@@ -180,6 +180,25 @@ const HomePage = () => {
               </ul>
               <Link to="/services" className="service-link">Learn More</Link>
             </div>
+
+            <div className="service-category">
+              <div className="service-icon">
+                <Heart />
+              </div>
+              <h3>Bill Payment Services</h3>
+              <p>Complete bill management and payment assistance</p>
+              <ul className="service-list">
+                <li>⚡ Electricity Bill Payment</li>
+                <li>🏛️ Property Tax Payment</li>
+                <li>🏠 Land Tax Management</li>
+                <li>💧 Water Bill Payment</li>
+                <li>🌐 Internet & Cable Bills</li>
+                <li>📱 Mobile & Phone Bills</li>
+                <li>🏥 Insurance Premium Payment</li>
+                <li>📋 Bill Tracking & Reminders</li>
+              </ul>
+              <Link to="/services" className="service-link">Learn More</Link>
+            </div>
           </div>
         </div>
       </section>
