@@ -50,11 +50,11 @@ class ErrorBoundary extends Component {
             </p>
             
             <div className="error-actions">
-              <button onClick={this.handleRetry} className="retry-button">
+              <button onClick={this.handleRetry} className="retry-button" aria-label="Try to recover from the error">
                 <RefreshCw size={20} />
                 Try Again
               </button>
-              <button onClick={() => window.location.reload()} className="reload-button">
+              <button onClick={() => window.location.reload()} className="reload-button" aria-label="Reload the page to fix the error">
                 Reload Page
               </button>
             </div>

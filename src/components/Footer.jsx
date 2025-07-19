@@ -76,8 +76,10 @@ const Footer = () => {
                 type="email" 
                 placeholder="Enter your email" 
                 className="newsletter-input"
+                aria-label="Email address for newsletter subscription"
+                name="email"
               />
-              <button type="submit" className="newsletter-btn">Subscribe</button>
+              <button type="submit" className="newsletter-btn" aria-label="Subscribe to our newsletter">Subscribe</button>
             </form>
             <div className="social-links">
               <span>Follow us:</span>

@@ -68,7 +68,7 @@ const ServicesPage = () => {
             </div>
           </div>
           
-          <button className="learn-more-btn">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about standard home maintenance services">Learn More</button>
         </div>
       </section>
 
@@ -111,7 +111,7 @@ const ServicesPage = () => {
             </div>
           </div>
           
-          <button className="learn-more-btn">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about migrant homeowner services">Learn More</button>
         </div>
       </section>
 
@@ -154,7 +154,7 @@ const ServicesPage = () => {
             </div>
           </div>
           
-          <button className="learn-more-btn">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about elderly care support services">Learn More</button>
         </div>
       </section>
 
@@ -192,7 +192,7 @@ const ServicesPage = () => {
             </div>
           </div>
           
-          <button className="learn-more-btn">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about driver services">Learn More</button>
         </div>
       </section>
 
@@ -230,7 +230,7 @@ const ServicesPage = () => {
             </div>
           </div>
           
-          <button className="learn-more-btn">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about pet care services">Learn More</button>
         </div>
       </section>
 
@@ -268,7 +268,7 @@ const ServicesPage = () => {
             </div>
           </div>
           
-          <button className="learn-more-btn">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about dedicated caretaker services">Learn More</button>
         </div>
       </section>
 
@@ -306,7 +306,7 @@ const ServicesPage = () => {
             </div>
           </div>
           
-          <button className="learn-more-btn">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about security guard services">Learn More</button>
         </div>
       </section>
 

@@ -99,6 +99,7 @@ const ContactPage = () => {
                     name="serviceType"
                     value={formData.serviceType}
                     onChange={handleChange}
+                    aria-label="Select service type"
                   >
                     <option value="">Select a service...</option>
                     <option value="home-maintenance">Standard Home Maintenance</option>
@@ -170,7 +171,7 @@ const ContactPage = () => {
                   <div className="contact-details">
                     <h3>Schedule a Consultation</h3>
                     <p>Book a free consultation to discuss your family's specific needs.</p>
-                    <button className="consultation-btn">Book Consultation</button>
+                    <button className="consultation-btn" aria-label="Book a free consultation to discuss your family's needs">Book Consultation</button>
                   </div>
                 </div>
               </div>

@@ -58,7 +58,7 @@ const AboutPage = () => {
                 </div>
               </div>
               
-              <button className="learn-tech-btn">Learn More About Our Technology</button>
+              <button className="learn-tech-btn" aria-label="Learn more about our AI-powered technology platform">Learn More About Our Technology</button>
             </div>
             
             <div className="tech-features">
@@ -130,7 +130,7 @@ const AboutPage = () => {
           <h2>Ready to <span className="text-primary">Get Started?</span></h2>
           <p>Contact our care coordination team to discuss your family's unique needs. We're here 
              to provide personalized solutions that give you peace of mind.</p>
-          <button className="cta-button">Contact Us</button>
+          <button className="cta-button" aria-label="Contact our care coordination team">Contact Us</button>
         </div>
       </section>
     </div>

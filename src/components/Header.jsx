@@ -27,7 +27,7 @@ const Header = () => {
               <Phone size={18} />
               +1 (555) 123-4567
             </a>
-            <button className="cta-button">Get Started</button>
+            <button className="cta-button" aria-label="Get started with our services">Get Started</button>
           </div>
         </div>
       </div>
