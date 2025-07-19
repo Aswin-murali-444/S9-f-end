@@ -1,0 +1,245 @@
+/* Services Page */
+.services-page {
+  padding-top: 0;
+  width: 100%;
+}
+
+/* Services Hero */
+.services-hero {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  padding: 100px 0 80px;
+  text-align: center;
+  width: 100%;
+}
+
+.services-hero h1 {
+  font-size: 3.5rem;
+  font-weight: 800;
+  margin-bottom: 24px;
+  color: #1e293b;
+}
+
+.services-hero p {
+  font-size: 1.25rem;
+  color: #64748b;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* Service Section */
+.service-section {
+  padding: 80px 0;
+  width: 100%;
+}
+
+.service-section.alt-bg {
+  background: #f8fafc;
+}
+
+.service-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 60px;
+  max-width: 600px;
+}
+
+.service-main-icon {
+  color: #4f9cf9;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+.service-header h2 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #2c3e50;
+  margin-bottom: 8px;
+}
+
+.service-header p {
+  color: #64748b;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+/* Services Grid */
+.services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-bottom: 40px;
+}
+
+.service-card {
+  background: white;
+  padding: 32px 24px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  border: 1px solid #f1f5f9;
+  text-align: center;
+}
+
+.service-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.service-icon {
+  font-size: 2.5rem;
+  margin-bottom: 20px;
+  display: block;
+}
+
+.service-card h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 12px;
+}
+
+.service-card p {
+  color: #64748b;
+  font-size: 0.95rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Learn More Button */
+.learn-more-btn {
+  background: linear-gradient(135deg, #4f9cf9 0%, #3b82f6 100%);
+  color: white;
+  border: none;
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(79, 156, 249, 0.3);
+  display: block;
+  margin: 0 auto;
+}
+
+.learn-more-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(79, 156, 249, 0.4);
+}
+
+/* Emergency Section */
+.emergency-section {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  padding: 60px 0;
+  text-align: center;
+}
+
+.emergency-content h2 {
+  color: #dc2626;
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.emergency-content p {
+  color: #7f1d1d;
+  font-size: 1.1rem;
+  margin-bottom: 24px;
+}
+
+.emergency-number {
+  display: inline-block;
+  background: #dc2626;
+  color: white;
+  padding: 16px 32px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-size: 1.5rem;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
+}
+
+.emergency-number:hover {
+  background: #b91c1c;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(220, 38, 38, 0.4);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .services-hero {
+    padding: 80px 0 60px;
+  }
+  
+  .services-hero h1 {
+    font-size: 2.8rem;
+  }
+  
+  .services-hero p {
+    font-size: 1.1rem;
+  }
+  
+  .service-section {
+    padding: 60px 0;
+  }
+  
+  .service-header {
+    flex-direction: column;
+    text-align: center;
+    gap: 16px;
+  }
+  
+  .service-header h2 {
+    font-size: 2rem;
+  }
+  
+  .services-grid {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+  }
+  
+  .emergency-content h2 {
+    font-size: 1.75rem;
+  }
+  
+  .emergency-number {
+    font-size: 1.25rem;
+    padding: 14px 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .services-hero h1 {
+    font-size: 2.2rem;
+  }
+  
+  .services-hero p {
+    font-size: 1rem;
+  }
+  
+  .service-header h2 {
+    font-size: 1.75rem;
+  }
+  
+  .services-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .service-card {
+    padding: 24px 20px;
+  }
+  
+  .learn-more-btn {
+    padding: 14px 24px;
+    font-size: 1rem;
+  }
+  
+  .emergency-number {
+    font-size: 1.1rem;
+    padding: 12px 20px;
+  }
+} 
