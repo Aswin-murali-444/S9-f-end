@@ -1,3 +1,24 @@
+/* CSS Custom Properties for Advanced Theming */
+:root {
+  --primary-color: #4f9cf9;
+  --primary-dark: #3b82f6;
+  --secondary-color: #64748b;
+  --background-color: #ffffff;
+  --text-color: #2c3e50;
+  --border-color: #f1f5f9;
+  --shadow-light: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --shadow-medium: 0 8px 30px rgba(0, 0, 0, 0.12);
+  --shadow-heavy: 0 12px 40px rgba(0, 0, 0, 0.15);
+  --gradient-primary: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+  --gradient-background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  --border-radius-small: 8px;
+  --border-radius-medium: 12px;
+  --border-radius-large: 16px;
+  --transition-fast: 0.2s ease;
+  --transition-medium: 0.3s ease;
+  --transition-slow: 0.4s ease;
+}
+
 /* Global Styles */
 * {
   margin: 0;
@@ -104,8 +125,9 @@ p {
 }
 
 .btn-primary:hover {
-  transform: translateY(-2px);
+  transform: translateY(-2px) scale(1.05);
   box-shadow: 0 8px 25px rgba(79, 156, 249, 0.4);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .btn-secondary {

@@ -1,27 +1,70 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, Clock, Users, Star, Home, Heart, Car, ShieldCheck } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { useInView } from 'react-intersection-observer';
+import AOS from 'aos';
+import 'aos/dist/aos.css';
 import './HomePage.css';
 
 const HomePage = () => {
+  const [heroRef, heroInView] = useInView({ threshold: 0.3, triggerOnce: true });
+  const [servicesRef, servicesInView] = useInView({ threshold: 0.2, triggerOnce: true });
+
+  useEffect(() => {
+    AOS.init({
+      duration: 1000,
+      once: true,
+      offset: 100,
+    });
+  }, []);
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        delayChildren: 0.3,
+        staggerChildren: 0.2
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: {
+      y: 0,
+      opacity: 1,
+      transition: {
+        type: "spring",
+        stiffness: 100
+      }
+    }
+  };
+
   return (
     <div className="home-page">
       {/* Hero Section */}
-      <section className="hero-section">
+      <section className="hero-section" ref={heroRef}>
         <div className="container">
-          <div className="hero-content">
-            <div className="hero-badge">
+          <motion.div 
+            className="hero-content"
+            initial="hidden"
+            animate={heroInView ? "visible" : "hidden"}
+            variants={containerVariants}
+          >
+            <motion.div className="hero-badge" variants={itemVariants}>
               <Shield size={20} />
               AI-Driven Home Care Platform
-            </div>
-            <h1 className="hero-title">
+            </motion.div>
+            <motion.h1 className="hero-title" variants={itemVariants}>
               Professional <span className="text-primary">Home Maintenance</span> & Care Services
-            </h1>
-            <p className="hero-description">
+            </motion.h1>
+            <motion.p className="hero-description" variants={itemVariants}>
               Comprehensive home support solutions for local residents and migrant families. 
               Specialized elderly care, smart maintenance, and personalized assistance with 
               AI-powered quality assurance.
-            </p>
+            </motion.p>
             
             <div className="hero-features">
               <div className="hero-feature">
@@ -63,7 +106,7 @@ const HomePage = () => {
                 <p>4.9/5 Rating</p>
               </div>
             </div>
-          </div>
+          </motion.div>
           
           <div className="hero-features-grid">
             <div className="feature-card">
@@ -100,8 +143,8 @@ const HomePage = () => {
                AI-supervised services tailored to your family's unique needs.</p>
           </div>
           
-          <div className="services-grid">
-            <div className="service-category">
+          <div className="services-grid" ref={servicesRef}>
+            <div className="service-category" data-aos="fade-up" data-aos-delay="100">
               <div className="service-icon">
                 <Home />
               </div>
@@ -120,7 +163,7 @@ const HomePage = () => {
               <Link to="/services" className="service-link">Learn More</Link>
             </div>
 
-            <div className="service-category">
+            <div className="service-category" data-aos="fade-up" data-aos-delay="200">
               <div className="service-icon">
                 <ShieldCheck />
               </div>
@@ -135,7 +178,7 @@ const HomePage = () => {
               <Link to="/services" className="service-link">Learn More</Link>
             </div>
 
-            <div className="service-category">
+            <div className="service-category" data-aos="fade-up" data-aos-delay="300">
               <div className="service-icon">
                 <Heart />
               </div>
@@ -151,7 +194,7 @@ const HomePage = () => {
               <Link to="/services" className="service-link">Learn More</Link>
             </div>
 
-            <div className="service-category">
+            <div className="service-category" data-aos="fade-up" data-aos-delay="400">
               <div className="service-icon">
                 <Car />
               </div>
@@ -164,7 +207,7 @@ const HomePage = () => {
               <Link to="/services" className="service-link">Learn More</Link>
             </div>
 
-            <div className="service-category">
+            <div className="service-category" data-aos="fade-up" data-aos-delay="500">
               <div className="service-icon">
                 <ShieldCheck />
               </div>
@@ -181,7 +224,7 @@ const HomePage = () => {
               <Link to="/services" className="service-link">Learn More</Link>
             </div>
 
-            <div className="service-category">
+            <div className="service-category" data-aos="fade-up" data-aos-delay="600">
               <div className="service-icon">
                 <Heart />
               </div>

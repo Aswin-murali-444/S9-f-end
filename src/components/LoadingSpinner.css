@@ -1,0 +1,59 @@
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.spinner {
+  border: 3px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 3px solid #4f9cf9;
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner.small .spinner {
+  width: 20px;
+  height: 20px;
+}
+
+.loading-spinner.medium .spinner {
+  width: 40px;
+  height: 40px;
+}
+
+.loading-spinner.large .spinner {
+  width: 60px;
+  height: 60px;
+}
+
+.loading-text {
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 0.9rem;
+  font-weight: 500;
+  animation: fadeInOut 2s ease-in-out infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes fadeInOut {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Shimmer effect for loading states */
+.shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+} 
