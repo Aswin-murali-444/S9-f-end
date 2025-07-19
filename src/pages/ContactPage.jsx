@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'react-hot-toast';
 import { Phone, Mail, MapPin, Send, MessageSquare, Calendar, Headphones } from 'lucide-react';
+import { useContactForm } from '../hooks/useModernFeatures';
+import LoadingSpinner from '../components/LoadingSpinner';
 import './ContactPage.css';
 
 const ContactPage = () => {
