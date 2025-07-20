@@ -1,34 +1,22 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Phone } from 'lucide-react';
 import './Header.css';
 
 const Header = () => {
   return (
     <header className="header">
-      <div className="container">
-        <div className="header-content">
-          <Link to="/" className="logo">
-            <div className="logo-icon">HM</div>
-            <div className="logo-text">
-              <span className="logo-main">HomeMaintain</span>
-              <span className="logo-sub">AI-Driven Care Platform</span>
-            </div>
-          </Link>
-          
-          <nav className="nav-menu">
-            <Link to="/services" className="nav-link">Services</Link>
-            <Link to="/about" className="nav-link">About</Link>
-            <Link to="/contact" className="nav-link">Contact</Link>
-          </nav>
-          
-          <div className="header-actions">
-            <a href="tel:+15551234567" className="phone-link">
-              <Phone size={18} />
-              +1 (555) 123-4567
-            </a>
-            <button className="cta-button" aria-label="Get started with our services">Get Started</button>
-          </div>
+      <div className="header-content">
+        <Link to="/" className="logo">HomeMaintain</Link>
+        
+        <nav className="nav-menu">
+          <Link to="/services">Services</Link>
+          <Link to="/about">About</Link>
+          <Link to="/contact">Contact</Link>
+        </nav>
+        
+        <div className="auth-buttons">
+          <Link to="/login" className="auth-link">Login</Link>
+          <Link to="/register" className="auth-link register">Register</Link>
         </div>
       </div>
     </header>
