@@ -281,3 +281,7 @@
     font-size: 1.25rem;
   }
 } 
+
+.footer, .footer-content, .footer-bottom {
+  background: #1e293b !important;
+} 
