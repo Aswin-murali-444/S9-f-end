@@ -337,3 +337,46 @@ a:hover {
     font-size: 1.75rem;
   }
 } 
+
+.google-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #fff;
+  color: #222;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 12px 0;
+  margin-bottom: 18px;
+  box-shadow: 0 2px 8px rgba(79, 156, 249, 0.06);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.google-btn:hover {
+  border-color: #4f9cf9;
+  box-shadow: 0 4px 16px rgba(79, 156, 249, 0.12);
+  background: #f1f5ff;
+} 
+
+button, .google-btn, .schedule-btn {
+  transition: background 0.2s, color 0.2s, box-shadow 0.25s, transform 0.18s cubic-bezier(.4,2,.6,1), border-color 0.2s;
+}
+
+input, select, .role-card, .register-box, .meeting-card {
+  transition: box-shadow 0.25s, border-color 0.2s, background 0.2s, color 0.2s, transform 0.18s cubic-bezier(.4,2,.6,1);
+}
+
+.role-card.selected {
+  animation: popSelected 0.25s cubic-bezier(.4,2,.6,1);
+}
+
+@keyframes popSelected {
+  0% { transform: scale(1); }
+  60% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+} 

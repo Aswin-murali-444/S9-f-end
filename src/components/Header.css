@@ -102,8 +102,8 @@
   color: white;
   box-shadow: 0 4px 15px rgba(79, 156, 249, 0.3);
   border: 2px solid transparent;
-}
-
+  }
+  
 .auth-link.register:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(79, 156, 249, 0.4);

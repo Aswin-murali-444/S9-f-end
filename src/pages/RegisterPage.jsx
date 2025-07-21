@@ -56,6 +56,7 @@ const RegisterPage = () => {
             <UserPlus size={32} />
           </div>
         </div>
+        
                 <h2>Select Your Role</h2>
         
         <div className="role-cards">
@@ -103,6 +104,10 @@ const RegisterPage = () => {
             <span>Delivery</span>
           </div>
         </div>
+        <button type="button" className="google-btn">
+            <svg width="22" height="22" viewBox="0 0 48 48" style={{marginRight: 8}}><g><path fill="#4285F4" d="M24 9.5c3.54 0 6.36 1.53 7.82 2.81l5.77-5.62C34.5 3.54 29.74 1.5 24 1.5 14.98 1.5 7.09 7.5 3.67 15.02l6.91 5.37C12.18 14.41 17.62 9.5 24 9.5z"/><path fill="#34A853" d="M46.1 24.55c0-1.64-.15-3.21-.42-4.73H24v9.18h12.42c-.54 2.91-2.18 5.38-4.65 7.05l7.18 5.59C43.91 37.13 46.1 31.36 46.1 24.55z"/><path fill="#FBBC05" d="M10.58 28.13a14.6 14.6 0 0 1 0-8.26l-6.91-5.37A23.94 23.94 0 0 0 1.9 24c0 3.77.9 7.34 2.49 10.5l6.91-5.37z"/><path fill="#EA4335" d="M24 46.5c6.48 0 11.92-2.15 15.89-5.85l-7.18-5.59c-2 1.36-4.56 2.18-8.71 2.18-6.38 0-11.82-4.91-13.42-11.41l-6.91 5.37C7.09 40.5 14.98 46.5 24 46.5z"/></g></svg>
+            Continue with Google
+          </button>
         
         <form onSubmit={handleSubmit}>
           <div className="input-group">
@@ -145,7 +150,8 @@ const RegisterPage = () => {
               required
             />
           </div>
-          <button type="submit">Register</button>
+         
+          <button type="submit">Get Started</button>
         </form>
         <p>
           Already have an account? <Link to="/login">Login</Link>

@@ -88,7 +88,7 @@ const LoginPage = () => {
               required
             />
           </div>
-          <button type="submit">Login</button>
+          <button type="submit">Sign In</button>
         </form>
         <p>
           Don't have an account? <Link to="/register">Register</Link>
