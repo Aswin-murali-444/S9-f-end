@@ -20,41 +20,17 @@
 
 .footer-logo {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   margin-bottom: 24px;
 }
 
-.footer-logo .logo-icon {
-  background: linear-gradient(135deg, #4f9cf9 0%, #3b82f6 100%);
-  color: white;
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 1.2rem;
-  box-shadow: 0 4px 15px rgba(79, 156, 249, 0.3);
-}
-
-.footer-logo .logo-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.footer-logo .logo-main {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: white;
-  line-height: 1;
-}
-
 .footer-logo .logo-sub {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: #94a3b8;
   font-weight: 500;
+  margin-left: 4px;
 }
 
 .footer-description {

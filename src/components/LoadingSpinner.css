@@ -1,59 +1,249 @@
-.loading-spinner {
+.loading-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  gap: 1rem;
+  padding: 2rem;
 }
 
-.spinner {
-  border: 3px solid #f3f3f3;
+.spinner-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Bootstrap Spinner Variants */
+.spinner-primary {
+  color: #4f9cf9 !important;
+}
+
+.spinner-secondary {
+  color: #6c757d !important;
+}
+
+.spinner-success {
+  color: #198754 !important;
+}
+
+.spinner-danger {
+  color: #dc3545 !important;
+}
+
+.spinner-warning {
+  color: #ffc107 !important;
+}
+
+.spinner-info {
+  color: #0dcaf0 !important;
+}
+
+/* Size variants */
+.spinner-sm {
+  width: 2rem;
+  height: 2rem;
+}
+
+.spinner-md {
+  width: 3rem;
+  height: 3rem;
+}
+
+.spinner-lg {
+  width: 4rem;
+  height: 4rem;
+}
+
+/* Custom Animated Rings */
+.custom-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.ring {
+  position: absolute;
+  border: 2px solid transparent;
   border-radius: 50%;
-  border-top: 3px solid #4f9cf9;
-  animation: spin 1s linear infinite;
+  animation: ringRotate 2s linear infinite;
 }
 
-.loading-spinner.small .spinner {
-  width: 20px;
-  height: 20px;
-}
-
-.loading-spinner.medium .spinner {
-  width: 40px;
-  height: 40px;
-}
-
-.loading-spinner.large .spinner {
+.ring-1 {
   width: 60px;
   height: 60px;
+  border-top-color: #4f9cf9;
+  animation-duration: 1.5s;
 }
 
+.ring-2 {
+  width: 80px;
+  height: 80px;
+  border-right-color: #3b82f6;
+  animation-duration: 2s;
+}
+
+.ring-3 {
+  width: 100px;
+  height: 100px;
+  border-bottom-color: #4f9cf9;
+  animation-duration: 2.5s;
+}
+
+@keyframes ringRotate {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+/* Pulsing Dots */
+.pulse-dots {
+  position: absolute;
+  display: flex;
+  gap: 0.5rem;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4f9cf9;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.dot-1 {
+  animation-delay: 0s;
+}
+
+.dot-2 {
+  animation-delay: 0.2s;
+}
+
+.dot-3 {
+  animation-delay: 0.4s;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+/* Loading Text */
 .loading-text {
-  margin-top: 10px;
-  color: #64748b;
-  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+  color: #4f9cf9;
   font-weight: 500;
-  animation: fadeInOut 2s ease-in-out infinite;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.text-dots {
+  display: flex;
+  gap: 0.1rem;
 }
 
-@keyframes fadeInOut {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+.text-dots .dot {
+  width: 4px;
+  height: 4px;
+  background: #4f9cf9;
+  animation: textPulse 1.5s ease-in-out infinite;
 }
 
-/* Shimmer effect for loading states */
-.shimmer {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 2s infinite;
+.text-dots .dot:nth-child(1) {
+  animation-delay: 0s;
 }
 
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+.text-dots .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.text-dots .dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes textPulse {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Enhanced Hover Effects */
+.spinner-wrapper:hover .ring {
+  animation-duration: 1s;
+}
+
+.spinner-wrapper:hover .dot {
+  animation-duration: 1s;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .spinner-lg {
+    width: 3rem;
+    height: 3rem;
+  }
+  
+  .ring-1 {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .ring-2 {
+    width: 70px;
+    height: 70px;
+  }
+  
+  .ring-3 {
+    width: 90px;
+    height: 90px;
+  }
+  
+  .loading-text {
+    font-size: 1rem;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .loading-text {
+    color: #a5b4fc;
+  }
+  
+  .dot {
+    background: #a5b4fc;
+  }
+  
+  .text-dots .dot {
+    background: #a5b4fc;
+  }
+}
+
+/* Accessibility */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 } 

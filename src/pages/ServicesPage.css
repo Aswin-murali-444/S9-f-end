@@ -2,6 +2,12 @@
 .services-page {
   padding-top: 0;
   width: 100%;
+  scroll-behavior: smooth;
+}
+
+/* Scroll offset for fixed header */
+.service-section {
+  scroll-margin-top: 100px;
 }
 
 /* Services Hero */
@@ -242,4 +248,42 @@
     font-size: 1.1rem;
     padding: 12px 20px;
   }
+}
+
+/* Booking Button Styles */
+.book-service-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #4f9cf9 0%, #3b82f6 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(79, 156, 249, 0.2);
+  margin-top: auto;
+}
+
+.book-service-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(79, 156, 249, 0.3);
+}
+
+.book-service-btn:active {
+  transform: translateY(0);
+}
+
+.service-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.service-card p {
+  margin-bottom: 16px;
 } 

@@ -152,6 +152,82 @@
   margin: 0;
 }
 
+/* User Roles Section */
+.user-roles-section {
+  padding: 100px 0;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+.user-roles-section h2 {
+  font-size: 3rem;
+  font-weight: 700;
+  color: #2c3e50;
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.roles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.role-card {
+  background: white;
+  padding: 32px 24px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  border: 1px solid #f1f5f9;
+}
+
+.role-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.role-icon {
+  font-size: 3rem;
+  margin-bottom: 20px;
+  display: block;
+}
+
+.role-card h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 20px;
+}
+
+.role-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.role-card li {
+  color: #64748b;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin-bottom: 12px;
+  padding-left: 20px;
+  position: relative;
+}
+
+.role-card li:before {
+  content: "•";
+  color: #4f9cf9;
+  font-weight: bold;
+  position: absolute;
+  left: 0;
+}
+
+.role-card li:last-child {
+  margin-bottom: 0;
+}
+
 /* Mission Section */
 .mission-section {
   background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
@@ -263,6 +339,11 @@
   .values {
     gap: 32px;
   }
+  
+  .roles-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -289,6 +370,20 @@
   
   .content-text h2 {
     font-size: 2rem;
+  }
+  
+  .user-roles-section {
+    padding: 80px 0;
+  }
+  
+  .user-roles-section h2 {
+    font-size: 2.5rem;
+    margin-bottom: 40px;
+  }
+  
+  .roles-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
   }
   
   .mission-section {
@@ -336,6 +431,22 @@
   
   .content-text p {
     font-size: 1rem;
+  }
+  
+  .user-roles-section h2 {
+    font-size: 2rem;
+  }
+  
+  .role-card {
+    padding: 24px 20px;
+  }
+  
+  .role-card h3 {
+    font-size: 1.25rem;
+  }
+  
+  .role-card li {
+    font-size: 0.9rem;
   }
   
   .mission-content h2 {

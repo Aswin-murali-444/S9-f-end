@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Gradient Definitions -->
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f9cf9"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Main Hexagon -->
+  <g transform="translate(20, 20)">
+    <path
+      d="M60 4 L108 32 L108 88 L60 116 L12 88 L12 32 Z"
+      fill="url(#logoGradient)"
+      opacity="1"
+    />
+    
+    <!-- Inner Connection Lines -->
+    <path
+      d="M30 60 L60 40 L90 60 L60 80 Z"
+      stroke="white"
+      stroke-width="4"
+      fill="none"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <circle cx="60" cy="60" r="6" fill="white" opacity="0.9"/>
+  </g>
+</svg> 

@@ -1,128 +1,173 @@
-import React from 'react';
-import { Home, Shield, Heart, Car, PawPrint, User, ShieldCheck } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Home, Shield, Heart, Car, Truck, User, ShieldCheck, Camera, Brain, UserCheck } from 'lucide-react';
 import './ServicesPage.css';
 
 const ServicesPage = () => {
+  
+
+  // Handle hash navigation and smooth scrolling
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (hash) {
+        const element = document.querySelector(hash);
+        if (element) {
+          setTimeout(() => {
+            element.scrollIntoView({ 
+              behavior: 'smooth',
+              block: 'start'
+            });
+          }, 100);
+        }
+      }
+    };
+
+    // Handle initial load with hash
+    handleHashChange();
+
+    // Listen for hash changes
+    window.addEventListener('hashchange', handleHashChange);
+    
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
+
   return (
     <div className="services-page">
       {/* Hero Section */}
       <section className="services-hero">
         <div className="container">
-          <h1>Comprehensive <span className="text-primary">Home Care Solutions</span></h1>
-          <p>From standard maintenance to specialized elderly care, we provide professional, 
-             AI-supervised services tailored to your family's unique needs.</p>
+          <h1>Comprehensive <span className="text-primary">Smart Home Solutions</span></h1>
+          <p>From AI-powered maintenance to specialized elderly care, we provide professional, 
+             smart camera-monitored services tailored to your family's unique needs.</p>
         </div>
       </section>
 
-      {/* Standard Home Maintenance */}
-      <section className="service-section">
+      {/* Smart Home Maintenance */}
+      <section id="smart-maintenance" className="service-section">
         <div className="container">
           <div className="service-header">
             <Home className="service-main-icon" />
             <div>
-              <h2>Standard Home Maintenance</h2>
-              <p>Complete home maintenance solutions for everyday needs</p>
+              <h2>Smart Home Maintenance</h2>
+              <p>AI-supervised maintenance with real-time progress tracking</p>
             </div>
           </div>
           
           <div className="services-grid">
-            <div className="service-card">
+            <div className="service-card" data-aos="fade-up">
               <div className="service-icon">🔧</div>
-              <h3>Plumbing</h3>
-              <p>Professional plumbing repairs, installations, and maintenance services</p>
+              <h3>Plumbing & Electrical</h3>
+              <p>Professional repairs with AI-monitored quality assurance</p>
             </div>
-            <div className="service-card">
-              <div className="service-icon">⚡</div>
-              <h3>Electrical</h3>
-              <p>Safe and reliable electrical work by certified professionals</p>
-            </div>
-            <div className="service-card">
+            <div className="service-card" data-aos="fade-up" data-aos-delay="100">
               <div className="service-icon">🔨</div>
-              <h3>Carpentry</h3>
-              <p>Custom woodwork, repairs, and furniture assembly services</p>
+              <h3>Carpentry & Repairs</h3>
+              <p>Custom woodwork and repairs with smart scheduling</p>
             </div>
-            <div className="service-card">
+            <div className="service-card" data-aos="fade-up" data-aos-delay="150">
               <div className="service-icon">🧹</div>
-              <h3>Cleaning</h3>
-              <p>Thorough home cleaning services for a spotless living environment</p>
+              <h3>Cleaning & Maintenance</h3>
+              <p>AI-coordinated cleaning services with quality monitoring</p>
             </div>
-            <div className="service-card">
+            <div className="service-card" data-aos="fade-up" data-aos-delay="200">
               <div className="service-icon">🔧</div>
-              <h3>Appliance Repair</h3>
-              <p>Expert repair services for all household appliances</p>
+              <h3>Appliance Services</h3>
+              <p>Smart appliance repair with predictive maintenance</p>
             </div>
-            <div className="service-card">
+            <div className="service-card" data-aos="fade-up" data-aos-delay="250">
               <div className="service-icon">🌿</div>
-              <h3>Gardening/Landscaping</h3>
-              <p>Beautiful garden maintenance and landscaping services</p>
+              <h3>Landscaping & Gardening</h3>
+              <p>AI-scheduled garden maintenance and landscaping</p>
             </div>
-            <div className="service-card">
+            <div className="service-card" data-aos="fade-up" data-aos-delay="300">
               <div className="service-icon">🐛</div>
               <h3>Pest Control</h3>
-              <p>Safe and effective pest control solutions for your home</p>
+              <p>Smart pest control with monitoring and prevention</p>
             </div>
-            <div className="service-card">
+            <div className="service-card" data-aos="fade-up" data-aos-delay="350">
               <div className="service-icon">🎨</div>
-              <h3>Painting</h3>
-              <p>Professional interior and exterior painting services</p>
+              <h3>Painting & Renovation</h3>
+              <p>Professional painting with AI quality monitoring</p>
+            </div>
+            <div className="service-card" data-aos="fade-up" data-aos-delay="400">
+              <div className="service-icon">📱</div>
+              <h3>Smart Home Integration</h3>
+              <p>IoT device installation and smart home setup</p>
             </div>
           </div>
           
-          <button className="learn-more-btn" aria-label="Learn more about standard home maintenance services">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about smart home maintenance services">Learn More</button>
         </div>
       </section>
 
-      {/* Migrant Homeowner Services */}
-      <section className="service-section alt-bg">
+      {/* Smart Camera & Security */}
+      <section id="smart-security" className="service-section alt-bg">
         <div className="container">
           <div className="service-header">
-            <ShieldCheck className="service-main-icon" />
+            <Camera className="service-main-icon" />
             <div>
-              <h2>Migrant Homeowner Services</h2>
-              <p>Specialized services for families living away from home</p>
+              <h2>Smart Camera & Security</h2>
+              <p>Professional security camera installation and AI monitoring</p>
             </div>
           </div>
           
           <div className="services-grid">
             <div className="service-card">
-              <div className="service-icon">👁️</div>
-              <h3>Property Supervision</h3>
-              <p>Regular property monitoring and maintenance oversight</p>
+              <div className="service-icon">📹</div>
+              <h3>Security Camera Installation</h3>
+              <p>Professional camera setup with mobile app integration</p>
             </div>
             <div className="service-card">
-              <div className="service-icon">📄</div>
-              <h3>Utility Bill Management</h3>
-              <p>Complete utility bill handling and payment coordination</p>
+              <div className="service-icon">📱</div>
+              <h3>Remote Monitoring Setup</h3>
+              <p>24/7 remote access to your property via mobile</p>
             </div>
             <div className="service-card">
-              <div className="service-icon">📬</div>
-              <h3>Mail Collection & Forwarding</h3>
-              <p>Secure mail collection and forwarding services</p>
+              <div className="service-icon">🤖</div>
+              <h3>AI Motion Detection</h3>
+              <p>Smart alerts with false alarm filtering</p>
             </div>
             <div className="service-card">
-              <div className="service-icon">📞</div>
-              <h3>Emergency Contact & Liaison</h3>
-              <p>24/7 emergency response and local coordination</p>
+              <div className="service-icon">📊</div>
+              <h3>Cloud Storage Solutions</h3>
+              <p>Secure cloud recording with easy access</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🌙</div>
+              <h3>Night Vision & Analytics</h3>
+              <p>Advanced night monitoring with AI analytics</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🚨</div>
+              <h3>Emergency Alert System</h3>
+              <p>Instant notifications for security threats</p>
             </div>
             <div className="service-card">
               <div className="service-icon">🏠</div>
-              <h3>Home Opening/Closing Services</h3>
-              <p>Seasonal property preparation and security services</p>
+              <h3>Property Surveillance</h3>
+              <p>Comprehensive property monitoring coverage</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📱</div>
+              <h3>Mobile App Integration</h3>
+              <p>Easy control and monitoring from anywhere</p>
             </div>
           </div>
           
-          <button className="learn-more-btn" aria-label="Learn more about migrant homeowner services">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about smart camera and security services">Learn More</button>
         </div>
       </section>
 
-      {/* Elderly Care Support */}
-      <section className="service-section">
+      {/* AI-Powered Elder Care */}
+      <section id="elder-care" className="service-section">
         <div className="container">
           <div className="service-header">
             <Heart className="service-main-icon" />
             <div>
-              <h2>Elderly Care Support</h2>
-              <p>Compassionate care and assistance for seniors</p>
+              <h2>AI-Powered Elder Care</h2>
+              <p>Compassionate care with health monitoring and emergency alerts</p>
             </div>
           </div>
           
@@ -130,183 +175,334 @@ const ServicesPage = () => {
             <div className="service-card">
               <div className="service-icon">⏰</div>
               <h3>Daily Routine Assistance</h3>
-              <p>Support with daily activities and routine maintenance</p>
+              <p>AI-coordinated daily care and routine support</p>
             </div>
             <div className="service-card">
-              <div className="service-icon">👥</div>
-              <h3>Companionship</h3>
-              <p>Friendly companionship and social interaction services</p>
-            </div>
-            <div className="service-card">
-              <div className="service-icon">🏃</div>
-              <h3>Errand Running</h3>
-              <p>Shopping, pharmacy visits, and essential errands</p>
-            </div>
-            <div className="service-card">
-              <div className="service-icon">📅</div>
-              <h3>Appointment Management</h3>
-              <p>Medical appointment scheduling and transportation</p>
-            </div>
-            <div className="service-card">
-              <div className="service-icon">🛡️</div>
-              <h3>Safety Monitoring</h3>
-              <p>Regular wellness checks and safety assessments</p>
-            </div>
-          </div>
-          
-          <button className="learn-more-btn" aria-label="Learn more about elderly care support services">Learn More</button>
-        </div>
-      </section>
-
-      {/* Driver Services */}
-      <section className="service-section alt-bg">
-        <div className="container">
-          <div className="service-header">
-            <Car className="service-main-icon" />
-            <div>
-              <h2>Driver Services</h2>
-              <p>Professional transportation and vehicle management</p>
-            </div>
-          </div>
-          
-          <div className="services-grid">
-            <div className="service-card">
-              <div className="service-icon">🚗</div>
-              <h3>Personal Driver for Family Car</h3>
-              <p>Professional driving services using your family vehicle</p>
-            </div>
-            <div className="service-card">
-              <div className="service-icon">🔧</div>
-              <h3>Vehicle Maintenance Coordination</h3>
-              <p>Complete vehicle maintenance scheduling and oversight</p>
-            </div>
-            <div className="service-card">
-              <div className="service-icon">⛽</div>
-              <h3>Fueling Services</h3>
-              <p>Regular vehicle fueling and maintenance checks</p>
-            </div>
-            <div className="service-card">
-              <div className="service-icon">📋</div>
-              <h3>Documentation Assistance</h3>
-              <p>Vehicle registration and documentation support</p>
-            </div>
-          </div>
-          
-          <button className="learn-more-btn" aria-label="Learn more about driver services">Learn More</button>
-        </div>
-      </section>
-
-      {/* Pet Care Services */}
-      <section className="service-section">
-        <div className="container">
-          <div className="service-header">
-            <PawPrint className="service-main-icon" />
-            <div>
-              <h2>Minimal Pet Care Services</h2>
-              <p>Essential pet care for busy families and travelers</p>
-            </div>
-          </div>
-          
-          <div className="services-grid">
-            <div className="service-card">
-              <div className="service-icon">❤️</div>
-              <h3>Pet Feeding & Hydration</h3>
-              <p>Regular feeding schedules and fresh water maintenance</p>
-            </div>
-            <div className="service-card">
-              <div className="service-icon">📋</div>
-              <h3>Basic Pet Health Reporting</h3>
-              <p>Health monitoring and status updates for pet owners</p>
-            </div>
-            <div className="service-card">
-              <div className="service-icon">🧹</div>
-              <h3>Litter Box/Cage Spot Cleaning</h3>
-              <p>Regular cleaning and maintenance of pet areas</p>
-            </div>
-            <div className="service-card">
-              <div className="service-icon">🐕</div>
-              <h3>Pet Companionship Check-ins</h3>
-              <p>Regular visits to provide companionship and care</p>
-            </div>
-          </div>
-          
-          <button className="learn-more-btn" aria-label="Learn more about pet care services">Learn More</button>
-        </div>
-      </section>
-
-      {/* Dedicated Caretaker Services */}
-      <section className="service-section alt-bg">
-        <div className="container">
-          <div className="service-header">
-            <User className="service-main-icon" />
-            <div>
-              <h2>Dedicated Caretaker Services</h2>
-              <p>Long-term personalized care for elderly people</p>
-            </div>
-          </div>
-          
-          <div className="services-grid">
-            <div className="service-card">
-              <div className="service-icon">📅</div>
-              <h3>Long-Term/Scheduled Care</h3>
-              <p>Consistent, scheduled care services for ongoing support</p>
-            </div>
-            <div className="service-card">
-              <div className="service-icon">❤️</div>
-              <h3>Personalized Care Plans</h3>
-              <p>Customized care plans tailored to individual needs</p>
+              <div className="service-icon">💊</div>
+              <h3>Medication Management</h3>
+              <p>Smart medication reminders and tracking</p>
             </div>
             <div className="service-card">
               <div className="service-icon">🏥</div>
-              <h3>Health Monitoring & Reporting</h3>
-              <p>Regular health assessments and family updates</p>
+              <h3>Health Monitoring & Reports</h3>
+              <p>AI-powered health tracking and family updates</p>
             </div>
             <div className="service-card">
               <div className="service-icon">🚨</div>
-              <h3>Emergency Response Coordination</h3>
-              <p>24/7 emergency response and medical coordination</p>
+              <h3>Emergency Response System</h3>
+              <p>24/7 emergency detection and response</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">👥</div>
+              <h3>Companionship Services</h3>
+              <p>AI-matched companionship and social interaction</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📅</div>
+              <h3>Appointment Coordination</h3>
+              <p>Smart scheduling for medical appointments</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🛡️</div>
+              <h3>Safety & Fall Detection</h3>
+              <p>AI-powered safety monitoring and alerts</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📱</div>
+              <h3>Family Communication</h3>
+              <p>Real-time updates and family notifications</p>
             </div>
           </div>
           
-          <button className="learn-more-btn" aria-label="Learn more about dedicated caretaker services">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about AI-powered elder care services">Learn More</button>
         </div>
       </section>
 
-      {/* Security Guard Services */}
-      <section className="service-section">
+      {/* Smart Delivery & Transport */}
+      <section id="delivery-transport" className="service-section alt-bg">
         <div className="container">
           <div className="service-header">
-            <Shield className="service-main-icon" />
+            <Truck className="service-main-icon" />
             <div>
-              <h2>Security Guard Services</h2>
-              <p>Professional security and property protection</p>
+              <h2>Smart Delivery & Transport</h2>
+              <p>AI-coordinated delivery and transportation services</p>
+            </div>
+          </div>
+          
+          <div className="services-grid">
+            <div className="service-card">
+              <div className="service-icon">🚚</div>
+              <h3>Home Essentials Delivery</h3>
+              <p>AI-optimized delivery of daily necessities</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">💊</div>
+              <h3>Medicine & Healthcare Items</h3>
+              <p>Priority delivery for medical supplies</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🚗</div>
+              <h3>Elderly Transportation</h3>
+              <p>Safe transport with real-time tracking</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📦</div>
+              <h3>Package & Grocery Delivery</h3>
+              <p>Smart delivery scheduling and tracking</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🏥</div>
+              <h3>Medical Appointment Transport</h3>
+              <p>Reliable medical transportation service</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">⚡</div>
+              <h3>Same-Day Express Service</h3>
+              <p>Urgent delivery with AI route optimization</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📱</div>
+              <h3>Real-Time Tracking</h3>
+              <p>Live delivery status and ETA updates</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🤖</div>
+              <h3>AI Route Optimization</h3>
+              <p>Efficient delivery routes and scheduling</p>
+            </div>
+          </div>
+          
+          <button className="learn-more-btn" aria-label="Learn more about smart delivery and transport services">Learn More</button>
+        </div>
+      </section>
+
+      {/* Professional Caretaker Services */}
+      <section id="caretaker-services" className="service-section">
+        <div className="container">
+          <div className="service-header">
+            <UserCheck className="service-main-icon" />
+            <div>
+              <h2>Professional Caretaker Services</h2>
+              <p>Long-term personalized care with health monitoring</p>
+            </div>
+          </div>
+          
+          <div className="services-grid">
+            <div className="service-card">
+              <div className="service-icon">📅</div>
+              <h3>Long-Term Care Plans</h3>
+              <p>AI-coordinated long-term care strategies</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">❤️</div>
+              <h3>Personalized Care Routines</h3>
+              <p>Customized care plans for individual needs</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🏥</div>
+              <h3>Health Status Reporting</h3>
+              <p>Regular health assessments and updates</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🚨</div>
+              <h3>Emergency Response</h3>
+              <p>24/7 emergency care coordination</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">👥</div>
+              <h3>Family Communication</h3>
+              <p>Real-time family updates and coordination</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📱</div>
+              <h3>Digital Care Records</h3>
+              <p>AI-powered care documentation and tracking</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🔄</div>
+              <h3>Progress Monitoring</h3>
+              <p>AI analytics for care quality improvement</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🎯</div>
+              <h3>Care Quality Assurance</h3>
+              <p>Continuous quality monitoring and improvement</p>
+            </div>
+          </div>
+          
+          <button className="learn-more-btn" aria-label="Learn more about professional caretaker services">Learn More</button>
+        </div>
+      </section>
+
+      {/* Smart Bill Management */}
+      <section id="bill-management" className="service-section alt-bg">
+        <div className="container">
+          <div className="service-header">
+            <ShieldCheck className="service-main-icon" />
+            <div>
+              <h2>Smart Bill Management</h2>
+              <p>AI-powered bill payment and utility management</p>
             </div>
           </div>
           
           <div className="services-grid">
             <div className="service-card">
               <div className="service-icon">⚡</div>
-              <h3>On-Demand Security</h3>
-              <p>Immediate security response when you need it most</p>
+              <h3>Automated Bill Payments</h3>
+              <p>AI-scheduled automatic bill processing</p>
             </div>
             <div className="service-card">
-              <div className="service-icon">⏰</div>
-              <h3>Regular Guarding</h3>
-              <p>Scheduled security patrols and property monitoring</p>
+              <div className="service-icon">🏛️</div>
+              <h3>Property Tax Management</h3>
+              <p>Smart tax payment and tracking system</p>
             </div>
             <div className="service-card">
-              <div className="service-icon">🏠</div>
-              <h3>Property Monitoring</h3>
-              <p>Continuous surveillance and property protection</p>
+              <div className="service-icon">💧</div>
+              <h3>Utility Bill Processing</h3>
+              <p>AI-optimized utility bill management</p>
             </div>
             <div className="service-card">
-              <div className="service-icon">👥</div>
-              <h3>Access Control</h3>
-              <p>Visitor management and access control services</p>
+              <div className="service-icon">🌐</div>
+              <h3>Internet & Cable Services</h3>
+              <p>Smart telecom bill coordination</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📱</div>
+              <h3>Mobile & Phone Bills</h3>
+              <p>Automated mobile bill management</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🏥</div>
+              <h3>Insurance Premiums</h3>
+              <p>AI-coordinated insurance payments</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📋</div>
+              <h3>Smart Reminders & Alerts</h3>
+              <p>Intelligent payment reminders and notifications</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📊</div>
+              <h3>Payment Analytics</h3>
+              <p>AI-powered spending analysis and insights</p>
             </div>
           </div>
           
-          <button className="learn-more-btn" aria-label="Learn more about security guard services">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about smart bill management services">Learn More</button>
+        </div>
+      </section>
+
+      {/* Remote Property Management */}
+      <section id="property-management" className="service-section">
+        <div className="container">
+          <div className="service-header">
+            <Home className="service-main-icon" />
+            <div>
+              <h2>Remote Property Management</h2>
+              <p>AI-monitored property supervision for migrant families</p>
+            </div>
+          </div>
+          
+          <div className="services-grid">
+            <div className="service-card">
+              <div className="service-icon">📹</div>
+              <h3>Smart Camera Monitoring</h3>
+              <p>24/7 AI-powered property surveillance</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🔐</div>
+              <h3>Access Control Management</h3>
+              <p>Smart access control and visitor management</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📬</div>
+              <h3>Mail & Package Handling</h3>
+              <p>Secure mail collection and forwarding</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🏠</div>
+              <h3>Property Opening/Closing</h3>
+              <p>Seasonal property preparation services</p>
+            </div>
+          </div>
+          
+          <button className="learn-more-btn" aria-label="Learn more about remote property management services">Learn More</button>
+        </div>
+      </section>
+
+      {/* AI Service Coordination */}
+      <section id="ai-coordination" className="service-section alt-bg">
+        <div className="container">
+          <div className="service-header">
+            <Brain className="service-main-icon" />
+            <div>
+              <h2>AI Service Coordination</h2>
+              <p>Intelligent scheduling and service provider allocation</p>
+            </div>
+          </div>
+          
+          <div className="services-grid">
+            <div className="service-card">
+              <div className="service-icon">📅</div>
+              <h3>Smart Appointment Scheduling</h3>
+              <p>AI-optimized service scheduling system</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">👥</div>
+              <h3>Provider Matching Algorithm</h3>
+              <p>Intelligent service provider selection</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📊</div>
+              <h3>Performance Analytics</h3>
+              <p>AI-powered service quality analysis</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🔄</div>
+              <h3>Quality Assurance Monitoring</h3>
+              <p>Continuous service quality improvement</p>
+            </div>
+          </div>
+          
+          <button className="learn-more-btn" aria-label="Learn more about AI service coordination services">Learn More</button>
+        </div>
+      </section>
+
+      {/* Security & Monitoring */}
+      <section id="security-monitoring" className="service-section">
+        <div className="container">
+          <div className="service-header">
+            <Shield className="service-main-icon" />
+            <div>
+              <h2>Security & Monitoring</h2>
+              <p>Professional security with AI-powered threat detection</p>
+            </div>
+          </div>
+          
+          <div className="services-grid">
+            <div className="service-card">
+              <div className="service-icon">👮</div>
+              <h3>On-Demand Security Guards</h3>
+              <p>Professional security personnel when needed</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📹</div>
+              <h3>24/7 Camera Monitoring</h3>
+              <p>Continuous AI-powered surveillance</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">🚨</div>
+              <h3>AI Threat Detection</h3>
+              <p>Smart security threat identification</p>
+            </div>
+            <div className="service-card">
+              <div className="service-icon">📱</div>
+              <h3>Real-Time Alerts</h3>
+              <p>Instant security notifications</p>
+            </div>
+          </div>
+          
+          <button className="learn-more-btn" aria-label="Learn more about security and monitoring services">Learn More</button>
         </div>
       </section>
 
@@ -315,11 +511,13 @@ const ServicesPage = () => {
         <div className="container">
           <div className="emergency-content">
             <h2>Emergency Services</h2>
-            <p>For urgent care needs or emergency situations, call our 24/7 hotline immediately.</p>
+            <p>For urgent care needs or emergency situations, call our 24/7 AI-monitored hotline immediately.</p>
             <a href="tel:+15559110000" className="emergency-number">+1 (555) 911-CARE</a>
           </div>
         </div>
       </section>
+
+      
     </div>
   );
 };

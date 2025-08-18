@@ -12,8 +12,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg}']
       },
       manifest: {
-        name: 'HomeMaintain - AI-Driven Care Platform',
-        short_name: 'HomeMaintain',
+        name: 'Nexus - Premium Service Platform',
+        short_name: 'Nexus',
         description: 'Professional home maintenance and care services powered by AI',
         theme_color: '#4f9cf9',
         background_color: '#ffffff',

@@ -106,7 +106,7 @@ const ContactPage = () => {
                     <option value="migrant-services">Migrant Homeowner Services</option>
                     <option value="elderly-care">Elderly Care Support</option>
                     <option value="driver-services">Driver Services</option>
-                    <option value="pet-care">Pet Care Services</option>
+                    <option value="delivery">Home Essentials Delivery</option>
                     <option value="caretaker">Dedicated Caretaker Services</option>
                     <option value="security">Security Guard Services</option>
                     <option value="emergency">Emergency Services</option>
@@ -151,7 +151,7 @@ const ContactPage = () => {
                   <div className="contact-details">
                     <h3>Email Us</h3>
                     <p>Send us your questions and requests</p>
-                    <a href="mailto:care@homemaintain.com" className="contact-link">care@homemaintain.com</a>
+                    <a href="mailto:hello@nexusservices.com" className="contact-link">hello@nexusservices.com</a>
                     <span className="availability">Response within 2 hours</span>
                   </div>
                 </div>

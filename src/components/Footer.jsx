@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Phone, Mail, MapPin, Facebook, Twitter, Instagram, Linkedin } from 'lucide-react';
+import Logo from './Logo';
 import './Footer.css';
 
 const Footer = () => {
@@ -10,24 +11,21 @@ const Footer = () => {
         <div className="footer-content">
           <div className="footer-brand">
             <div className="footer-logo">
-              <div className="logo-icon">HM</div>
-              <div className="logo-text">
-                <span className="logo-main">HomeMaintain</span>
-                <span className="logo-sub">AI-Driven Care Platform</span>
-              </div>
+              <Logo size="medium" />
+              <div className="logo-sub">Premium Service Platform</div>
             </div>
             <p className="footer-description">
-              Professional home maintenance and care services powered by AI, specializing in 
-              elderly care and migrant family support.
+              Connecting you with trusted professionals for all your service needs. 
+              Experience excellence in home maintenance, care, and lifestyle services.
             </p>
             <div className="footer-contact">
               <a href="tel:+15551234567" className="contact-item">
                 <Phone size={16} />
                 +1 (555) 123-4567
               </a>
-              <a href="mailto:care@homemaintain.com" className="contact-item">
+              <a href="mailto:hello@nexusservices.com" className="contact-item">
                 <Mail size={16} />
-                care@homemaintain.com
+                hello@nexusservices.com
               </a>
               <div className="contact-item">
                 <MapPin size={16} />
@@ -39,12 +37,12 @@ const Footer = () => {
           <div className="footer-links">
             <div className="footer-column">
               <h4>Services</h4>
-              <Link to="/services">Home Maintenance</Link>
-              <Link to="/services">Elderly Care</Link>
-              <Link to="/services">Driver Services</Link>
-              <Link to="/services">Security Services</Link>
-              <Link to="/services">Migrant Support</Link>
-              <Link to="/services">Emergency Care</Link>
+              <Link to="/services#smart-maintenance">Home Maintenance</Link>
+              <Link to="/services#elder-care">Elderly Care</Link>
+              <Link to="/services#delivery-transport">Driver Services</Link>
+              <Link to="/services#security-monitoring">Security Services</Link>
+              <Link to="/services#property-management">Migrant Support</Link>
+              <Link to="/services#smart-security">Emergency Care</Link>
             </div>
             
             <div className="footer-column">
@@ -92,8 +90,8 @@ const Footer = () => {
         </div>
         
         <div className="footer-bottom">
-          <p>&copy; 2024 HomeMaintain. All rights reserved.</p>
-          <p>AI-Driven Home Care Platform | Serving families with compassion and technology</p>
+          <p>&copy; 2024 Nexus. All rights reserved.</p>
+          <p>Premium Service Platform | Connecting you with trusted professionals</p>
         </div>
       </div>
     </footer>
