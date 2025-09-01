@@ -23,12 +23,11 @@
 }
 
 .login-content {
-  display: grid;
-  grid-template-columns: 1fr 400px;
-  gap: 30px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   width: 100%;
-  max-width: 1200px;
-  align-items: start;
+  max-width: 500px;
 }
 
 /* Compact Role Selection Section */
@@ -202,8 +201,7 @@
 
 /* Login Form Section */
 .login-form-section {
-  position: sticky;
-  top: 20px;
+  width: 100%;
 }
 
 .login-box {
@@ -491,6 +489,24 @@ input::placeholder {
   transform: translateY(0);
 }
 
+.google-auth-section {
+  margin-bottom: 15px;
+}
+
+.google-auth-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 0.75rem;
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: rgba(100, 116, 139, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(100, 116, 139, 0.2);
+}
+
 .google-icon {
   flex-shrink: 0;
   display: block;
@@ -569,9 +585,9 @@ a:hover {
   
   .login-content {
     padding: 0;
+    max-width: 100%;
   }
   
-  .role-selection-section,
   .login-box {
     padding: 20px;
   }

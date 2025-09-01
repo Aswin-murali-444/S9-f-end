@@ -135,13 +135,13 @@ const AboutPage = () => {
             </div>
             <div className="role-card">
               <div className="role-icon">👵</div>
-              <h3>Caretaker (Elder Care)</h3>
+              <h3>Supervisor</h3>
               <ul>
-                <li>Assist elders with daily routines and medication management</li>
-                <li>Provide health updates through the AI dashboard</li>
-                <li>Raise emergency alerts when needed with instant response</li>
-                <li>Maintain digital health and care reports</li>
-                <li>Coordinate with family members through the platform</li>
+                <li>Oversee daily operations and team management</li>
+                <li>Provide leadership and guidance to staff members</li>
+                <li>Monitor performance and quality standards</li>
+                <li>Maintain detailed reports and documentation</li>
+                <li>Coordinate with stakeholders and clients</li>
               </ul>
             </div>
             

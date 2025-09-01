@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LogIn, Home, Wrench, Heart, Truck, UserCheck, AlertCircle, CheckCircle, Shield, Clock, Users, Star } from 'lucide-react';
+import { LogIn, UserCheck, AlertCircle, CheckCircle, Shield } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
@@ -24,7 +24,6 @@ const loginSchema = yup.object({
 });
 
 const LoginPage = () => {
-  const [selectedRole, setSelectedRole] = useState(null);
   const { login, signInWithGoogle, loading } = useAuth();
   const navigate = useNavigate();
 
@@ -45,73 +44,6 @@ const LoginPage = () => {
 
   const watchedFields = watch();
 
-  // Enhanced role definitions with more detailed information
-  const userRoles = [
-    {
-      id: 'customer',
-      title: 'Customer (Resident)',
-      description: 'Smart home management and service booking',
-      icon: Home,
-      features: [
-        'Book home repairs, elder care, delivery services',
-        'Real-time home monitoring via smart cameras',
-        'Track service progress and manage billing',
-        'Provide feedback and rate service quality',
-        'Schedule recurring maintenance tasks',
-        'Access emergency support 24/7'
-      ],
-      benefits: ['Convenience', 'Peace of Mind', 'Cost Control'],
-      color: '#3b82f6'
-    },
-    {
-      id: 'service-provider',
-      title: 'Service Provider',
-      description: 'Professional maintenance and repair services',
-      icon: Wrench,
-      features: [
-        'Perform plumbing, electrical, and general repairs',
-        'Accept and manage service requests efficiently',
-        'Update job status with detailed notes and photos',
-        'Access mobile app for task management',
-        'View customer history and preferences',
-        'Earn ratings and build reputation'
-      ],
-      benefits: ['Flexible Work', 'Good Pay', 'Growth Opportunities'],
-      color: '#10b981'
-    },
-    {
-      id: 'caretaker',
-      title: 'Caretaker (Elder Care)',
-      description: 'Compassionate elderly care and support',
-      icon: Heart,
-      features: [
-        'Assist with daily routines and medication management',
-        'Provide health monitoring and updates',
-        'Raise emergency alerts when needed',
-        'Maintain detailed care reports and logs',
-        'Coordinate with family members',
-        'Access training and support resources'
-      ],
-      benefits: ['Meaningful Work', 'Flexible Hours', 'Training Support'],
-      color: '#ef4444'
-    },
-    {
-      id: 'driver',
-      title: 'Driver',
-      description: 'Safe and reliable transportation',
-      icon: Truck,
-      features: [
-        'Transport elderly to medical appointments safely',
-        'Provide real-time trip status updates',
-        'Handle multiple trip routes efficiently',
-        'Maintain vehicle safety standards',
-        'Build customer relationships'
-      ],
-      benefits: ['Flexible Schedule', 'Good Earnings', 'Independent Work'],
-      color: '#f59e0b'
-    }
-  ];
-
   // Clear form on component mount and prevent autofill
   useEffect(() => {
     reset();
@@ -127,15 +59,9 @@ const LoginPage = () => {
   }, [reset]);
 
   const onSubmit = async (data) => {
-    if (!selectedRole) {
-      toast.error('Please select a user role');
-      return;
-    }
-
     const result = await login({ 
       email: data.email, 
-      password: data.password, 
-      userType: selectedRole
+      password: data.password
     });
     
     if (result.success) {
@@ -167,55 +93,7 @@ const LoginPage = () => {
   return (
     <div className="login-container">
       <div className="login-content">
-        {/* Compact Role Selection Section */}
-        <div className="role-selection-section">
-          <div className="role-selection-header">
-            <div className="role-header-icon">
-              <Users size={24} />
-            </div>
-            <h2>Select Your Role</h2>
-            <p>Choose how you'll use our platform</p>
-          </div>
-          
-          <div className="role-cards-grid">
-            {userRoles.map((role) => {
-              const IconComponent = role.icon;
-              return (
-                <div
-                  key={role.id}
-                  className={`role-card ${selectedRole === role.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedRole(role.id)}
-                  style={{ '--role-color': role.color }}
-                >
-                  <div className="role-card-header">
-                    <div className="role-icon" style={{ backgroundColor: role.color }}>
-                      <IconComponent size={20} />
-                    </div>
-                    <div className="role-check">
-                      {selectedRole === role.id && <CheckCircle size={18} />}
-                    </div>
-                  </div>
-                  
-                  <div className="role-content">
-                    <h4>{role.title}</h4>
-                    <p className="role-description">{role.description}</p>
-                    
-                    <div className="role-features-compact">
-                      {role.features.slice(0, 3).map((feature, index) => (
-                        <div key={index} className="feature-item">
-                          <CheckCircle size={14} />
-                          <span>{feature}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Enhanced Login Form Section */}
+        {/* Login Form Section */}
         <div className="login-form-section">
           <div className="login-box">
             <div className="login-logo">
@@ -294,19 +172,12 @@ const LoginPage = () => {
               <div className="form-actions">
                 <button 
                   type="submit" 
-                  disabled={loading || isSubmitting || Object.keys(errors).length > 0 || !selectedRole}
-                  className={`submit-btn ${Object.keys(errors).length > 0 || !selectedRole ? 'disabled' : ''}`}
+                  disabled={loading || isSubmitting || Object.keys(errors).length > 0}
+                  className={`submit-btn ${Object.keys(errors).length > 0 ? 'disabled' : ''}`}
                 >
                   <LogIn size={18} />
                   {(loading || isSubmitting) ? 'Signing In...' : 'Sign In'}
                 </button>
-                
-                {!selectedRole && (
-                  <div className="role-reminder">
-                    <AlertCircle size={16} />
-                    <span>Please select a user role from the side panel</span>
-                  </div>
-                )}
               </div>
             </form>
             
@@ -314,20 +185,26 @@ const LoginPage = () => {
               <span>or continue with</span>
             </div>
             
-            <button 
-              type="button" 
-              className="google-btn" 
-              onClick={handleGoogleSignIn}
-              disabled={loading || isSubmitting}
-            >
-              <svg className="google-icon" width="18" height="18" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-              </svg>
-              {(loading || isSubmitting) ? 'Signing in...' : 'Continue with Google'}
-            </button>
+            <div className="google-auth-section">
+              <button 
+                type="button" 
+                className="google-btn" 
+                onClick={handleGoogleSignIn}
+                disabled={loading || isSubmitting}
+              >
+                <svg className="google-icon" width="18" height="18" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                {(loading || isSubmitting) ? 'Signing in...' : 'Continue with Google'}
+              </button>
+              <div className="google-auth-note">
+                <UserCheck size={14} />
+                <span>Google sign-in is for customers only</span>
+              </div>
+            </div>
             
             <div className="login-footer">
               <p>

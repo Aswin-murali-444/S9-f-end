@@ -414,6 +414,17 @@ select option {
   padding: 2px 0;
 }
 
+.info-message {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #3b82f6;
+  font-size: 0.75rem;
+  margin-top: 4px;
+  padding: 2px 0;
+  font-style: italic;
+}
+
 .error-message svg,
 .success-message svg {
   flex-shrink: 0;
@@ -484,6 +495,7 @@ select option {
 /* Animation for validation messages */
 .error-message,
 .success-message,
+.info-message,
 .password-strength {
   animation: slideIn 0.3s ease-out;
 }
@@ -551,6 +563,24 @@ select option {
 
 .google-btn:active {
   transform: translateY(0);
+}
+
+.google-auth-section {
+  margin-bottom: 15px;
+}
+
+.google-auth-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 0.75rem;
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: rgba(100, 116, 139, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(100, 116, 139, 0.2);
 }
 
 .google-icon {

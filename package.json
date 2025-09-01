@@ -10,8 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@gsap/react": "^2.1.2",
     "@headlessui/react": "^2.2.4",
     "@popperjs/core": "^2.11.8",
+    "@react-three/drei": "^10.7.4",
+    "@react-three/fiber": "^9.3.0",
     "@tanstack/react-query": "^5.83.0",
     "@tanstack/react-query-devtools": "^5.83.0",
     "@vitejs/plugin-react-swc": "^3.11.0",
@@ -19,6 +22,7 @@
     "bootstrap": "^5.3.7",
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.6",
+    "gsap": "^3.13.0",
     "lucide-react": "^0.525.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -27,6 +31,7 @@
     "react-intersection-observer": "^9.16.0",
     "react-router-dom": "^7.7.0",
     "tailwind-merge": "^3.3.1",
+    "three": "^0.179.1",
     "vite-plugin-pwa": "^1.0.1",
     "workbox-webpack-plugin": "^7.3.0"
   },

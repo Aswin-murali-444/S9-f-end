@@ -407,15 +407,15 @@ const HomePage = () => {
               <div className="role-icon animate-float">
                 <Heart />
               </div>
-              <h3>Caretaker (Elder Care)</h3>
-              <p>Assist with daily routines, monitor health, and raise emergency alerts</p>
+              <h3>Supervisor</h3>
+              <p>Oversee operations, manage teams, and monitor performance standards</p>
               <ul className="role-features">
-                <li>⏰ Daily routine assistance</li>
-                <li>💊 Medication management</li>
-                <li>🏥 Health monitoring & updates</li>
-                <li>🚨 Emergency alert system</li>
-                <li>📊 Care reports & analytics</li>
-                <li>👥 Companionship services</li>
+                <li>👥 Team management</li>
+                <li>📊 Performance monitoring</li>
+                <li>🎯 Quality assurance</li>
+                <li>📋 Report generation</li>
+                <li>🤝 Stakeholder coordination</li>
+                <li>⚡ Operational efficiency</li>
               </ul>
             </div>
             <div className="role-card card-hover" data-aos="fade-up" data-aos-delay="400">

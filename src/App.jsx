@@ -22,6 +22,11 @@ const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const CustomerDashboard = lazy(() => import('./pages/dashboards/CustomerDashboard'));
+const ServiceProviderDashboard = lazy(() => import('./pages/dashboards/ServiceProviderDashboard'));
+const DriverDashboard = lazy(() => import('./pages/dashboards/DriverDashboard'));
+const SupervisorDashboard = lazy(() => import('./pages/dashboards/SupervisorDashboard'));
+const AdminDashboard = lazy(() => import('./pages/dashboards/AdminDashboard'));
 
 const Placeholder = ({ title }) => (
   <div style={{ minHeight: '50vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
@@ -60,11 +65,14 @@ function App() {
                     <Route path="/auth/callback" element={<AuthCallback />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
-                    <Route path="/dashboard/customer" element={<Placeholder title="Customer Dashboard" />} />
-                    <Route path="/dashboard/provider" element={<Placeholder title="Provider Dashboard" />} />
-                    <Route path="/dashboard/driver" element={<Placeholder title="Driver Dashboard" />} />
-                    <Route path="/dashboard/caregiver" element={<Placeholder title="Caregiver Dashboard" />} />
-                    <Route path="/dashboard/admin" element={<Placeholder title="Admin Dashboard" />} />
+                    <Route path="/dashboard/customer" element={<CustomerDashboard />} />
+                    <Route path="/dashboard/provider" element={<ServiceProviderDashboard />} />
+                    <Route path="/dashboard/driver" element={<DriverDashboard />} />
+                    <Route path="/dashboard/supervisor" element={<SupervisorDashboard />} />
+                    <Route path="/dashboard/admin" element={<AdminDashboard />} />
+                    
+                    {/* Catch-all route for /dashboard - redirect to home */}
+                    <Route path="/dashboard" element={<HomePage />} />
                   </Routes>
                 </Suspense>
               </main>

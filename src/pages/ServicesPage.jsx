@@ -276,14 +276,14 @@ const ServicesPage = () => {
         </div>
       </section>
 
-      {/* Professional Caretaker Services */}
-      <section id="caretaker-services" className="service-section">
+      {/* Professional Supervisor Services */}
+      <section id="supervisor-services" className="service-section">
         <div className="container">
           <div className="service-header">
             <UserCheck className="service-main-icon" />
             <div>
-              <h2>Professional Caretaker Services</h2>
-              <p>Long-term personalized care with health monitoring</p>
+              <h2>Professional Supervisor Services</h2>
+              <p>Professional supervision and management services</p>
             </div>
           </div>
           
@@ -330,7 +330,7 @@ const ServicesPage = () => {
             </div>
           </div>
           
-          <button className="learn-more-btn" aria-label="Learn more about professional caretaker services">Learn More</button>
+          <button className="learn-more-btn" aria-label="Learn more about professional supervisor services">Learn More</button>
         </div>
       </section>
 
