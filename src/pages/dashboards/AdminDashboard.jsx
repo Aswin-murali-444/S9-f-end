@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
   Settings, 
@@ -46,12 +47,18 @@ import {
   PieChart,
   LineChart,
   BarChart,
-  Activity as ActivityIcon
+  Activity as ActivityIcon,
+  LogOut
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
+import Logo from '../../components/Logo';
+import { useAuth } from '../../hooks/useAuth';
+import { apiService } from '../../services/api';
+import './SharedDashboard.css';
 import './AdminDashboard.css';
 
 const AdminDashboard = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
   const [users, setUsers] = useState([]);
   const [systemMetrics, setSystemMetrics] = useState({
@@ -79,11 +86,71 @@ const AdminDashboard = () => {
   const [systemHealth, setSystemHealth] = useState({});
   const [securityEvents, setSecurityEvents] = useState([]);
   const [performanceData, setPerformanceData] = useState({});
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const notificationsRef = useRef(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Services & Categories
+  const [categories, setCategories] = useState([]);
+  const [services, setServices] = useState([]);
+
+  // Providers & Allocation
+  const [providersPending, setProvidersPending] = useState([]);
+  const [providers, setProviders] = useState([]);
+  const [allocations, setAllocations] = useState([]);
+
+  // Monitoring
+  const [serviceRequests, setServiceRequests] = useState([]);
+  const [ongoingTasks, setOngoingTasks] = useState([]);
+
+  // Billing
+  const [invoices, setInvoices] = useState([]);
+  const [payouts, setPayouts] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+
+  // Feedback
+  const [reviews, setReviews] = useState([]);
   
   const [headerRef, headerInView] = useInView({ threshold: 0.3, triggerOnce: true });
   const [statsRef, statsInView] = useInView({ threshold: 0.2, triggerOnce: true });
   
   const { useAnimatedInView, staggerAnimation } = useAnimations();
+  const { logout } = useAuth();
+
+  const formatUptime = (totalSeconds) => {
+    if (typeof totalSeconds !== 'number' || totalSeconds < 0) return '—';
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  };
+
+  const fetchMetrics = async (silent = false) => {
+    if (isRefreshing) return;
+    if (!silent) setIsRefreshing(true);
+    const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    try {
+      const data = await apiService.getSystemMetrics();
+      const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const rttMs = Math.round(t1 - t0);
+
+      setSystemMetrics(prev => ({
+        ...prev,
+        systemUptime: typeof data?.uptimeSec === 'number' ? formatUptime(data.uptimeSec) : prev.systemUptime,
+        responseTime: `${rttMs}ms`,
+        cpuUsage: typeof data?.cpu?.usagePercent === 'number' ? data.cpu.usagePercent : prev.cpuUsage,
+        memoryUsage: typeof data?.memory?.usagePercent === 'number' ? data.memory.usagePercent : prev.memoryUsage,
+        diskUsage: typeof data?.disk?.usagePercent === 'number' ? data.disk.usagePercent : prev.diskUsage,
+      }));
+    } catch (e) {
+      // ignore
+    } finally {
+      if (!silent) setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     // Simulate loading comprehensive data
@@ -158,6 +225,81 @@ const AdminDashboard = () => {
       memoryUsage: [67, 65, 68, 71, 69, 66, 67, 70, 64, 67, 69, 67],
       activeUsers: [456, 442, 468, 481, 473, 458, 465, 472, 451, 463, 470, 456]
     });
+
+    // Services & Categories
+    setCategories([
+      { id: 1, name: 'Home Maintenance', description: 'Repairs and maintenance for homes' },
+      { id: 2, name: 'Elder Care', description: 'Care and assistance for the elderly' },
+      { id: 3, name: 'Transport', description: 'Driver and logistics services' },
+      { id: 4, name: 'Delivery', description: 'Parcel and medicine delivery' }
+    ]);
+
+    setServices([
+      { id: 1, categoryId: 1, name: 'Plumbing', pricingModel: 'fixed', basePrice: 50 },
+      { id: 2, categoryId: 1, name: 'Electrical', pricingModel: 'hourly', basePrice: 20 },
+      { id: 3, categoryId: 4, name: 'Medicine Delivery', pricingModel: 'per_km', basePrice: 1.5 }
+    ]);
+
+    // Providers
+    setProvidersPending([
+      { id: 101, name: 'Alpha Services', specialization: 'Plumbing', documents: 'Pending Review' },
+      { id: 102, name: 'CareFirst', specialization: 'Elder Care', documents: 'Submitted' }
+    ]);
+    setProviders([
+      { id: 201, name: 'QuickFix Co.', specialization: 'Electrical', rating: 4.6, available: true },
+      { id: 202, name: 'SafeRide', specialization: 'Transport', rating: 4.8, available: true }
+    ]);
+    setAllocations([
+      { id: 1, requestId: 'REQ-1001', category: 'Home Maintenance', service: 'Plumbing', assignedProviderId: 201, mode: 'AI' }
+    ]);
+
+    // Monitoring
+    setServiceRequests([
+      { id: 'REQ-1001', customer: 'Emily Davis', category: 'Home Maintenance', service: 'Plumbing', status: 'in_progress', priority: 'high' },
+      { id: 'REQ-1002', customer: 'John Smith', category: 'Transport', service: 'Airport Drop', status: 'pending', priority: 'medium' }
+    ]);
+    setOngoingTasks([
+      { id: 'TASK-9001', provider: 'QuickFix Co.', job: 'Electrical Diagnosis', eta: '40m', progress: 70 },
+      { id: 'TASK-9002', provider: 'SafeRide', job: 'Pickup to Airport', eta: '15m', progress: 35 }
+    ]);
+
+    // Billing
+    setInvoices([
+      { id: 'INV-5001', customer: 'Emily Davis', amount: 120, status: 'due', date: '2024-01-15' },
+      { id: 'INV-5002', customer: 'John Smith', amount: 45, status: 'paid', date: '2024-01-14' }
+    ]);
+    setPayouts([
+      { id: 'PO-3001', provider: 'QuickFix Co.', amount: 220, status: 'scheduled', date: '2024-01-18' },
+      { id: 'PO-3002', provider: 'SafeRide', amount: 140, status: 'completed', date: '2024-01-12' }
+    ]);
+    setTransactions([
+      { id: 'TX-7001', type: 'invoice', ref: 'INV-5002', amount: 45, method: 'card', status: 'success' },
+      { id: 'TX-7002', type: 'payout', ref: 'PO-3002', amount: 140, method: 'bank', status: 'success' }
+    ]);
+
+    // Feedback
+    setReviews([
+      { id: 'RV-8001', customer: 'Alice', provider: 'QuickFix Co.', rating: 5, comment: 'Great service!', flagged: false },
+      { id: 'RV-8002', customer: 'Bob', provider: 'SafeRide', rating: 3, comment: 'Pickup was late', flagged: false }
+    ]);
+  }, []);
+
+  // Live system metrics polling
+  useEffect(() => {
+    fetchMetrics();
+    const intervalId = setInterval(() => fetchMetrics(true), 5000);
+    return () => { clearInterval(intervalId); };
+  }, []);
+
+  // Close notifications dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target)) {
+        setIsNotificationsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const containerVariants = {
@@ -190,6 +332,19 @@ const AdminDashboard = () => {
     { label: "Security Score", value: `${analytics.securityScore?.current || 0}/100`, icon: Shield, color: "#f59e0b", change: analytics.securityScore?.change || "+0%", changeType: "positive" }
   ];
 
+  const navItems = [
+    { key: 'overview', label: 'Overview', icon: BarChart3 },
+    { key: 'users', label: 'User Management', icon: Users },
+    { key: 'services', label: 'Services', icon: Settings },
+    { key: 'allocation', label: 'Allocation', icon: Target },
+    { key: 'monitoring', label: 'Monitoring', icon: Activity },
+    { key: 'billing', label: 'Billing', icon: DollarSign },
+    { key: 'feedback', label: 'Feedback', icon: Star },
+    { key: 'system', label: 'System Health', icon: Server },
+    { key: 'security', label: 'Security', icon: Shield },
+    { key: 'analytics', label: 'Analytics', icon: PieChart }
+  ];
+
   const handleUserAction = (userId, action) => {
     setUsers(prev => 
       prev.map(user => 
@@ -220,8 +375,64 @@ const AdminDashboard = () => {
     );
   };
 
+  // Services & Categories are now handled by dedicated pages
+
+  // Allocation Handlers
+  const handleApproveProvider = (id) => {
+    setProvidersPending(prev => prev.filter(p => p.id !== id));
+    const approved = providersPending.find(p => p.id === id);
+    if (approved) setProviders(prev => [...prev, { id: approved.id, name: approved.name, specialization: approved.specialization, rating: 0, available: true }]);
+  };
+
+  const handleAssignProvider = (requestId, providerId, mode = 'Manual') => {
+    setAllocations(prev => {
+      const existing = prev.find(a => a.requestId === requestId);
+      if (existing) {
+        return prev.map(a => a.requestId === requestId ? { ...a, assignedProviderId: providerId, mode } : a);
+      }
+      return [...prev, { id: prev.length ? Math.max(...prev.map(a => a.id)) + 1 : 1, requestId, category: '', service: '', assignedProviderId: providerId, mode }];
+    });
+  };
+
+  const handleAddUser = (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const name = formData.get('name')?.toString().trim();
+    const email = formData.get('email')?.toString().trim();
+    const role = formData.get('role')?.toString();
+    const department = formData.get('department')?.toString().trim();
+    if (!name || !email || !role) return;
+    const initials = name.split(' ').map(p => p[0]).slice(0,2).join('').toUpperCase();
+    setUsers(prev => [
+      ...prev,
+      {
+        id: prev.length ? Math.max(...prev.map(u => u.id)) + 1 : 1,
+        name,
+        email,
+        role,
+        status: 'active',
+        lastLogin: new Date().toISOString().slice(0,16).replace('T',' '),
+        department: department || 'General',
+        permissions: [],
+        avatar: initials
+      }
+    ]);
+    setIsAddUserOpen(false);
+  };
+
+  const roleDistribution = React.useMemo(() => {
+    const counts = users.reduce((acc, u) => {
+      acc[u.role] = (acc[u.role] || 0) + 1;
+      return acc;
+    }, {});
+    const roles = ['admin','supervisor','service_provider','customer','driver'];
+    const total = users.length || 1;
+    return roles.map(r => ({ role: r, count: counts[r] || 0, percent: Math.round(((counts[r] || 0) / total) * 100) }));
+  }, [users]);
+
   return (
     <div className="admin-dashboard">
+
       {/* Header Section */}
       <motion.section 
         className="dashboard-header"
@@ -233,22 +444,110 @@ const AdminDashboard = () => {
         <div className="container">
           <motion.div className="header-content" variants={itemVariants}>
             <div className="welcome-section">
-              <h1>Welcome back, Administrator!</h1>
-              <p>Monitor system health, manage users, and oversee platform operations</p>
+              <Logo size="medium" />
             </div>
-            <div className="header-actions">
-              <button className="btn-secondary">
-                <Bell size={20} />
-                Notifications
-              </button>
-              <button className="btn-primary">
+            <div className="header-actions" ref={notificationsRef}>
+              <div className="notifications-wrapper">
+                <button 
+                  className="btn-secondary"
+                  onClick={() => setIsNotificationsOpen(v => !v)}
+                  aria-haspopup="true"
+                  aria-expanded={isNotificationsOpen}
+                >
+                  <Bell size={20} />
+                  Notifications
+                </button>
+                {isNotificationsOpen && (
+                  <div className="notifications-dropdown">
+                    <div className="dropdown-header">
+                      <span>Notifications</span>
+                      <button className="link-button" onClick={() => setAlerts(prev => prev.map(a => ({...a, status: 'reviewed'})))}>Mark all read</button>
+                    </div>
+                    <div className="dropdown-list">
+                      {alerts.slice(0,6).map(item => (
+                        <div key={item.id} className={`notification-item ${item.severity}`}>
+                          <div className="notification-icon">
+                            {item.type === 'security' && <Shield size={16} />}
+                            {item.type === 'performance' && <Activity size={16} />}
+                            {item.type === 'system' && <Server size={16} />}
+                          </div>
+                          <div className="notification-content">
+                            <div className="notification-title">{item.title}</div>
+                            <div className="notification-message">{item.message}</div>
+                            <div className="notification-meta">
+                              <span className={`severity ${item.severity}`}>{item.severity}</span>
+                              <span className="timestamp">{item.timestamp}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="dropdown-footer">
+                      <button className="btn-secondary" onClick={() => setIsNotificationsOpen(false)}>Close</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <button className="btn-primary" onClick={() => navigate('/admin/add-user')}>
                 <Plus size={20} />
                 Add User
+              </button>
+              <button 
+                className="btn-secondary"
+                onClick={logout}
+                aria-label="Logout"
+                title="Logout"
+              >
+                <LogOut size={20} />
+                Logout
               </button>
             </div>
           </motion.div>
         </div>
       </motion.section>
+
+      {isAddUserOpen && (
+        <div className="modal-backdrop" onClick={() => setIsAddUserOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h4>Add User</h4>
+            </div>
+            <form className="modal-body" onSubmit={handleAddUser}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="name">Name</label>
+                  <input id="name" name="name" type="text" placeholder="Jane Doe" required />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="email">Email</label>
+                  <input id="email" name="email" type="email" placeholder="jane@example.com" required />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="role">Role</label>
+                  <select id="role" name="role" required>
+                    <option value="admin">Admin</option>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="service_provider">Service Provider</option>
+                    <option value="customer">Customer</option>
+                    <option value="driver">Driver</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="department">Department</label>
+                  <input id="department" name="department" type="text" placeholder="Operations" />
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-secondary" onClick={() => setIsAddUserOpen(false)}>Cancel</button>
+                <button type="submit" className="btn-primary">Create User</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Stats Section */}
       <motion.section 
@@ -289,42 +588,24 @@ const AdminDashboard = () => {
       {/* Main Content */}
       <section className="dashboard-content">
         <div className="container">
-          {/* Tabs */}
-          <div className="tabs">
-            <button 
-              className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
-              onClick={() => setActiveTab('overview')}
-            >
-              Overview
-            </button>
-            <button 
-              className={`tab ${activeTab === 'users' ? 'active' : ''}`}
-              onClick={() => setActiveTab('users')}
-            >
-              User Management
-            </button>
-            <button 
-              className={`tab ${activeTab === 'system' ? 'active' : ''}`}
-              onClick={() => setActiveTab('system')}
-            >
-              System Health
-            </button>
-            <button 
-              className={`tab ${activeTab === 'security' ? 'active' : ''}`}
-              onClick={() => setActiveTab('security')}
-            >
-              Security
-            </button>
-            <button 
-              className={`tab ${activeTab === 'analytics' ? 'active' : ''}`}
-              onClick={() => setActiveTab('analytics')}
-            >
-              Analytics
-            </button>
-          </div>
+          <div className="dashboard-layout">
+            <aside className="dashboard-sidebar">
+              <nav className="sidebar-nav">
+                {navItems.map(item => (
+                  <button
+                    key={item.key}
+                    className={`nav-item ${activeTab === item.key ? 'active' : ''}`}
+                    onClick={() => setActiveTab(item.key)}
+                  >
+                    <item.icon size={18} />
+                    {item.label}
+                  </button>
+                ))}
+                <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '8px 0' }} />
+              </nav>
+            </aside>
 
-          {/* Tab Content */}
-          <div className="tab-content">
+            <div className="tab-content">
             {activeTab === 'overview' && (
               <motion.div 
                 className="overview-tab"
@@ -339,7 +620,17 @@ const AdminDashboard = () => {
                     <div className="overview-card">
                       <div className="card-header">
                         <h4>Performance Metrics</h4>
-                        <RefreshCw size={16} className="refresh-icon" />
+                        <button
+                          className="btn-secondary"
+                          onClick={() => fetchMetrics()}
+                          disabled={isRefreshing}
+                          aria-label="Refresh performance metrics"
+                          title={isRefreshing ? 'Refreshing…' : 'Refresh'}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        >
+                          <RefreshCw size={16} className="refresh-icon" />
+                          {isRefreshing ? 'Refreshing…' : 'Refresh'}
+                        </button>
                       </div>
                       <div className="metrics-list">
                         <div className="metric-item">
@@ -419,6 +710,24 @@ const AdminDashboard = () => {
                         </div>
                       </div>
                     </div>
+                    
+                    <div className="overview-card role-distribution">
+                      <div className="card-header">
+                        <h4>User Roles</h4>
+                        <Users size={16} />
+                      </div>
+                      <div className="roles-list">
+                        {roleDistribution.map(item => (
+                          <div key={item.role} className="role-item">
+                            <span className={`role-label ${item.role}`}>{item.role.replace('_',' ')}</span>
+                            <div className="role-bar">
+                              <div className="role-fill" style={{ width: `${item.percent}%` }}></div>
+                            </div>
+                            <span className="role-count">{item.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -488,21 +797,25 @@ const AdminDashboard = () => {
                 <div className="quick-actions">
                   <h3>Quick Actions</h3>
                   <div className="actions-grid">
-                    <button className="action-card">
+                    <button className="action-card" onClick={() => navigate('/admin/add-user')}>
                       <UserPlus size={24} />
                       <span>Add User</span>
                     </button>
-                    <button className="action-card">
-                      <BarChart3 size={24} />
-                      <span>Generate Report</span>
+                    <button className="action-card" onClick={() => navigate('/admin/add-category')}>
+                      <Plus size={24} />
+                      <span>Add Category</span>
                     </button>
-                    <button className="action-card">
-                      <Shield size={24} />
-                      <span>Security Scan</span>
-                    </button>
-                    <button className="action-card">
+                    <button className="action-card" onClick={() => navigate('/admin/add-service')}>
                       <Settings size={24} />
-                      <span>System Settings</span>
+                      <span>Add Service</span>
+                    </button>
+                    <button className="action-card" onClick={() => navigate('/admin/assign-provider')}>
+                      <Target size={24} />
+                      <span>Assign Provider</span>
+                    </button>
+                    <button className="action-card" onClick={() => navigate('/admin/create-bill')}>
+                      <DollarSign size={24} />
+                      <span>Create Bill</span>
                     </button>
                   </div>
                 </div>
@@ -531,7 +844,7 @@ const AdminDashboard = () => {
                       <option>Customer</option>
                       <option>Driver</option>
                     </select>
-                    <button className="btn-primary">
+                    <button className="btn-primary" onClick={() => navigate('/admin/add-user')}>
                       <Plus size={20} />
                       Add User
                     </button>
@@ -595,6 +908,363 @@ const AdminDashboard = () => {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'services' && (
+              <motion.div 
+                className="services-tab"
+                initial="hidden"
+                animate="visible"
+                variants={containerVariants}
+              >
+                <div className="admin-forms-header">
+                  <h2>Admin Management</h2>
+                  <p>Manage all administrative functions from here</p>
+                </div>
+                
+                <div className="admin-forms-grid">
+                  {/* Add Service Category */}
+                  <motion.div 
+                    className="admin-form-card"
+                    whileHover={{ scale: 1.02, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate('/admin/add-category')}
+                    variants={itemVariants}
+                  >
+                    <div className="form-card-icon">
+                      <Settings size={32} />
+                    </div>
+                    <div className="form-card-content">
+                      <h3>Add Service Category</h3>
+                      <p>Create new service categories with descriptions and icons</p>
+                      <ul className="form-card-features">
+                        <li>Category Name & Description</li>
+                        <li>Icon/Image Upload</li>
+                        <li>Active/Inactive Toggle</li>
+                      </ul>
+                    </div>
+                    <div className="form-card-action">
+                      <span>Create Category →</span>
+                    </div>
+                  </motion.div>
+
+                  {/* Add Service */}
+                  <motion.div 
+                    className="admin-form-card"
+                    whileHover={{ scale: 1.02, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate('/admin/add-service')}
+                    variants={itemVariants}
+                  >
+                    <div className="form-card-icon">
+                      <Zap size={32} />
+                    </div>
+                    <div className="form-card-content">
+                      <h3>Add Service</h3>
+                      <p>Create comprehensive service offerings with pricing</p>
+                      <ul className="form-card-features">
+                        <li>Select Category & Pricing Model</li>
+                        <li>Duration & Provider Assignment</li>
+                        <li>Base Price Configuration</li>
+                      </ul>
+                    </div>
+                    <div className="form-card-action">
+                      <span>Create Service →</span>
+                    </div>
+                  </motion.div>
+
+                  {/* Add User */}
+                  <motion.div 
+                    className="admin-form-card"
+                    whileHover={{ scale: 1.02, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate('/admin/add-user')}
+                    variants={itemVariants}
+                  >
+                    <div className="form-card-icon">
+                      <UserPlus size={32} />
+                    </div>
+                    <div className="form-card-content">
+                      <h3>Add User</h3>
+                      <p>Create accounts for customers, providers, drivers, and supervisors</p>
+                      <ul className="form-card-features">
+                        <li>Role-Based Access Control</li>
+                        <li>Auto/Manual Password Generation</li>
+                        <li>Service Assignment (Providers)</li>
+                      </ul>
+                    </div>
+                    <div className="form-card-action">
+                      <span>Create User →</span>
+                    </div>
+                  </motion.div>
+
+                  {/* Assign Provider to Service */}
+                  <motion.div 
+                    className="admin-form-card"
+                    whileHover={{ scale: 1.02, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate('/admin/assign-provider')}
+                    variants={itemVariants}
+                  >
+                    <div className="form-card-icon">
+                      <Target size={32} />
+                    </div>
+                    <div className="form-card-content">
+                      <h3>Assign Provider to Service</h3>
+                      <p>Allocate service providers to specific services with priority</p>
+                      <ul className="form-card-features">
+                        <li>Service & Provider Selection</li>
+                        <li>Priority Level Assignment</li>
+                        <li>Performance Metrics Display</li>
+                      </ul>
+                    </div>
+                    <div className="form-card-action">
+                      <span>Assign Provider →</span>
+                    </div>
+                  </motion.div>
+
+                  {/* Billing Setup */}
+                  <motion.div 
+                    className="admin-form-card"
+                    whileHover={{ scale: 1.02, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate('/admin/create-bill')}
+                    variants={itemVariants}
+                  >
+                    <div className="form-card-icon">
+                      <DollarSign size={32} />
+                    </div>
+                    <div className="form-card-content">
+                      <h3>Billing Setup (Create Bill)</h3>
+                      <p>Generate invoices for customer services with calculations</p>
+                      <ul className="form-card-features">
+                        <li>Customer & Service Selection</li>
+                        <li>Tax & Discount Calculations</li>
+                        <li>Payment Status Management</li>
+                      </ul>
+                    </div>
+                    <div className="form-card-action">
+                      <span>Create Bill →</span>
+                    </div>
+                  </motion.div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'allocation' && (
+              <motion.div 
+                className="allocation-tab"
+                initial="hidden"
+                animate="visible"
+                variants={containerVariants}
+              >
+                <div className="content-grid">
+                  <div className="content-card">
+                    <h3>Pending Providers</h3>
+                    <div className="list-table">
+                      {providersPending.length === 0 && <div className="empty">No pending providers</div>}
+                      {providersPending.map(p => (
+                        <div key={p.id} className="list-row">
+                          <div className="list-main">
+                            <strong>{p.name}</strong>
+                            <span className="text-muted">{p.specialization} • {p.documents}</span>
+                          </div>
+                          <div className="list-actions">
+                            <button className="btn-primary" onClick={() => handleApproveProvider(p.id)}>Approve</button>
+                            <button className="btn-secondary">Reject</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="content-card">
+                    <div className="card-header">
+                      <h3>Provider Assignment</h3>
+                      <button 
+                        className="btn-primary" 
+                        onClick={() => navigate('/admin/assign-provider')}
+                      >
+                        <Plus size={20} />
+                        Assign Provider
+                      </button>
+                    </div>
+                    <div className="list-table">
+                      {serviceRequests.map(req => (
+                        <div key={req.id} className="list-row">
+                          <div className="list-main">
+                            <strong>{req.id}</strong>
+                            <span className="text-muted">{req.category} • {req.service} • {req.status}</span>
+                          </div>
+                          <div className="list-actions">
+                            <select onChange={(e) => handleAssignProvider(req.id, Number(e.target.value))} defaultValue="">
+                              <option value="" disabled>Select provider</option>
+                              {providers.map(pr => (
+                                <option key={pr.id} value={pr.id}>{pr.name} ({pr.specialization})</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'monitoring' && (
+              <motion.div 
+                className="monitoring-tab"
+                initial="hidden"
+                animate="visible"
+                variants={containerVariants}
+              >
+                <div className="content-grid">
+                  <div className="content-card">
+                    <h3>Service Requests</h3>
+                    <div className="list-table">
+                      {serviceRequests.map(r => (
+                        <div key={r.id} className="list-row">
+                          <div className="list-main">
+                            <strong>{r.id}</strong>
+                            <span className="text-muted">{r.customer} • {r.category} • {r.service}</span>
+                          </div>
+                          <div className="list-actions">
+                            <span className={`status-badge ${r.status}`}>{r.status.replace('_',' ')}</span>
+                            <span className={`status-badge ${r.priority}`}>{r.priority}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="content-card">
+                    <h3>Ongoing Tasks</h3>
+                    <div className="list-table">
+                      {ongoingTasks.map(t => (
+                        <div key={t.id} className="list-row">
+                          <div className="list-main">
+                            <strong>{t.provider}</strong>
+                            <span className="text-muted">{t.job} • ETA {t.eta}</span>
+                          </div>
+                          <div className="list-actions">
+                            <div className="progress-bar"><div className="progress-fill" style={{ width: `${t.progress}%` }}></div></div>
+                            <span className="text-muted">{t.progress}%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'billing' && (
+              <motion.div 
+                className="billing-tab"
+                initial="hidden"
+                animate="visible"
+                variants={containerVariants}
+              >
+                <div className="content-grid">
+                  <div className="content-card">
+                    <div className="card-header">
+                      <h3>Invoices</h3>
+                      <button 
+                        className="btn-primary" 
+                        onClick={() => navigate('/admin/create-bill')}
+                      >
+                        <Plus size={20} />
+                        Create Bill
+                      </button>
+                    </div>
+                    <div className="list-table">
+                      {invoices.map(inv => (
+                        <div key={inv.id} className="list-row">
+                          <div className="list-main">
+                            <strong>{inv.id}</strong>
+                            <span className="text-muted">{inv.customer} • {inv.date}</span>
+                          </div>
+                          <div className="list-actions">
+                            <span className="amount">${inv.amount.toFixed(2)}</span>
+                            <span className={`status-badge ${inv.status}`}>{inv.status}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="content-card">
+                    <h3>Provider Payouts</h3>
+                    <div className="list-table">
+                      {payouts.map(po => (
+                        <div key={po.id} className="list-row">
+                          <div className="list-main">
+                            <strong>{po.provider}</strong>
+                            <span className="text-muted">{po.date}</span>
+                          </div>
+                          <div className="list-actions">
+                            <span className="amount">${po.amount.toFixed(2)}</span>
+                            <span className={`status-badge ${po.status}`}>{po.status}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="content-card">
+                    <h3>Transactions</h3>
+                    <div className="list-table">
+                      {transactions.map(tx => (
+                        <div key={tx.id} className="list-row">
+                          <div className="list-main">
+                            <strong>{tx.id}</strong>
+                            <span className="text-muted">{tx.type} • {tx.ref}</span>
+                          </div>
+                          <div className="list-actions">
+                            <span className="amount">${tx.amount.toFixed(2)}</span>
+                            <span className={`status-badge ${tx.status}`}>{tx.status}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'feedback' && (
+              <motion.div 
+                className="feedback-tab"
+                initial="hidden"
+                animate="visible"
+                variants={containerVariants}
+              >
+                <div className="content-grid">
+                  <div className="content-card">
+                    <h3>Customer Feedback</h3>
+                    <div className="list-table">
+                      {reviews.map(rv => (
+                        <div key={rv.id} className="list-row">
+                          <div className="list-main">
+                            <strong>{rv.customer}</strong>
+                            <span className="text-muted">{rv.provider} • {rv.rating}/5</span>
+                            <div className="comment">{rv.comment}</div>
+                          </div>
+                          <div className="list-actions">
+                            {!rv.flagged ? (
+                              <button className="btn-secondary" onClick={() => setReviews(prev => prev.map(r => r.id === rv.id ? { ...r, flagged: true } : r))}>Flag</button>
+                            ) : (
+                              <span className="status-badge warning">Flagged</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="content-card">
+                    <h3>Disputes & Escalations</h3>
+                    <div className="empty">No active disputes</div>
                   </div>
                 </div>
               </motion.div>
@@ -888,6 +1558,7 @@ const AdminDashboard = () => {
                 </div>
               </motion.div>
             )}
+          </div>
           </div>
         </div>
       </section>

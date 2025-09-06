@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import QueryProvider from './providers/QueryProvider';
 import { AuthProvider } from './hooks/useAuth';
@@ -28,6 +28,13 @@ const DriverDashboard = lazy(() => import('./pages/dashboards/DriverDashboard'))
 const SupervisorDashboard = lazy(() => import('./pages/dashboards/SupervisorDashboard'));
 const AdminDashboard = lazy(() => import('./pages/dashboards/AdminDashboard'));
 
+// Admin Pages
+const AddCategoryPage = lazy(() => import('./pages/admin/AddCategoryPage'));
+const AddServicePage = lazy(() => import('./pages/admin/AddServicePage'));
+const AddUserPage = lazy(() => import('./pages/admin/AddUserPage'));
+const AssignProviderPage = lazy(() => import('./pages/admin/AssignProviderPage'));
+const CreateBillPage = lazy(() => import('./pages/admin/CreateBillPage'));
+
 const Placeholder = ({ title }) => (
   <div style={{ minHeight: '50vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
     <h2>{title}</h2>
@@ -35,15 +42,15 @@ const Placeholder = ({ title }) => (
   </div>
 );
 
-function App() {
+function AppShell() {
+  const location = useLocation();
+  const isDashboard = location.pathname.startsWith('/dashboard');
+  const isAdminPage = location.pathname.startsWith('/admin');
+
   return (
-    <ErrorBoundary>
-      <QueryProvider>
-        <AuthProvider>
-          <Router>
-            <div className="App">
-              <Header />
-              <main className="main-content">
+    <div className="App">
+      {!isDashboard && !isAdminPage && <Header />}
+      <main className="main-content">
                 <Suspense fallback={
                   <div style={{ 
                     display: 'flex', 
@@ -71,40 +78,57 @@ function App() {
                     <Route path="/dashboard/supervisor" element={<SupervisorDashboard />} />
                     <Route path="/dashboard/admin" element={<AdminDashboard />} />
                     
+                    {/* Admin Pages */}
+                    <Route path="/admin/add-category" element={<AddCategoryPage />} />
+                    <Route path="/admin/add-service" element={<AddServicePage />} />
+                    <Route path="/admin/add-user" element={<AddUserPage />} />
+                    <Route path="/admin/assign-provider" element={<AssignProviderPage />} />
+                    <Route path="/admin/create-bill" element={<CreateBillPage />} />
+                    
                     {/* Catch-all route for /dashboard - redirect to home */}
                     <Route path="/dashboard" element={<HomePage />} />
                   </Routes>
                 </Suspense>
-              </main>
-              <Footer />
-              
-              {/* Modern Toast Notifications */}
-              <Toaster
-                position="top-right"
-                toastOptions={{
-                  duration: 4000,
-                  style: {
-                    background: 'white',
-                    color: '#2c3e50',
-                    border: '1px solid #f1f5f9',
-                    borderRadius: '12px',
-                    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.12)',
-                  },
-                  success: {
-                    iconTheme: {
-                      primary: '#10b981',
-                      secondary: 'white',
-                    },
-                  },
-                  error: {
-                    iconTheme: {
-                      primary: '#ef4444',
-                      secondary: 'white',
-                    },
-                  },
-                }}
-              />
-            </div>
+      </main>
+      {!isDashboard && !isAdminPage && <Footer />}
+
+      {/* Modern Toast Notifications */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: 'white',
+            color: '#2c3e50',
+            border: '1px solid #f1f5f9',
+            borderRadius: '12px',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.12)',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: 'white',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: 'white',
+            },
+          },
+        }}
+      />
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <QueryProvider>
+        <AuthProvider>
+          <Router>
+            <AppShell />
           </Router>
         </AuthProvider>
       </QueryProvider>

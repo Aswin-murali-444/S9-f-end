@@ -91,6 +91,11 @@ class ApiService {
   async getUsers() {
     return this.request('/users');
   }
+
+  // System metrics
+  async getSystemMetrics() {
+    return this.request('/system/metrics');
+  }
 }
 
 export const apiService = new ApiService(); 
