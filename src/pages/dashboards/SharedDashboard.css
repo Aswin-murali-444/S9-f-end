@@ -5,6 +5,11 @@
   padding: 0 20px;
 }
 
+/* Wider container for content-heavy dashboard sections */
+.container-wide {
+  max-width: 1400px;
+}
+
 /* Common Button Styles */
 .btn-primary, .btn-secondary, .btn-outline, .btn-danger, .btn-success, .btn-filter {
   display: flex;

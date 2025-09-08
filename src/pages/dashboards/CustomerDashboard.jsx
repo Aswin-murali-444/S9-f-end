@@ -55,13 +55,13 @@ import {
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
 import Logo from '../../components/Logo';
-import './CustomerDashboard.css';
 import './SharedDashboard.css';
+import './CustomerDashboard.css';
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -268,35 +268,33 @@ const CustomerDashboard = () => {
     { label: "Avg Rating", value: serviceStats.averageRating.toString(), icon: Star, color: "#f59e0b", change: "+0.2 improvement", changeType: "positive" }
   ];
 
+  // Navigation items with Home as default active tab
   const navItems = [
     { key: 'home', label: 'Home', icon: Home },
-    { key: 'services', label: 'Browse Services', icon: Search },
+    { key: 'categories', label: 'Categories', icon: Settings },
     { key: 'orders', label: 'Your Orders', icon: Package },
-    { key: 'monitoring', label: 'Smart Home', icon: Camera },
+    { key: 'wishlist', label: 'Wishlist', icon: Heart },
+    { key: 'cart', label: 'Cart', icon: Package },
     { key: 'account', label: 'Your Account', icon: User },
     { key: 'support', label: 'Customer Service', icon: MessageCircle }
   ];
 
   return (
-    <div className="admin-dashboard customer-premium">
-      {/* Header Section */}
+    <div className="admin-dashboard">
+      {/* Header Section - Same as Admin */}
       <motion.section 
-        className="dashboard-header premium-header"
+        className="dashboard-header"
         ref={headerRef}
         initial="hidden"
         animate={headerInView ? "visible" : "hidden"}
         variants={containerVariants}
       >
         <div className="container">
-          <motion.div className="header-content premium-header-content" variants={itemVariants}>
-            <div className="welcome-section premium-welcome">
+          <motion.div className="header-content" variants={itemVariants}>
+            <div className="welcome-section">
               <Logo size="medium" />
-              <div className="welcome-text">
-                <h2>Welcome back, {user?.user_metadata?.full_name || 'Customer'}</h2>
-                <p>Your premium service experience</p>
-          </div>
-        </div>
-            <div className="header-actions premium-actions" ref={notificationsRef}>
+            </div>
+            <div className="header-actions" ref={notificationsRef}>
               <div className="notifications-wrapper">
                 <button 
                   className="btn-secondary"
@@ -315,7 +313,7 @@ const CustomerDashboard = () => {
                     <div className="dropdown-header">
                       <span>Notifications</span>
                       <button className="link-button" onClick={() => setNotifications([])}>Mark all read</button>
-            </div>
+                    </div>
                     <div className="dropdown-list">
                       {notifications.slice(0,6).map(item => (
                         <div key={item.id} className={`notification-item ${item.type}`}>
@@ -324,14 +322,14 @@ const CustomerDashboard = () => {
                             {item.type === 'billing' && <DollarSign size={16} />}
                             {item.type === 'security' && <Shield size={16} />}
                             {item.type === 'service' && <CheckCircle size={16} />}
-            </div>
+                          </div>
                           <div className="notification-content">
                             <div className="notification-title">{item.title}</div>
                             <div className="notification-message">{item.message}</div>
                             <div className="notification-meta">
                               <span className="timestamp">{item.time}</span>
-          </div>
-        </div>
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -340,13 +338,28 @@ const CustomerDashboard = () => {
                     </div>
                   </div>
                 )}
-          </div>
-          
-              <button className="btn-primary" onClick={handleBookService}>
-                <Plus size={20} />
-                Book Service
-            </button>
-            <button 
+              </div>
+              
+              <div
+                className="user-info"
+                role="button"
+                tabIndex={0}
+                onClick={() => setActiveTab('profile')}
+                onKeyDown={(e) => { if (e.key === 'Enter') setActiveTab('profile'); }}
+              >
+                <div className="user-avatar">
+                  {user?.user_metadata?.avatar_url ? (
+                    <img src={user.user_metadata.avatar_url} alt="Profile" />
+                  ) : (
+                    <User size={20} />
+                  )}
+                </div>
+                <div className="user-details">
+                  <span className="user-name">{user?.user_metadata?.full_name || 'Customer'}</span>
+                </div>
+              </div>
+
+              <button 
                 className="btn-secondary"
                 onClick={handleLogout}
                 aria-label="Logout"
@@ -354,13 +367,13 @@ const CustomerDashboard = () => {
               >
                 <LogOut size={20} />
                 Logout
-            </button>
-        </div>
+              </button>
+            </div>
           </motion.div>
         </div>
       </motion.section>
 
-      {/* Stats Section */}
+      {/* Stats Section - Same style as Admin */}
       <motion.section 
         className="stats-section"
         ref={statsRef}
@@ -398,7 +411,7 @@ const CustomerDashboard = () => {
 
       {/* Main Content */}
       <section className="dashboard-content">
-        <div className="container">
+        <div className="container container-wide">
           <div className="dashboard-layout">
         <aside className="dashboard-sidebar">
           <nav className="sidebar-nav">
@@ -418,481 +431,458 @@ const CustomerDashboard = () => {
             <div className="tab-content">
               {activeTab === 'home' && (
                 <motion.div 
-                  className="home-tab premium-home"
+                  className="home-tab"
                   initial="hidden"
                   animate="visible"
                   variants={containerVariants}
                 >
-                  {/* Premium Dashboard Overview */}
-                  <div className="premium-overview">
-                    <div className="overview-grid">
-                      <motion.div className="overview-card primary" variants={itemVariants}>
-                        <div className="card-header">
-                          <div className="card-icon">
-                            <Activity size={24} />
-              </div>
-                          <h3>Service Activity</h3>
+                  {/* Flipkart-style Search Bar */}
+                  <div className="marketplace-search-section">
+                    <div className="search-header">
+                      <h2>Find Professional Services</h2>
+                      <p>Browse from thousands of trusted service providers</p>
                     </div>
-                        <div className="card-content">
-                          <div className="metric-large">
-                            <span className="metric-value">{serviceStats.totalServices}</span>
-                            <span className="metric-label">Total Services</span>
-                    </div>
-                          <div className="metric-small">
-                            <span className="metric-value">{serviceStats.activeBookings}</span>
-                            <span className="metric-label">Active</span>
-                  </div>
-                    </div>
-                      </motion.div>
-
-                      <motion.div className="overview-card success" variants={itemVariants}>
-                        <div className="card-header">
-                          <div className="card-icon">
-                            <TrendingUp size={24} />
-                    </div>
-                          <h3>Performance</h3>
-                  </div>
-                        <div className="card-content">
-                          <div className="metric-large">
-                            <span className="metric-value">{serviceStats.averageRating}</span>
-                            <span className="metric-label">Avg Rating</span>
-                    </div>
-                          <div className="metric-small">
-                            <span className="metric-value">{serviceStats.completedServices}</span>
-                            <span className="metric-label">Completed</span>
-                    </div>
-                  </div>
-                      </motion.div>
-
-                      <motion.div className="overview-card warning" variants={itemVariants}>
-                        <div className="card-header">
-                          <div className="card-icon">
-                            <DollarSign size={24} />
-                    </div>
-                          <h3>Spending</h3>
-                    </div>
-                        <div className="card-content">
-                          <div className="metric-large">
-                            <span className="metric-value">${serviceStats.totalSpent.toLocaleString()}</span>
-                            <span className="metric-label">Total Spent</span>
-                  </div>
-                          <div className="metric-small">
-                            <span className="metric-value">${serviceStats.monthlySavings}</span>
-                            <span className="metric-label">Saved</span>
-                </div>
-              </div>
-                      </motion.div>
-
-                      <motion.div className="overview-card info" variants={itemVariants}>
-                        <div className="card-header">
-                          <div className="card-icon">
-                            <BarChart3 size={24} />
-                          </div>
-                <h3>Quick Actions</h3>
-                        </div>
-                        <div className="card-content">
-                          <button className="premium-cta-btn" onClick={handleBookService}>
-                            <Plus size={18} />
-                            Book Service
-                          </button>
-                          <button className="premium-cta-btn secondary" onClick={() => setActiveTab('orders')}>
-                            <Package size={18} />
-                            View Orders
-                          </button>
-                        </div>
-                      </motion.div>
-                    </div>
-                  </div>
-
-                  {/* Premium Service Categories */}
-                  <div className="premium-categories">
-                    <div className="section-header">
-                      <h2>Service Categories</h2>
-                      <p>Professional services at your fingertips</p>
-                    </div>
-                    <div className="premium-categories-grid">
-                      {categories.map(category => {
-                        const IconComponent = category.icon;
-                    return (
-                          <motion.div 
-                            key={category.id} 
-                            className="premium-category-card" 
-                            onClick={() => setActiveTab('services')}
-                            whileHover={{ scale: 1.02, y: -4 }}
-                            whileTap={{ scale: 0.98 }}
-                            variants={itemVariants}
-                          >
-                            <div className="category-icon-wrapper">
-                              <IconComponent size={32} />
-                        </div>
-                            <div className="category-info">
-                              <h3>{category.name}</h3>
-                              <p>{category.services.length} services available</p>
-                              <div className="category-pricing">
-                                <span className="price-label">Starting from</span>
-                                <span className="price-value">$25</span>
-                              </div>
-                            </div>
-                            <div className="category-action">
-                              <button className="explore-category-btn">
-                                Explore
-                                <ArrowRight size={16} />
+                    <div className="marketplace-search-bar">
+                      <div className="search-input-wrapper">
+                        <Search size={20} />
+                        <input 
+                          type="text" 
+                          placeholder="Search for services (e.g., plumbing, cleaning, elder care)" 
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                      </div>
+                      <button className="btn-primary search-action">
+                        <Search size={18} />
+                        Search
                       </button>
-                            </div>
-                          </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
+                    </div>
+                    <div className="popular-searches">
+                      <span className="search-label">Popular:</span>
+                      <button className="search-tag" onClick={() => setSearchQuery('Home Cleaning')}>Home Cleaning</button>
+                      <button className="search-tag" onClick={() => setSearchQuery('Plumbing')}>Plumbing</button>
+                      <button className="search-tag" onClick={() => setSearchQuery('Elder Care')}>Elder Care</button>
+                      <button className="search-tag" onClick={() => setSearchQuery('Electrical')}>Electrical</button>
+                    </div>
+                  </div>
 
-                  {/* Premium Active Orders */}
-                  <div className="premium-orders-section">
+                  {/* Promotional Banner */}
+                  <div className="promotional-banner">
+                    <div className="banner-content">
+                      <div className="banner-text">
+                        <h3>Big Service Sale!</h3>
+                        <p>Get up to 50% OFF on home services</p>
+                        <button className="btn-primary banner-cta">
+                          Shop Now
+                          <ArrowRight size={16} />
+                        </button>
+                      </div>
+                      <div className="banner-image">
+                        <Settings size={80} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Categories Section - Flipkart Style */}
+                  <div className="marketplace-categories full-bleed">
                     <div className="section-header">
-                      <h2>Active Services</h2>
-                      <button className="view-all-link" onClick={() => setActiveTab('orders')}>
-                        View All Orders
+                      <h3>Categories</h3>
+                      <button className="view-all-btn" onClick={() => setActiveTab('categories')}>
+                        View All
                         <ArrowRight size={16} />
                       </button>
                     </div>
-                    <div className="premium-orders-grid">
-                      {services.filter(s => s.status === 'in-progress' || s.status === 'scheduled').slice(0, 3).map(service => (
+                    <div className="categories-grid">
+                      {categories.map(category => {
+                        const IconComponent = category.icon;
+                        return (
+                          <motion.div 
+                            key={category.id} 
+                            className="category-card" 
+                            onClick={() => setActiveTab('categories')}
+                            whileHover={{ y: -4 }}
+                            variants={itemVariants}
+                          >
+                            <div className="category-icon-box">
+                              <IconComponent size={32} />
+                            </div>
+                            <h4>{category.name}</h4>
+                            <p className="service-count">{category.services.length}+ Services</p>
+                            <span className="category-offer">Min. 20% Off</span>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Deals of the Day - Flipkart Style */}
+                  <div className="deals-section full-bleed">
+                    <div className="section-header">
+                      <h3>Deals of the Day</h3>
+                      <div className="timer">
+                        <Clock size={16} />
+                        <span>22:07:36 Left</span>
+                      </div>
+                    </div>
+                    <div className="deals-grid">
+                      {[
+                        { id: 1, name: 'Home Deep Cleaning', price: 75, originalPrice: 150, discount: 50, rating: 4.5, reviews: 2341, provider: 'CleanPro' },
+                        { id: 2, name: 'AC Service & Repair', price: 45, originalPrice: 90, discount: 50, rating: 4.3, reviews: 1823, provider: 'CoolTech' },
+                        { id: 3, name: 'Plumbing Services', price: 35, originalPrice: 70, discount: 50, rating: 4.6, reviews: 3421, provider: 'FixIt' },
+                        { id: 4, name: 'Electrical Repair', price: 40, originalPrice: 80, discount: 50, rating: 4.4, reviews: 2156, provider: 'PowerFix' }
+                      ].map(deal => (
                         <motion.div 
-                          key={service.id} 
-                          className="premium-order-card"
-                          whileHover={{ y: -2, boxShadow: "0 12px 40px rgba(0,0,0,0.15)" }}
+                          key={deal.id} 
+                          className="deal-card"
+                          whileHover={{ y: -4 }}
                           variants={itemVariants}
                         >
-                          <div className="order-status-bar">
-                            <div className="status-indicator">
-                              <span 
-                                className="status-dot"
-                                style={{ backgroundColor: getStatusColor(service.status) }}
-                              ></span>
-                              <span className="status-text">{service.status.replace('-', ' ')}</span>
+                          <div className="deal-badge">{deal.discount}% OFF</div>
+                          <div className="deal-image">
+                            <Settings size={60} />
+                          </div>
+                          <div className="deal-content">
+                            <h4>{deal.name}</h4>
+                            <p className="provider-name">{deal.provider}</p>
+                            <div className="rating-row">
+                              <span className="rating-badge">{deal.rating} ★</span>
+                              <span className="reviews">({deal.reviews.toLocaleString()})</span>
                             </div>
-                            <span className="order-id">#{service.trackingId}</span>
+                            <div className="price-row">
+                              <span className="current-price">${deal.price}</span>
+                              <span className="original-price">${deal.originalPrice}</span>
+                            </div>
                           </div>
-                          
-                          <div className="order-service-info">
-                            <div className="service-icon-placeholder">
-                              <Settings size={24} />
-                      </div>
-                      <div className="service-details">
-                              <h3>{service.name}</h3>
-                              <p className="provider-name">by {service.provider}</p>
-                              <div className="service-meta">
-                                <span className="service-date">
-                                  <Clock size={14} />
-                                  {service.date} at {service.time}
-                                </span>
-                                <span className="service-price">${service.price}</span>
-                      </div>
-                      </div>
-                    </div>
-
-                          <div className="order-progress-bar">
-                            <div className="progress-fill" style={{ 
-                              width: service.status === 'scheduled' ? '25%' : service.status === 'in-progress' ? '75%' : '100%' 
-                            }}></div>
-                          </div>
-
-                          <div className="order-actions-premium">
-                            {service.status === 'in-progress' && (
-                              <button className="action-btn primary">
-                                <MapPin size={16} />
-                                Track Live
-                              </button>
-                            )}
-                            <button className="action-btn secondary">
-                              <MessageCircle size={16} />
-                              Contact
-                            </button>
-                          </div>
+                          <button className="btn-primary add-to-cart" onClick={handleBookService}>
+                            <Plus size={16} />
+                            Add to Cart
+                          </button>
                         </motion.div>
-                  ))}
-                </div>
-              </div>
-
-                  {/* Recommended Services */}
-                  <div className="recommendations-section">
-                    <h2>Recommended for You</h2>
-                    <div className="recommendations-grid">
-                      <div className="recommendation-card">
-                        <div className="rec-image">
-                          <Settings size={32} />
-                      </div>
-                        <div className="rec-content">
-                          <h3>Regular Home Cleaning</h3>
-                          <p>Based on your previous bookings</p>
-                          <div className="rec-rating">
-                            <Star size={16} fill="#fbbf24" color="#fbbf24" />
-                            <span>4.8 (2.1k reviews)</span>
-                      </div>
-                          <div className="rec-price">Starting at $45</div>
-                        </div>
-                        <button className="rec-book-btn">Book Now</button>
-                    </div>
-
-                      <div className="recommendation-card">
-                        <div className="rec-image">
-                          <Heart size={32} />
-                </div>
-                        <div className="rec-content">
-                          <h3>Elder Care Service</h3>
-                          <p>Trusted caregivers in your area</p>
-                          <div className="rec-rating">
-                            <Star size={16} fill="#fbbf24" color="#fbbf24" />
-                            <span>4.9 (1.8k reviews)</span>
-              </div>
-                          <div className="rec-price">Starting at $35/hour</div>
-            </div>
-                        <button className="rec-book-btn">Book Now</button>
-                    </div>
-
-                      <div className="recommendation-card">
-                        <div className="rec-image">
-                          <Truck size={32} />
-                    </div>
-                        <div className="rec-content">
-                          <h3>Express Delivery</h3>
-                          <p>Same-day delivery service</p>
-                          <div className="rec-rating">
-                            <Star size={16} fill="#fbbf24" color="#fbbf24" />
-                            <span>4.7 (3.2k reviews)</span>
-                  </div>
-                          <div className="rec-price">Starting at $15</div>
-                    </div>
-                        <button className="rec-book-btn">Book Now</button>
-                    </div>
-                  </div>
-                    </div>
-
-                  {/* Recently Viewed */}
-                  <div className="recently-viewed-section">
-                    <h2>Continue where you left off</h2>
-                    <div className="recently-viewed-grid">
-                      {bookingHistory.slice(0, 4).map(booking => (
-                        <div key={booking.id} className="recently-viewed-item">
-                          <div className="item-image">
-                            <Calendar size={24} />
-                    </div>
-                          <div className="item-content">
-                            <h4>{booking.service}</h4>
-                            <p>Last booked: {booking.date}</p>
-                            <span className="item-price">${booking.amount}</span>
-                  </div>
-                          <button className="book-again-btn">Book Again</button>
-                </div>
                       ))}
-              </div>
+                    </div>
+                  </div>
+
+                  {/* Top Offers Section */}
+                  <div className="top-offers-section full-bleed">
+                    <div className="section-header">
+                      <h3>Top Offers</h3>
+                    </div>
+                    <div className="offers-grid">
+                      <div className="offer-card">
+                        <div className="offer-content">
+                          <h4>Flat ₹200 Off</h4>
+                          <p>On first home cleaning service</p>
+                          <span className="offer-code">Code: FIRST200</span>
+                        </div>
+                        <div className="offer-icon">
+                          <Settings size={40} />
+                        </div>
+                      </div>
+                      <div className="offer-card">
+                        <div className="offer-content">
+                          <h4>Buy 2 Get 1 Free</h4>
+                          <p>On all maintenance services</p>
+                          <span className="offer-code">Code: MAINTAIN</span>
+                        </div>
+                        <div className="offer-icon">
+                          <Zap size={40} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recently Viewed Services */}
+                  <div className="recently-section full-bleed">
+                    <div className="section-header">
+                      <h3>Recently Viewed</h3>
+                      <button className="view-all-btn" onClick={() => setActiveTab('orders')}>
+                        View History
+                        <ArrowRight size={16} />
+                      </button>
+                    </div>
+                    <div className="recent-services-grid">
+                      {bookingHistory.slice(0, 4).map(booking => (
+                        <motion.div 
+                          key={booking.id} 
+                          className="recent-card"
+                          whileHover={{ y: -2 }}
+                          variants={itemVariants}
+                        >
+                          <div className="recent-image">
+                            <Calendar size={24} />
+                          </div>
+                          <h5>{booking.service}</h5>
+                          <p className="recent-date">{booking.date}</p>
+                          <div className="recent-price">
+                            <span>${booking.amount}</span>
+                          </div>
+                          <button className="btn-secondary book-again">
+                            Book Again
+                          </button>
+                        </motion.div>
+                      ))}
+                    </div>
                   </div>
                 </motion.div>
           )}
 
-          {activeTab === 'services' && (
+          {activeTab === 'categories' && (
                 <motion.div 
-                  className="services-tab premium-services"
+                  className="categories-tab flipkart-categories-page"
                   initial="hidden"
                   animate="visible"
                   variants={containerVariants}
                 >
-                  {/* Premium Services Header */}
-                  <div className="premium-services-header">
-                    <div className="services-hero">
-                      <h1>Professional Services</h1>
-                      <p>Find trusted professionals for all your home and personal needs</p>
-              </div>
-                    <div className="premium-search-bar">
+                  {/* Flipkart-style Categories Header */}
+                  <div className="flipkart-categories-header">
+                    <div className="categories-hero">
+                      <h1>All Categories</h1>
+                      <p>Explore our wide range of professional services</p>
+                    </div>
+                    <div className="categories-search-bar">
                       <div className="search-container">
-                  <Search size={20} />
-                  <input
-                    type="text"
-                          placeholder="Search for services..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                          className="premium-search-input"
-                  />
-                        <button className="premium-search-btn">
+                        <Search size={20} />
+                        <input
+                          type="text"
+                          placeholder="Search categories..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="categories-search-input"
+                        />
+                        <button className="categories-search-btn">
                           Search
                         </button>
-                </div>
-                <select 
-                  value={filterCategory} 
-                  onChange={(e) => setFilterCategory(e.target.value)}
-                        className="premium-category-filter"
-                >
-                  <option value="all">All Categories</option>
-                        {categories.map(cat => (
-                          <option key={cat.id} value={cat.name}>{cat.name}</option>
-                        ))}
-                </select>
+                      </div>
                     </div>
-              </div>
+                  </div>
 
-                  {/* Featured Categories */}
-                  <div className="featured-categories">
-                    <h2>Popular Categories</h2>
-                    <div className="categories-showcase">
+                  {/* All Categories Grid */}
+                  <div className="all-categories">
+                    <h2>Browse All Categories</h2>
+                    <div className="all-categories-grid">
                       {categories.map(category => {
                         const IconComponent = category.icon;
                         return (
-                          <div key={category.id} className="showcase-category">
-                            <div className="showcase-image">
-                              <IconComponent size={48} />
+                          <motion.div 
+                            key={category.id} 
+                            className="category-item-card"
+                            whileHover={{ scale: 1.02 }}
+                            variants={itemVariants}
+                          >
+                            <div className="category-image-large">
+                              <IconComponent size={56} />
                             </div>
-                            <div className="showcase-content">
+                            <div className="category-content">
                               <h3>{category.name}</h3>
                               <p>{category.services.length} services available</p>
-                              <div className="showcase-services">
-                                {category.services.slice(0, 3).map((service, idx) => (
-                                  <span key={idx} className="service-chip">{service}</span>
+                              <div className="category-services-list">
+                                {category.services.slice(0, 4).map((service, idx) => (
+                                  <span key={idx} className="service-tag">{service}</span>
                                 ))}
                               </div>
-                              <div className="showcase-pricing">
+                              <div className="category-pricing">
                                 <span className="price-from">Starting from</span>
                                 <span className="price-amount">$25</span>
+                                <span className="discount-badge">50% OFF</span>
                               </div>
                             </div>
-                            <button className="explore-btn">Explore Services</button>
-                          </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-                  {/* Service Listings */}
-                  <div className="service-listings">
-                    <div className="listings-header">
-                      <h2>All Services</h2>
-                      <div className="sort-options">
-                        <label>Sort by:</label>
-                        <select>
-                          <option>Most Popular</option>
-                          <option>Price: Low to High</option>
-                          <option>Price: High to Low</option>
-                          <option>Highest Rated</option>
-                          <option>Newest</option>
-                        </select>
-                      </div>
+                            <div className="category-actions">
+                              <button className="explore-btn-large" onClick={handleBookService}>
+                                Book Now
+                              </button>
+                              <button className="wishlist-btn-small">
+                                <Heart size={16} />
+                              </button>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
                     </div>
+                  </div>
 
-                    <div className="services-marketplace">
-                      <div className="service-item-card">
+                  {/* Popular Services */}
+                  <div className="popular-services">
+                    <h2>Popular Services</h2>
+                    <div className="popular-services-grid">
+                      <div className="service-deal-card">
+                        <div className="deal-badge">BESTSELLER</div>
                         <div className="service-image">
-                          <Settings size={40} />
+                          <Settings size={48} />
                         </div>
-                    <div className="service-info">
-                          <h3>Professional Home Cleaning</h3>
+                        <div className="service-info">
+                          <h3>Home Cleaning</h3>
                           <div className="service-rating">
                             <div className="stars">
                               {[1, 2, 3, 4, 5].map(star => (
-                                <Star key={star} size={14} fill="#fbbf24" color="#fbbf24" />
+                                <Star key={star} size={12} fill="#fbbf24" color="#fbbf24" />
                               ))}
-                      </div>
-                            <span className="rating-text">4.8 (2,156 reviews)</span>
-                          </div>
-                          <p className="service-description">
-                            Deep cleaning service for your entire home. Includes kitchen, bathrooms, bedrooms, and living areas.
-                          </p>
-                          <div className="service-features">
-                            <span className="feature-tag">✓ Eco-friendly products</span>
-                            <span className="feature-tag">✓ Background checked</span>
-                            <span className="feature-tag">✓ Insured</span>
+                            </div>
+                            <span className="rating-count">(2,156)</span>
                           </div>
                           <div className="service-pricing">
-                            <span className="price-main">$75</span>
-                            <span className="price-period">per session</span>
+                            <span className="price-current">$75</span>
                             <span className="price-original">$95</span>
+                            <span className="discount-percent">21% off</span>
                           </div>
+                        </div>
+                        <button className="quick-book-btn" onClick={handleBookService}>
+                          Book Now
+                        </button>
                       </div>
-                      <div className="service-actions">
-                          <button className="add-to-cart-btn" onClick={handleBookService}>
-                            <Plus size={16} />
-                            Book Now
-                          </button>
-                          <button className="wishlist-btn">
-                            <Heart size={16} />
-                          </button>
+
+                      <div className="service-deal-card">
+                        <div className="deal-badge">TOP RATED</div>
+                        <div className="service-image">
+                          <Heart size={48} />
+                        </div>
+                        <div className="service-info">
+                          <h3>Elder Care</h3>
+                          <div className="service-rating">
+                            <div className="stars">
+                              {[1, 2, 3, 4, 5].map(star => (
+                                <Star key={star} size={12} fill="#fbbf24" color="#fbbf24" />
+                              ))}
+                            </div>
+                            <span className="rating-count">(1,823)</span>
+                          </div>
+                          <div className="service-pricing">
+                            <span className="price-current">$35</span>
+                            <span className="price-original">$45</span>
+                            <span className="discount-percent">22% off</span>
+                          </div>
+                        </div>
+                        <button className="quick-book-btn" onClick={handleBookService}>
+                          Book Now
+                        </button>
+                      </div>
+
+                      <div className="service-deal-card">
+                        <div className="deal-badge">LIMITED TIME</div>
+                        <div className="service-image">
+                          <Truck size={48} />
+                        </div>
+                        <div className="service-info">
+                          <h3>Express Delivery</h3>
+                          <div className="service-rating">
+                            <div className="stars">
+                              {[1, 2, 3, 4, 5].map(star => (
+                                <Star key={star} size={12} fill="#fbbf24" color="#fbbf24" />
+                              ))}
+                            </div>
+                            <span className="rating-count">(3,291)</span>
+                          </div>
+                          <div className="service-pricing">
+                            <span className="price-current">$15</span>
+                            <span className="price-original">$20</span>
+                            <span className="discount-percent">25% off</span>
+                          </div>
+                        </div>
+                        <button className="quick-book-btn" onClick={handleBookService}>
+                          Book Now
+                        </button>
                       </div>
                     </div>
+                  </div>
+                </motion.div>
+              )}
 
-                      <div className="service-item-card">
-                        <div className="service-image">
-                          <Heart size={40} />
+              {activeTab === 'wishlist' && (
+                <motion.div 
+                  className="wishlist-tab"
+                  initial="hidden"
+                  animate="visible"
+                  variants={containerVariants}
+                >
+                  <div className="wishlist-header">
+                    <h3>My Wishlist</h3>
+                    <p>Services you've saved for later</p>
+                  </div>
+
+                  <div className="wishlist-grid">
+                    {services.slice(0, 2).map(service => (
+                      <div key={service.id} className="wishlist-item">
+                        <div className="wishlist-image">
+                          <Settings size={32} />
                         </div>
-                        <div className="service-info">
-                          <h3>Elder Care & Companionship</h3>
-                          <div className="service-rating">
-                            <div className="stars">
-                              {[1, 2, 3, 4, 5].map(star => (
-                                <Star key={star} size={14} fill="#fbbf24" color="#fbbf24" />
-                              ))}
-                            </div>
-                            <span className="rating-text">4.9 (1,823 reviews)</span>
+                        <div className="wishlist-info">
+                          <h4>{service.name}</h4>
+                          <p>by {service.provider}</p>
+                          <div className="wishlist-rating">
+                            <Star size={14} fill="#fbbf24" color="#fbbf24" />
+                            <span>4.8 (150 reviews)</span>
                           </div>
-                          <p className="service-description">
-                            Compassionate care for elderly family members. Medication reminders, meal preparation, and companionship.
-                          </p>
-                          <div className="service-features">
-                            <span className="feature-tag">✓ Certified caregivers</span>
-                            <span className="feature-tag">✓ 24/7 availability</span>
-                            <span className="feature-tag">✓ Health monitoring</span>
-                          </div>
-                          <div className="service-pricing">
-                            <span className="price-main">$35</span>
-                            <span className="price-period">per hour</span>
-                            <span className="price-original">$45</span>
+                          <div className="wishlist-price">
+                            <span className="current-price">${service.price}</span>
+                            <span className="original-price">$95</span>
                           </div>
                         </div>
-                        <div className="service-actions">
-                          <button className="add-to-cart-btn" onClick={handleBookService}>
-                            <Plus size={16} />
+                        <div className="wishlist-actions">
+                          <button className="btn-primary" onClick={handleBookService}>
                             Book Now
                           </button>
-                          <button className="wishlist-btn">
-                            <Heart size={16} />
-                          </button>
-                </div>
-              </div>
-
-                      <div className="service-item-card">
-                        <div className="service-image">
-                          <Truck size={40} />
-                        </div>
-                        <div className="service-info">
-                          <h3>Express Delivery Service</h3>
-                          <div className="service-rating">
-                            <div className="stars">
-                              {[1, 2, 3, 4, 5].map(star => (
-                                <Star key={star} size={14} fill="#fbbf24" color="#fbbf24" />
-                              ))}
-                            </div>
-                            <span className="rating-text">4.7 (3,291 reviews)</span>
-                          </div>
-                          <p className="service-description">
-                            Same-day delivery for groceries, medicine, and packages. Fast, reliable, and secure delivery service.
-                          </p>
-                          <div className="service-features">
-                            <span className="feature-tag">✓ Same-day delivery</span>
-                            <span className="feature-tag">✓ Real-time tracking</span>
-                            <span className="feature-tag">✓ Contactless delivery</span>
-                          </div>
-                          <div className="service-pricing">
-                            <span className="price-main">$15</span>
-                            <span className="price-period">per delivery</span>
-                            <span className="price-original">$20</span>
-                          </div>
-                        </div>
-                        <div className="service-actions">
-                          <button className="add-to-cart-btn" onClick={handleBookService}>
-                            <Plus size={16} />
-                            Book Now
-                          </button>
-                          <button className="wishlist-btn">
-                            <Heart size={16} />
+                          <button className="btn-secondary">
+                            <Trash2 size={16} />
+                            Remove
                           </button>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
+              {activeTab === 'cart' && (
+                <motion.div 
+                  className="cart-tab"
+                  initial="hidden"
+                  animate="visible"
+                  variants={containerVariants}
+                >
+                  <div className="cart-header">
+                    <h3>Shopping Cart</h3>
+                    <p>Review your selected services</p>
+                  </div>
+
+                  <div className="cart-content">
+                    <div className="cart-items">
+                      {services.slice(0, 2).map(service => (
+                        <div key={service.id} className="cart-item">
+                          <div className="cart-item-image">
+                            <Settings size={40} />
+                          </div>
+                          <div className="cart-item-info">
+                            <h4>{service.name}</h4>
+                            <p>by {service.provider}</p>
+                            <div className="cart-item-details">
+                              <span>Date: {service.date}</span>
+                              <span>Time: {service.time}</span>
+                            </div>
+                          </div>
+                          <div className="cart-item-price">
+                            <span className="price">${service.price}</span>
+                            <button className="remove-btn">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="cart-summary">
+                      <div className="summary-row">
+                        <span>Subtotal:</span>
+                        <span>$195.00</span>
+                      </div>
+                      <div className="summary-row">
+                        <span>Service Fee:</span>
+                        <span>$10.00</span>
+                      </div>
+                      <div className="summary-row total">
+                        <span>Total:</span>
+                        <span>$205.00</span>
+                      </div>
+                      <button className="checkout-btn" onClick={handleBookService}>
+                        Proceed to Checkout
+                      </button>
                     </div>
                   </div>
                 </motion.div>
