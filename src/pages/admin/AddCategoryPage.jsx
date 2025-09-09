@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, Save, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { apiService } from '../../services/api';
+import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/AdminLayout';
 import './AdminPages.css';
 
@@ -10,11 +12,77 @@ const AddCategoryPage = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    active: true
+    status: 'active'
   });
   const [iconPreview, setIconPreview] = useState(null);
   const [iconFile, setIconFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [checkingName, setCheckingName] = useState(false);
+  const [nameError, setNameError] = useState('');
+  const [nameAvailable, setNameAvailable] = useState(false);
+  const [iconError, setIconError] = useState('');
+
+  // Live validate category name (length, characters, uniqueness)
+  useEffect(() => {
+    const raw = formData.name || '';
+    const name = raw.trim();
+    setNameAvailable(false);
+    // Immediate local validations
+    if (!name) {
+      setNameError('');
+      setCheckingName(false);
+      return;
+    }
+    if (name.length < 3) {
+      setNameError('Name must be at least 3 characters');
+      setCheckingName(false);
+      return;
+    }
+    // Disallow any digits in category name
+    if (/\d/.test(name)) {
+      setNameError('Numbers are not allowed in category name');
+      setCheckingName(false);
+      return;
+    }
+    // Allow letters, spaces, hyphens, ampersands, and basic punctuation (no numbers)
+    const allowed = /^[A-Za-z \-&_()\/.,]+$/;
+    if (!allowed.test(name)) {
+      setNameError('Only letters, spaces and - & _ ( ) / . , allowed');
+      setCheckingName(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setCheckingName(true);
+    setNameError('');
+    const timer = setTimeout(async () => {
+      try {
+        // Check uniqueness against existing categories
+        const list = await apiService.getCategories();
+        const exists = Array.isArray(list) && list.some((c) => String(c?.name || '').trim().toLowerCase() === name.toLowerCase());
+        if (isCancelled) return;
+        if (exists) {
+          setNameError('A category with this name already exists');
+          setNameAvailable(false);
+        } else {
+          setNameError('');
+          setNameAvailable(true);
+        }
+      } catch (e) {
+        if (!isCancelled) {
+          setNameError('Unable to validate name right now');
+          setNameAvailable(false);
+        }
+      } finally {
+        if (!isCancelled) setCheckingName(false);
+      }
+    }, 400);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [formData.name]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -27,6 +95,18 @@ const AddCategoryPage = () => {
   const handleIconUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate type & size (<= 2MB)
+      if (!file.type?.startsWith('image/')) {
+        setIconError('Invalid file type. Please upload an image.');
+        toast.error('Invalid file type. Please upload an image.');
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        setIconError('File too large. Max size is 2MB.');
+        toast.error('File too large. Max size is 2MB.');
+        return;
+      }
+      setIconError('');
       if (iconPreview) {
         URL.revokeObjectURL(iconPreview);
       }
@@ -49,21 +129,39 @@ const AddCategoryPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.name || !formData.name.trim()) {
+      toast.error('Category name is required');
+      return;
+    }
+    if (checkingName) {
+      toast.error('Please wait for name check to complete');
+      return;
+    }
+    if (nameError) {
+      toast.error(nameError);
+      return;
+    }
     setIsSubmitting(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('Category data:', {
-        ...formData,
-        icon: iconFile ? iconFile.name : null
+      // Optional visual settings
+      const iconUrl = null; // File upload not implemented yet; pass null
+      const settings = null; // Additional settings optional
+      const created = await apiService.createCategory({
+        name: formData.name?.trim(),
+        description: formData.description || null,
+        // Derive boolean active from selected status for compatibility
+        active: String(formData.status).toLowerCase() === 'active',
+        status: String(formData.status).toLowerCase(),
+        iconUrl,
+        settings
       });
-      
-      // Navigate back to services tab
-      navigate('/dashboard/admin?tab=services');
+      toast.success(`Category "${created?.name || formData.name}" created`);
+      navigate('/admin/categories');
     } catch (error) {
       console.error('Error creating category:', error);
+      const msg = (error && error.message) ? error.message : 'Failed to create category';
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -128,6 +226,15 @@ const AddCategoryPage = () => {
                     placeholder="e.g., Home Maintenance"
                     required
                   />
+                  {checkingName && (
+                    <small style={{ color: '#64748b' }}>Checking availability…</small>
+                  )}
+                  {!checkingName && nameError && (
+                    <small style={{ color: '#ef4444', fontWeight: 600 }}>{nameError}</small>
+                  )}
+                  {!checkingName && !nameError && formData.name.trim() && (
+                    <small style={{ color: '#10b981' }}>Name looks good</small>
+                  )}
                 </div>
 
                 <div className="form-group full-width">
@@ -178,25 +285,24 @@ const AddCategoryPage = () => {
                       hidden
                     />
                   </div>
+                  {iconError && (
+                    <small style={{ color: '#ef4444', fontWeight: 600 }}>{iconError}</small>
+                  )}
                 </div>
 
-                {/* Status Toggle */}
+                {/* Status Dropdown */}
                 <div className="form-group">
-                  <label>Status</label>
-                  <div className="toggle-group">
-                    <label className="toggle-switch">
-                      <input
-                        type="checkbox"
-                        name="active"
-                        checked={formData.active}
-                        onChange={handleInputChange}
-                      />
-                      <span className="toggle-slider"></span>
-                    </label>
-                    <span className={`toggle-label ${formData.active ? 'active' : 'inactive'}`}>
-                      {formData.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
+                  <label htmlFor="status">Status</label>
+                  <select
+                    id="status"
+                    name="status"
+                    value={formData.status}
+                    onChange={handleInputChange}
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
                 </div>
               </div>
             </div>
@@ -215,7 +321,7 @@ const AddCategoryPage = () => {
             <button
               type="submit"
               className="btn-primary"
-              disabled={isSubmitting || !formData.name.trim()}
+              disabled={isSubmitting || checkingName || !!nameError || !formData.name.trim()}
             >
               {isSubmitting ? (
                 <>

@@ -1,5 +1,16 @@
 // API service for backend communication
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// Resolve base URL robustly across dev/preview/prod
+const API_BASE_URL = (() => {
+  const envBase = import.meta.env.VITE_API_URL;
+  if (envBase) return envBase.replace(/\/$/, '');
+  if (typeof window !== 'undefined') {
+    const host = window.location?.hostname || '';
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:3001';
+    }
+  }
+  return '/api';
+})();
 
 class ApiService {
   async request(endpoint, options = {}) {
@@ -15,15 +26,22 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      const contentType = response.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+
+      if (!isJson) {
+        const text = await response.text();
+        const snippet = text ? text.slice(0, 200) : '';
+        throw new Error(`Non-JSON response (status ${response.status}). Body: ${snippet}`);
       }
-      
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || `HTTP error! status: ${response.status}`);
+      }
       return data;
     } catch (error) {
-      console.error('API request failed:', error);
+      console.error('API request failed:', { url, error });
       throw error;
     }
   }
@@ -99,6 +117,66 @@ class ApiService {
   // System metrics
   async getSystemMetrics() {
     return this.request('/system/metrics');
+  }
+
+  // Service categories
+  async getCategories() {
+    return this.request('/categories');
+  }
+
+  async createCategory({ name, description = null, active = true, iconUrl = null, settings = null, status }) {
+    return this.request('/categories', {
+      method: 'POST',
+      body: JSON.stringify({ name, description, active, iconUrl, settings, status })
+    });
+  }
+
+  async getCategory(id) {
+    return this.request(`/categories/${encodeURIComponent(id)}`);
+  }
+
+  async updateCategory(id, updates) {
+    const { name, description, active, iconUrl, settings, status } = updates;
+    return this.request(`/categories/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, description, active, iconUrl, settings, status })
+    });
+  }
+
+  async blockCategory(id) {
+    // Prefer PATCH; fallback to POST if 404 from proxies
+    try {
+      return await this.request(`/categories/${encodeURIComponent(id)}/block`, { method: 'PATCH' });
+    } catch (e) {
+      return await this.request(`/categories/${encodeURIComponent(id)}/block`, { method: 'POST' });
+    }
+  }
+
+  async unblockCategory(id) {
+    try {
+      return await this.request(`/categories/${encodeURIComponent(id)}/unblock`, { method: 'PATCH' });
+    } catch (e) {
+      return await this.request(`/categories/${encodeURIComponent(id)}/unblock`, { method: 'POST' });
+    }
+  }
+
+  async deleteCategory(id) {
+    // Try DELETE first; fallback to POST /delete
+    let resp = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!resp.ok) {
+      // Fallback
+      resp = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(id)}/delete`, { method: 'POST' });
+    }
+    if (!resp.ok) {
+      const contentType = resp.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await resp.json();
+        throw new Error(data?.error || `HTTP error! status: ${resp.status}`);
+      }
+      const text = await resp.text();
+      throw new Error(text || `HTTP error! status: ${resp.status}`);
+    }
+    return { success: true };
   }
 }
 

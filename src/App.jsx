@@ -37,6 +37,8 @@ const AddUserPage = lazy(() => import('./pages/admin/AddUserPage'));
 const AssignProviderPage = lazy(() => import('./pages/admin/AssignProviderPage'));
 const CreateBillPage = lazy(() => import('./pages/admin/CreateBillPage'));
 const AdminUserProfilePage = lazy(() => import('./pages/admin/AdminUserProfile'));
+const CategoriesPage = lazy(() => import('./pages/admin/CategoriesPage'));
+const EditCategoryPage = lazy(() => import('./pages/admin/EditCategoryPage'));
 
 const Placeholder = ({ title }) => (
   <div style={{ minHeight: '50vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
@@ -124,6 +126,22 @@ function AppShell() {
                     />
                     
                     {/* Admin Pages */}
+                    <Route
+                      path="/admin/categories"
+                      element={
+                        <ProtectedRoute allowedRoles={["admin"]}>
+                          <CategoriesPage />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/admin/categories/:id"
+                      element={
+                        <ProtectedRoute allowedRoles={["admin"]}>
+                          <EditCategoryPage />
+                        </ProtectedRoute>
+                      }
+                    />
                     <Route
                       path="/admin/add-category"
                       element={

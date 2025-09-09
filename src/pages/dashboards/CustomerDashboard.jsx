@@ -58,6 +58,7 @@ import Logo from '../../components/Logo';
 import CustomerProfileForm from '../../components/CustomerProfileForm';
 import './SharedDashboard.css';
 import './CustomerDashboard.css';
+import { apiService } from '../../services/api';
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
@@ -173,12 +174,41 @@ const CustomerDashboard = () => {
     pendingPayments: 2
   });
 
-  const [categories] = useState([
-    { id: 1, name: 'Home Maintenance', icon: Settings, services: ['Plumbing', 'Electrical', 'Cleaning', 'Repairs'] },
-    { id: 2, name: 'Caregiving', icon: Heart, services: ['Elder Care', 'Child Care', 'Pet Care', 'Nursing'] },
-    { id: 3, name: 'Transport', icon: Truck, services: ['Taxi', 'Delivery', 'Moving', 'Airport Transfer'] },
-    { id: 4, name: 'Delivery', icon: Package, services: ['Grocery', 'Medicine', 'Food', 'Package'] }
-  ]);
+  const [categories, setCategories] = useState([]);
+
+  const iconForCategoryName = (name) => {
+    const n = String(name || '').toLowerCase();
+    if (n.includes('care')) return Heart;
+    if (n.includes('transport') || n.includes('driver')) return Truck;
+    if (n.includes('deliver')) return Package;
+    return Settings;
+  };
+
+  useEffect(() => {
+    let isCancelled = false;
+    const loadCategories = async () => {
+      try {
+        const data = await apiService.getCategories();
+        if (isCancelled) return;
+        const mapped = Array.isArray(data)
+          ? data.map((c) => ({
+              id: c.id,
+              name: c.name,
+              icon: iconForCategoryName(c.name),
+              // Use placeholder service list to show "4+ Services" UX until counts are wired
+              services: [1, 2, 3, 4]
+            }))
+          : [];
+        setCategories(mapped);
+      } catch (e) {
+        if (!isCancelled) setCategories([]);
+      }
+    };
+    loadCategories();
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   const filteredServices = services.filter(service => {
     const matchesSearch = service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

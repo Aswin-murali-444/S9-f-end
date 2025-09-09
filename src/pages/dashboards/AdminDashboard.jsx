@@ -18,7 +18,6 @@ import {
   Globe,
   Lock,
   Eye,
-  Trash2,
   Plus,
   Search,
   Filter,
@@ -216,6 +215,23 @@ const AdminDashboard = () => {
           return u;
         }));
         setUsers(resolvedUsers);
+        // Update user-related metrics based on live data
+        try {
+          const nowMs = Date.now();
+          const sevenDaysAgoMs = nowMs - 7 * 24 * 60 * 60 * 1000;
+          const newUsersCount = resolvedUsers.filter(u => {
+            const created = u?.created_at || u?.profile?.created_at;
+            const ts = created ? new Date(created).getTime() : NaN;
+            return !Number.isNaN(ts) && ts >= sevenDaysAgoMs;
+          }).length;
+          setSystemMetrics(prev => ({
+            ...prev,
+            totalUsers: resolvedUsers.length,
+            newUsers: newUsersCount
+          }));
+        } catch (_) {
+          // ignore metric calc errors
+        }
       } catch (error) {
         console.error('Failed to fetch users:', error);
         // Set some default data in case of error
@@ -225,10 +241,9 @@ const AdminDashboard = () => {
     
     fetchUsers();
 
-    setSystemMetrics({
-      totalUsers: 1247,
-      activeUsers: 1189,
-      newUsers: 23,
+    // Keep placeholder values for non-user metrics without overriding live user counts
+    setSystemMetrics(prev => ({
+      ...prev,
       systemUptime: "99.97%",
       responseTime: "45ms",
       cpuUsage: 23,
@@ -238,7 +253,7 @@ const AdminDashboard = () => {
       activeSessions: 456,
       failedLogins: 12,
       securityThreats: 3
-    });
+    }));
 
     setRecentActivity([
       { id: 1, user: "John Smith", action: "User account created", target: "emily.d@company.com", timestamp: "2 minutes ago", type: "user_management", severity: "info" },
@@ -878,13 +893,17 @@ const AdminDashboard = () => {
                       <UserPlus size={24} />
                       <span>Add User</span>
                     </button>
-                    <button className="action-card" onClick={() => navigate('/admin/add-category')}>
-                      <Plus size={24} />
-                      <span>Add Category</span>
+                    <button className="action-card" onClick={() => navigate('/admin/categories')}>
+                      <Settings size={24} />
+                      <span>Manage Categories</span>
                     </button>
                     <button className="action-card" onClick={() => navigate('/admin/add-service')}>
                       <Settings size={24} />
                       <span>Add Service</span>
+                    </button>
+                    <button className="action-card" onClick={() => navigate('/admin/categories')}>
+                      <Database size={24} />
+                      <span>Manage Categories</span>
                     </button>
                     <button className="action-card" onClick={() => navigate('/admin/assign-provider')}>
                       <Target size={24} />
@@ -1018,9 +1037,7 @@ const AdminDashboard = () => {
                               <UserCheck size={16} />
                             </button>
                           )}
-                          <button className="btn-icon danger" title="Delete">
-                            <Trash2 size={16} />
-                          </button>
+                          
                         </div>
                       </div>
                     ))}
@@ -1042,28 +1059,30 @@ const AdminDashboard = () => {
                 </div>
                 
                 <div className="admin-forms-grid">
-                  {/* Add Service Category */}
+                  {/* Service Categories (Add + Manage) */}
                   <motion.div 
                     className="admin-form-card"
                     whileHover={{ scale: 1.02, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => navigate('/admin/add-category')}
                     variants={itemVariants}
                   >
                     <div className="form-card-icon">
                       <Settings size={32} />
                     </div>
                     <div className="form-card-content">
-                      <h3>Add Service Category</h3>
-                      <p>Create new service categories with descriptions and icons</p>
+                      <h3>Service Categories</h3>
+                      <p>Create and manage service categories with descriptions and icons</p>
                       <ul className="form-card-features">
                         <li>Category Name & Description</li>
                         <li>Icon/Image Upload</li>
-                        <li>Active/Inactive Toggle</li>
+                        <li>Status: Active, Inactive, Suspended</li>
                       </ul>
                     </div>
                     <div className="form-card-action">
-                      <span>Create Category →</span>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <button className="btn-primary" onClick={() => navigate('/admin/add-category')}>Create Category →</button>
+                        <button className="btn-secondary" onClick={() => navigate('/admin/categories')}>Manage Categories →</button>
+                      </div>
                     </div>
                   </motion.div>
 
