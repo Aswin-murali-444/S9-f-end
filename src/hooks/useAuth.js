@@ -83,6 +83,10 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('user', JSON.stringify(session.user));
         localStorage.setItem('session', JSON.stringify(session));
         if (event === 'SIGNED_IN' && isInitialized) {
+          // Reset any prior logout message counters
+          localStorage.removeItem('logout_reason');
+          localStorage.removeItem('logout_toast_count');
+          // Increment a lightweight sign-in success counter for UX tuning if desired
           toast.success('Successfully signed in!');
         }
       } else {
@@ -91,7 +95,27 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('user');
         localStorage.removeItem('session');
         if (event === 'SIGNED_OUT') {
-          toast.success('Logged out successfully');
+          const reason = localStorage.getItem('logout_reason');
+          if (reason) {
+            // Limit reason toast to once here; a second may be shown by the OAuth callback
+            const prevReason = localStorage.getItem('logout_reason_prev');
+            let count = parseInt(localStorage.getItem('logout_toast_count') || '0', 10);
+            if (prevReason !== reason) {
+              count = 0;
+              localStorage.setItem('logout_reason_prev', reason);
+            }
+            if (count < 1) {
+              const message = reason === 'suspended'
+                ? 'Your account is suspended'
+                : reason === 'inactive'
+                  ? 'Your account is inactive'
+                  : 'Your account is pending verification';
+              toast.error(message);
+              localStorage.setItem('logout_toast_count', String(count + 1));
+            }
+          } else {
+            toast.success('Logged out successfully');
+          }
         }
       }
     });
@@ -160,7 +184,6 @@ export const AuthProvider = ({ children }) => {
             avatar_url: avatarUrl || null,
             last_login: new Date().toISOString(),
             supabase_auth: true,
-            status: 'active',
             email_verified: true
           })
           .eq('auth_user_id', authUserId)
@@ -263,7 +286,6 @@ export const AuthProvider = ({ children }) => {
           role: dbRole,
           full_name: fullName || '',
           supabase_auth: true,
-          status: 'active',
           email_verified: true,
           password_hash: 'supabase_auth_user',
           avatar_url: avatarUrl || null
@@ -281,7 +303,6 @@ export const AuthProvider = ({ children }) => {
             role: dbRole,
             full_name: fullName || '',
             supabase_auth: true,
-            status: 'active',
             email_verified: true,
             password_hash: 'supabase_auth_user',
             avatar_url: avatarUrl || null
@@ -402,7 +423,7 @@ export const AuthProvider = ({ children }) => {
           // First, try to get existing user profile
           const { data: userData, error: userError } = await supabase
             .from('users')
-            .select('role')
+            .select('role, status')
             .eq('auth_user_id', data.user.id)
             .single();
 
@@ -410,6 +431,16 @@ export const AuthProvider = ({ children }) => {
             // User already has a profile with a role
             console.log('✅ Existing user profile found:', userData);
             mappedRole = userData.role;
+            if (userData.status && userData.status !== 'active') {
+              localStorage.setItem('logout_reason', userData.status);
+              await supabase.auth.signOut();
+              toast.error(
+                userData.status === 'suspended' ? 'Account suspended' :
+                userData.status === 'inactive' ? 'Account inactive' :
+                'Account pending verification'
+              );
+              return { success: false, error: 'blocked', status: userData.status };
+            }
           } else {
             // Create new profile with selected role
             console.log('🆕 Creating new user profile for existing auth user...');
@@ -564,7 +595,7 @@ export const AuthProvider = ({ children }) => {
         // First, try to get existing user profile
         const { data: userData, error: userError } = await supabase
           .from('users')
-          .select('role, id')
+          .select('role, id, status')
           .eq('auth_user_id', currentUser.id)
           .single();
 
@@ -573,6 +604,11 @@ export const AuthProvider = ({ children }) => {
           console.log('✅ Existing OAuth user profile found:', userData);
           mappedRole = userData.role;
           isNewUser = false;
+          if (userData.status && userData.status !== 'active') {
+            localStorage.setItem('logout_reason', userData.status);
+            await supabase.auth.signOut();
+            return { success: false, error: 'blocked', status: userData.status };
+          }
           
           // Update last login for existing users
           try {
@@ -603,7 +639,6 @@ export const AuthProvider = ({ children }) => {
                 avatar_url: avatarUrl || null,
                 last_login: new Date().toISOString(),
                 supabase_auth: true,
-                status: 'active',
                 email_verified: true,
                 password_hash: 'supabase_auth_user'
               })
@@ -623,7 +658,6 @@ export const AuthProvider = ({ children }) => {
                   avatar_url: avatarUrl || null,
                   last_login: new Date().toISOString(),
                   supabase_auth: true,
-                  status: 'active',
                   email_verified: true,
                   password_hash: 'supabase_auth_user'
                 }, {
@@ -762,7 +796,12 @@ export const AuthProvider = ({ children }) => {
       }
       
       console.log('✅ Retrieved user data from database:', userData);
-      
+      // Enforce status gate on client routes as a backup
+      if (userData?.status && userData.status !== 'active') {
+        try { await supabase.auth.signOut(); } catch (_) {}
+        return null;
+      }
+
       if (userData?.role) {
         console.log('🎯 User role found:', userData.role);
         return userData.role;

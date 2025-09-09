@@ -18,7 +18,6 @@ import {
   Globe,
   Lock,
   Eye,
-  Edit,
   Trash2,
   Plus,
   Search,
@@ -1001,9 +1000,6 @@ const AdminDashboard = () => {
                         <div className="table-cell actions">
                           <button className="btn-icon" title="View" onClick={() => navigate(`/admin/users/${user.id}`)}>
                             <Eye size={16} />
-                          </button>
-                          <button className="btn-icon" title="Edit">
-                            <Edit size={16} />
                           </button>
                           {user.status === 'active' ? (
                             <button 
