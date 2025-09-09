@@ -440,8 +440,10 @@ export const AuthProvider = ({ children }) => {
           }
         }
 
+        const dashboardPath = roleToDashboardPath(mappedRole);
+        localStorage.setItem('dashboard_path', dashboardPath);
         toast.success('Login successful!');
-        return { success: true, user: data.user, role: mappedRole, dashboardPath: roleToDashboardPath(mappedRole) };
+        return { success: true, user: data.user, role: mappedRole, dashboardPath };
       }
     } catch (error) {
       toast.error('Login failed');
@@ -662,9 +664,11 @@ export const AuthProvider = ({ children }) => {
       // For Google auth users, always redirect to customer dashboard
       if (isNewUser) {
         console.log('🎉 New Google OAuth user created successfully with role:', mappedRole);
+        localStorage.setItem('dashboard_path', '/dashboard/customer');
         return { success: true, role: mappedRole, isNewUser: true, redirectTo: '/dashboard/customer' };
       } else {
         console.log('🔄 Existing Google OAuth user logged in with role:', mappedRole);
+        localStorage.setItem('dashboard_path', '/dashboard/customer');
         return { success: true, role: mappedRole, dashboardPath: '/dashboard/customer' };
       }
     } catch (e) {
@@ -720,6 +724,7 @@ export const AuthProvider = ({ children }) => {
       await supabase.auth.signOut();
       // Ensure user lands on login after logout
       if (typeof window !== 'undefined') {
+        localStorage.removeItem('dashboard_path');
         window.location.href = '/login';
       }
     } catch (error) {

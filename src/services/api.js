@@ -92,6 +92,10 @@ class ApiService {
     return this.request('/users');
   }
 
+  async getUserProfile(userId) {
+    return this.request(`/profile/${encodeURIComponent(userId)}`);
+  }
+
   // System metrics
   async getSystemMetrics() {
     return this.request('/system/metrics');

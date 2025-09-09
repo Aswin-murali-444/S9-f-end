@@ -55,6 +55,7 @@ import {
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
 import Logo from '../../components/Logo';
+import CustomerProfileForm from '../../components/CustomerProfileForm';
 import './SharedDashboard.css';
 import './CustomerDashboard.css';
 
@@ -1464,6 +1465,7 @@ const CustomerDashboard = () => {
               </div>
               
                   <div className="profile-content">
+                    <CustomerProfileForm />
                     <div className="profile-card">
                       <div className="profile-avatar-section">
                 <div className="profile-avatar">
@@ -1473,9 +1475,12 @@ const CustomerDashboard = () => {
                     <User size={40} />
                   )}
                         </div>
-                        <button className="btn-secondary">
+                        <button 
+                          className="btn-secondary"
+                          onClick={() => document.getElementById('profile-image-input')?.click()}
+                        >
                           <Upload size={16} />
-                          Change Photo
+                          {user?.user_metadata?.avatar_url ? 'Change Photo' : 'Upload Profile Picture'}
                         </button>
                 </div>
                 
@@ -1500,32 +1505,7 @@ const CustomerDashboard = () => {
             </div>
                         </div>
 
-                        <div className="detail-group">
-                          <label>Phone</label>
-                          <div className="detail-value">
-                            <span>{user?.user_metadata?.phone || 'Not provided'}</span>
-                            <button className="btn-icon">
-                              <Edit size={16} />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="detail-group">
-                          <label>Address</label>
-                          <div className="detail-value">
-                            <span>123 Main St, Apt 4B, City, State 12345</span>
-                            <button className="btn-icon">
-                              <Edit size={16} />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="detail-group">
-                          <label>Account Type</label>
-                          <div className="detail-value">
-                            <span className="account-badge">Customer</span>
-                          </div>
-                        </div>
+                        
                       </div>
                     </div>
 

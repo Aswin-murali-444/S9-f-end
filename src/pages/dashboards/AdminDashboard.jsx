@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Users, 
   Settings, 
@@ -52,13 +52,14 @@ import {
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
 import Logo from '../../components/Logo';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth, supabase } from '../../hooks/useAuth';
 import { apiService } from '../../services/api';
 import './SharedDashboard.css';
 import './AdminDashboard.css';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('overview');
   const [users, setUsers] = useState([]);
   const [systemMetrics, setSystemMetrics] = useState({
@@ -111,6 +112,8 @@ const AdminDashboard = () => {
 
   // Feedback
   const [reviews, setReviews] = useState([]);
+  const [profileModalUser, setProfileModalUser] = useState(null);
+  // const [profileModalLoading, setProfileModalLoading] = useState(false);
   
   const [headerRef, headerInView] = useInView({ threshold: 0.3, triggerOnce: true });
   const [statsRef, statsInView] = useInView({ threshold: 0.2, triggerOnce: true });
@@ -153,15 +156,75 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
-    // Simulate loading comprehensive data
-    setUsers([
-      { id: 1, name: "John Smith", email: "john.smith@company.com", role: "admin", status: "active", lastLogin: "2024-01-15 14:30", department: "IT", permissions: ["full_access"], avatar: "JS" },
-      { id: 2, name: "Sarah Johnson", email: "sarah.j@company.com", role: "supervisor", status: "active", lastLogin: "2024-01-15 13:45", department: "Operations", permissions: ["user_management", "reports"], avatar: "SJ" },
-      { id: 3, name: "Mike Chen", email: "mike.chen@company.com", role: "service_provider", status: "active", lastLogin: "2024-01-15 12:20", department: "Services", permissions: ["service_management"], avatar: "MC" },
-      { id: 4, name: "Emily Davis", email: "emily.d@company.com", role: "customer", status: "active", lastLogin: "2024-01-15 11:15", department: "Customer", permissions: ["basic_access"], avatar: "ED" },
-      { id: 5, name: "David Wilson", email: "david.w@company.com", role: "driver", status: "inactive", lastLogin: "2024-01-10 09:30", department: "Logistics", permissions: ["driver_access"], avatar: "DW" },
-      { id: 6, name: "Lisa Brown", email: "lisa.b@company.com", role: "customer", status: "suspended", lastLogin: "2024-01-08 16:45", department: "Customer", permissions: ["basic_access"], avatar: "LB" }
-    ]);
+    // Fetch real user data from the API
+    const fetchUsers = async () => {
+      try {
+        const userData = await apiService.getUsers();
+        console.log('Users fetched:', userData);
+        // Map backend shape: users with nested user_profiles (*)
+        const formattedUsers = (Array.isArray(userData) ? userData : []).map((user) => {
+          const profile = user.user_profiles || user.profile || {};
+          const firstName = profile.first_name || '';
+          const lastName = profile.last_name || '';
+          const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || user.name || user.email || 'Unknown';
+          const initials = fullName
+            .split(' ')
+            .filter(Boolean)
+            .map((p) => p[0])
+            .slice(0, 2)
+            .join('')
+            .toUpperCase();
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+          let avatarUrl = user.avatar_url || profile.profile_picture_url || profile.avatar_url || '';
+          if (avatarUrl && !/^https?:\/\//i.test(avatarUrl) && typeof supabaseUrl === 'string' && supabaseUrl) {
+            const base = supabaseUrl.replace(/\/$/, '');
+            const path = String(avatarUrl).replace(/^\//, '');
+            avatarUrl = `${base}/storage/v1/object/public/${path}`;
+          }
+          const lastLoginIso = user.updated_at || user.created_at || null;
+          return {
+            ...user,
+            name: fullName,
+            email: user.email,
+            profile,
+            avatar: avatarUrl || initials,
+            department: profile.department || 'General',
+            status: user.status || 'active',
+            lastLogin: lastLoginIso ? new Date(lastLoginIso).toLocaleString() : 'Never',
+          };
+        });
+        // Resolve storage paths to public/signed URLs when needed
+        const resolvedUsers = await Promise.all(formattedUsers.map(async (u) => {
+          if (typeof u.avatar === 'string' && u.avatar && !/^https?:\/\//i.test(u.avatar)) {
+            const match = u.avatar.match(/^([^\/]+)\/(.+)$/);
+            if (match) {
+              const bucket = match[1];
+              const key = match[2];
+              try {
+                const { data: pub } = supabase.storage.from(bucket).getPublicUrl(key);
+                if (pub?.publicUrl) {
+                  return { ...u, avatar: pub.publicUrl };
+                }
+              } catch (_) {}
+              try {
+                const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(key, 3600);
+                if (signed?.signedUrl) {
+                  return { ...u, avatar: signed.signedUrl };
+                }
+              } catch (_) {}
+            }
+          }
+          return u;
+        }));
+        setUsers(resolvedUsers);
+      } catch (error) {
+        console.error('Failed to fetch users:', error);
+        // Set some default data in case of error
+        setUsers([]);
+      }
+    };
+    
+    fetchUsers();
 
     setSystemMetrics({
       totalUsers: 1247,
@@ -345,6 +408,19 @@ const AdminDashboard = () => {
     { key: 'analytics', label: 'Analytics', icon: PieChart }
   ];
 
+  // Sync initial tab from URL query parameter (?tab=...)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search);
+      const tab = params.get('tab');
+      if (tab && navItems.some(n => n.key === tab)) {
+        setActiveTab(tab);
+      }
+    } catch (_) {
+      // ignore bad query strings
+    }
+  }, [location.search]);
+
   const handleUserAction = (userId, action) => {
     setUsers(prev => 
       prev.map(user => 
@@ -354,6 +430,8 @@ const AdminDashboard = () => {
       )
     );
   };
+
+  // Profile modal removed; profile view is now a dedicated page
 
   const handleAlertAction = (alertId, action) => {
     setAlerts(prev => 
@@ -855,31 +933,73 @@ const AdminDashboard = () => {
                   <div className="table-header">
                     <div className="header-cell">User</div>
                     <div className="header-cell">Role</div>
-                    <div className="header-cell">Department</div>
                     <div className="header-cell">Status</div>
                     <div className="header-cell">Last Login</div>
                     <div className="header-cell">Actions</div>
                   </div>
                   <div className="table-body">
+                    {users.length === 0 && (
+                      <div className="table-row">
+                        <div className="table-cell" style={{ gridColumn: '1 / -1' }}>
+                          No users found.
+                        </div>
+                      </div>
+                    )}
                     {users.map(user => (
                       <div key={user.id} className="table-row">
-                        <div className="table-cell user-info">
-                          <div className="user-avatar">{user.avatar}</div>
+                        <div className="table-cell user-info" onClick={() => navigate(`/admin/users/${user.id}`)} style={{ cursor: 'pointer' }}>
+                          <div className="user-avatar">
+                            {typeof user.avatar === 'string' && /^https?:\/\//i.test(user.avatar) ? (
+                              <img
+                                src={user.avatar}
+                                alt={user.name}
+                                onError={(e) => {
+                                  const el = e.currentTarget;
+                                  const wrapper = el.parentElement;
+                                  if (wrapper) {
+                                    wrapper.textContent = (user.name || user.email || 'NA')
+                                      .split(' ')
+                                      .filter(Boolean)
+                                      .map(p => p[0])
+                                      .slice(0,2)
+                                      .join('')
+                                      .toUpperCase();
+                                  }
+                                }}
+                              />
+                            ) : (
+                              (typeof user.avatar === 'string' ? user.avatar : 'NA')
+                            )}
+                          </div>
                           <div className="user-details">
                             <span className="user-name">{user.name}</span>
                             <span className="user-email">{user.email}</span>
+                            {user.profile?.phone && <span className="user-phone">{user.profile.phone}</span>}
                           </div>
                         </div>
                         <div className="table-cell">
                           <span className={`role-badge ${user.role}`}>{user.role.replace('_', ' ')}</span>
+                          {user.profile?.specialization && (
+                            <span className="specialization">{user.profile.specialization}</span>
+                          )}
                         </div>
-                        <div className="table-cell">{user.department}</div>
+                        {/* removed department column */}
                         <div className="table-cell">
                           <span className={`status-badge ${user.status}`}>{user.status}</span>
+                          {user.profile?.verified && (
+                            <span className="verified-badge">Verified</span>
+                          )}
                         </div>
-                        <div className="table-cell">{user.lastLogin}</div>
+                        <div className="table-cell">
+                          <div className="login-info">
+                            <span>{user.lastLogin}</span>
+                            {user.profile?.last_active && (
+                              <span className="last-active">Active: {new Date(user.profile.last_active).toLocaleString()}</span>
+                            )}
+                          </div>
+                        </div>
                         <div className="table-cell actions">
-                          <button className="btn-icon" title="View">
+                          <button className="btn-icon" title="View" onClick={() => navigate(`/admin/users/${user.id}`)}>
                             <Eye size={16} />
                           </button>
                           <button className="btn-icon" title="Edit">
@@ -1562,8 +1682,11 @@ const AdminDashboard = () => {
           </div>
         </div>
       </section>
+      {/* Profile modal removed */}
     </div>
   );
 };
 
 export default AdminDashboard;
+// Profile Modal
+// Rendered below main return via conditional

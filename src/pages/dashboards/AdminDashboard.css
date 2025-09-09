@@ -37,6 +37,16 @@
 
 .tab-content { margin-left: 0; }
 
+/* Allow specific blocks to extend into the left gutter (sidebar width + gap) */
+.full-bleed-admin {
+  margin-left: -284px; /* 260px sidebar + 24px gap */
+  width: calc(100% + 284px);
+}
+
+@media (max-width: 1024px) {
+  .full-bleed-admin { margin-left: 0; width: 100%; }
+}
+
 @media (max-width: 1024px) {
   .dashboard-layout { grid-template-columns: 1fr; }
   .dashboard-sidebar { position: static; }
@@ -220,6 +230,8 @@
   padding: 2rem 0;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   border-bottom: 1px solid #f1f5f9;
+  position: relative;
+  z-index: 3000; /* ensure header (and dropdowns) sit above main grid */
 }
 
 .header-content {
@@ -261,7 +273,56 @@
 
 .notifications-wrapper {
   position: relative;
+  isolation: isolate; /* ensure dropdown stacks above surrounding grid */
+  z-index: 1000;
 }
+
+.profile-wrapper { position: relative; isolation: isolate; z-index: 1000; }
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 360px;
+  background: linear-gradient(135deg, #4f9cf9 0%, #3b82f6 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+  z-index: 2000;
+  overflow: hidden;
+  color: #ffffff;
+}
+
+.profile-avatar-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  margin: 16px auto 8px auto;
+  overflow: hidden;
+}
+
+.profile-avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Make form content white and readable on the blue panel */
+.profile-dropdown .dropdown-header {
+  color: #ffffff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.profile-dropdown .link-button { color: #ffffff; opacity: 0.9; }
+.profile-dropdown .link-button:hover { opacity: 1; }
+
+.profile-dropdown .modal-body label { color: #ffffff; }
+.profile-dropdown .modal-body input {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+}
+.profile-dropdown .modal-body input::placeholder { color: rgba(255, 255, 255, 0.85); }
 
 .notifications-dropdown {
   position: absolute;
@@ -272,7 +333,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
-  z-index: 20;
+  z-index: 2000; /* stay above cards and charts */
   overflow: hidden;
 }
 
@@ -954,8 +1015,8 @@
 
 .actions-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
 }
 
 .action-card {
@@ -1163,7 +1224,7 @@ input[type="text"][placeholder*="Search" i]::placeholder {
 
 .table-header {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1.5fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1.5fr 1fr;
   gap: 1rem;
   padding: 1.5rem 2rem;
   background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
@@ -1209,7 +1270,7 @@ input[type="text"][placeholder*="Search" i]::placeholder {
 
 .table-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1.5fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1.5fr 1fr;
   gap: 1rem;
   padding: 1.5rem 2rem;
   border-bottom: 1px solid rgba(241, 245, 249, 0.8);
@@ -1277,6 +1338,7 @@ input[type="text"][placeholder*="Search" i]::placeholder {
   overflow: hidden;
   transition: all 0.3s ease;
 }
+.user-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 .user-avatar::before {
   content: '';
@@ -1303,6 +1365,60 @@ input[type="text"][placeholder*="Search" i]::placeholder {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
+}
+
+.user-phone {
+  font-size: 0.8rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.specialization {
+  font-size: 0.75rem;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.25rem;
+  display: inline-block;
+}
+
+.department-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.position {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+.verified-badge {
+  font-size: 0.75rem;
+  color: #10b981;
+  background: #dcfce7;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.login-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.last-active {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-style: italic;
 }
 
 .user-name {

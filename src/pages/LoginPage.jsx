@@ -24,7 +24,7 @@ const loginSchema = yup.object({
 });
 
 const LoginPage = () => {
-  const { login, signInWithGoogle, loading } = useAuth();
+  const { login, signInWithGoogle, loading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   const {
@@ -46,6 +46,12 @@ const LoginPage = () => {
 
   // Clear form on component mount and prevent autofill
   useEffect(() => {
+    // If already authenticated, redirect away from login
+    if (isAuthenticated) {
+      navigate('/', { replace: true });
+      return;
+    }
+
     reset();
     
     // Force clear any autofilled values
@@ -66,9 +72,9 @@ const LoginPage = () => {
     
     if (result.success) {
       if (result.dashboardPath) {
-        navigate(result.dashboardPath);
+        navigate(result.dashboardPath, { replace: true });
       } else {
-        navigate('/');
+        navigate('/', { replace: true });
       }
     }
   };
@@ -102,9 +108,6 @@ const LoginPage = () => {
             </div>
             
             <div className="form-header">
-              <div className="form-header-icon">
-                <LogIn size={20} />
-              </div>
               <h3>Access Your Dashboard</h3>
               <p>Enter your credentials to continue</p>
             </div>
