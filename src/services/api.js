@@ -131,6 +131,54 @@ class ApiService {
     });
   }
 
+  async uploadCategoryIcon(file) {
+    // Convert file to base64 (no data URL header)
+    const toBase64 = (f) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result || '';
+        const base64 = String(result).split(',').pop();
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(f);
+    });
+
+    const base64 = await toBase64(file);
+    return this.request('/categories/icon-upload', {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: file.name,
+        fileType: file.type || 'image/png',
+        base64
+      })
+    });
+  }
+
+  async uploadProfilePicture(file, userId) {
+    const toBase64 = (f) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result || '';
+        const base64 = String(result).split(',').pop();
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(f);
+    });
+
+    const base64 = await toBase64(file);
+    return this.request('/users/profile-picture-upload', {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: file.name,
+        fileType: file.type || 'image/png',
+        base64,
+        userId
+      })
+    });
+  }
+
   async getCategory(id) {
     return this.request(`/categories/${encodeURIComponent(id)}`);
   }
@@ -177,6 +225,81 @@ class ApiService {
       throw new Error(text || `HTTP error! status: ${resp.status}`);
     }
     return { success: true };
+  }
+
+  // Services endpoints
+  async getServices() {
+    return this.request('/services');
+  }
+
+  async createService({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, active = true }) {
+    return this.request('/services', {
+      method: 'POST',
+      body: JSON.stringify({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, active })
+    });
+  }
+
+  async getService(id) {
+    return this.request(`/services/${encodeURIComponent(id)}`);
+  }
+
+  async updateService(id, updates) {
+    const { categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, active } = updates;
+    return this.request(`/services/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, active })
+    });
+  }
+
+  async blockService(id) {
+    try {
+      return await this.request(`/services/${encodeURIComponent(id)}/block`, { method: 'PATCH' });
+    } catch (e) {
+      return await this.request(`/services/${encodeURIComponent(id)}/block`, { method: 'POST' });
+    }
+  }
+
+  async unblockService(id) {
+    try {
+      return await this.request(`/services/${encodeURIComponent(id)}/unblock`, { method: 'PATCH' });
+    } catch (e) {
+      return await this.request(`/services/${encodeURIComponent(id)}/unblock`, { method: 'POST' });
+    }
+  }
+
+  async deleteService(id) {
+    // Try DELETE first; fallback to POST /delete
+    let resp = await fetch(`${API_BASE_URL}/services/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!resp.ok) {
+      // Fallback
+      resp = await fetch(`${API_BASE_URL}/services/${encodeURIComponent(id)}/delete`, { method: 'POST' });
+    }
+    if (!resp.ok) {
+      const contentType = resp.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await resp.json();
+        throw new Error(data?.error || `HTTP error! status: ${resp.status}`);
+      }
+      const text = await resp.text();
+      throw new Error(text || `HTTP error! status: ${resp.status}`);
+    }
+    return { success: true };
+  }
+
+  // User management endpoints
+  async updateUserStatus(userId, status) {
+    return this.request(`/users/${encodeURIComponent(userId)}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status })
+    });
+  }
+
+  async blockUser(userId) {
+    return this.updateUserStatus(userId, 'suspended');
+  }
+
+  async unblockUser(userId) {
+    return this.updateUserStatus(userId, 'active');
   }
 }
 

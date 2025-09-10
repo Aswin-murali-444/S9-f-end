@@ -58,6 +58,50 @@ export const AuthProvider = ({ children }) => {
           setIsAuthenticated(true);
           localStorage.setItem('user', JSON.stringify(session.user));
           localStorage.setItem('session', JSON.stringify(session));
+          
+          // Sync profile picture from database to auth metadata if needed (async, non-blocking)
+          setTimeout(async () => {
+            try {
+              const { data: userData, error: userError } = await supabase
+                .from('users')
+                .select(`
+                  user_profiles (
+                    profile_picture_url
+                  )
+                `)
+                .eq('auth_user_id', session.user.id)
+                .single();
+
+              if (userData && !userError) {
+                const dbProfilePicture = userData.user_profiles?.profile_picture_url;
+                const authProfilePicture = session.user.user_metadata?.avatar_url;
+                
+                if (dbProfilePicture && dbProfilePicture !== authProfilePicture) {
+                  console.log('🔄 Syncing profile picture from database to auth metadata on app load...');
+                  try {
+                    await supabase.auth.updateUser({
+                      data: { avatar_url: dbProfilePicture }
+                    });
+                    // Update the session user with the synced profile picture
+                    const updatedUser = {
+                      ...session.user,
+                      user_metadata: {
+                        ...session.user.user_metadata,
+                        avatar_url: dbProfilePicture
+                      }
+                    };
+                    setUser(updatedUser);
+                    localStorage.setItem('user', JSON.stringify(updatedUser));
+                    console.log('✅ Profile picture synced successfully on app load');
+                  } catch (syncError) {
+                    console.warn('⚠️ Failed to sync profile picture on app load:', syncError.message);
+                  }
+                }
+              }
+            } catch (syncError) {
+              console.warn('⚠️ Failed to check profile picture sync on app load:', syncError.message);
+            }
+          }, 100); // Small delay to not block initialization
         } else {
           setUser(null);
           setIsAuthenticated(false);
@@ -82,6 +126,51 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(true);
         localStorage.setItem('user', JSON.stringify(session.user));
         localStorage.setItem('session', JSON.stringify(session));
+        
+        // Sync profile picture from database to auth metadata if needed (async, non-blocking)
+        setTimeout(async () => {
+          try {
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select(`
+                user_profiles (
+                  profile_picture_url
+                )
+              `)
+              .eq('auth_user_id', session.user.id)
+              .single();
+
+            if (userData && !userError) {
+              const dbProfilePicture = userData.user_profiles?.profile_picture_url;
+              const authProfilePicture = session.user.user_metadata?.avatar_url;
+              
+              if (dbProfilePicture && dbProfilePicture !== authProfilePicture) {
+                console.log('🔄 Syncing profile picture from database to auth metadata on auth state change...');
+                try {
+                  await supabase.auth.updateUser({
+                    data: { avatar_url: dbProfilePicture }
+                  });
+                  // Update the session user with the synced profile picture
+                  const updatedUser = {
+                    ...session.user,
+                    user_metadata: {
+                      ...session.user.user_metadata,
+                      avatar_url: dbProfilePicture
+                    }
+                  };
+                  setUser(updatedUser);
+                  localStorage.setItem('user', JSON.stringify(updatedUser));
+                  console.log('✅ Profile picture synced successfully on auth state change');
+                } catch (syncError) {
+                  console.warn('⚠️ Failed to sync profile picture on auth state change:', syncError.message);
+                }
+              }
+            }
+          } catch (syncError) {
+            console.warn('⚠️ Failed to check profile picture sync on auth state change:', syncError.message);
+          }
+        }, 100); // Small delay to not block auth state change
+        
         if (event === 'SIGNED_IN' && isInitialized) {
           // Reset any prior logout message counters
           localStorage.removeItem('logout_reason');
@@ -420,10 +509,16 @@ export const AuthProvider = ({ children }) => {
 
         let mappedRole = 'customer';
         try {
-          // First, try to get existing user profile
+          // First, try to get existing user profile with profile picture
           const { data: userData, error: userError } = await supabase
             .from('users')
-            .select('role, status')
+            .select(`
+              role, 
+              status,
+              user_profiles (
+                profile_picture_url
+              )
+            `)
             .eq('auth_user_id', data.user.id)
             .single();
 
@@ -431,6 +526,33 @@ export const AuthProvider = ({ children }) => {
             // User already has a profile with a role
             console.log('✅ Existing user profile found:', userData);
             mappedRole = userData.role;
+            
+            // Sync profile picture from database to auth metadata if needed
+            const dbProfilePicture = userData.user_profiles?.profile_picture_url;
+            const authProfilePicture = data.user.user_metadata?.avatar_url;
+            
+            if (dbProfilePicture && dbProfilePicture !== authProfilePicture) {
+              console.log('🔄 Syncing profile picture from database to auth metadata...');
+              try {
+                await supabase.auth.updateUser({
+                  data: { avatar_url: dbProfilePicture }
+                });
+                // Update the local user state with the synced profile picture
+                const updatedUser = {
+                  ...data.user,
+                  user_metadata: {
+                    ...data.user.user_metadata,
+                    avatar_url: dbProfilePicture
+                  }
+                };
+                setUser(updatedUser);
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+                console.log('✅ Profile picture synced successfully');
+              } catch (syncError) {
+                console.warn('⚠️ Failed to sync profile picture:', syncError.message);
+              }
+            }
+            
             if (userData.status && userData.status !== 'active') {
               localStorage.setItem('logout_reason', userData.status);
               await supabase.auth.signOut();
@@ -595,7 +717,14 @@ export const AuthProvider = ({ children }) => {
         // First, try to get existing user profile
         const { data: userData, error: userError } = await supabase
           .from('users')
-          .select('role, id, status')
+          .select(`
+            role, 
+            id, 
+            status,
+            user_profiles (
+              profile_picture_url
+            )
+          `)
           .eq('auth_user_id', currentUser.id)
           .single();
 
@@ -604,6 +733,23 @@ export const AuthProvider = ({ children }) => {
           console.log('✅ Existing OAuth user profile found:', userData);
           mappedRole = userData.role;
           isNewUser = false;
+          
+          // Sync profile picture from database to auth metadata if needed
+          const dbProfilePicture = userData.user_profiles?.profile_picture_url;
+          const authProfilePicture = currentUser.user_metadata?.avatar_url;
+          
+          if (dbProfilePicture && dbProfilePicture !== authProfilePicture) {
+            console.log('🔄 Syncing profile picture from database to auth metadata...');
+            try {
+              await supabase.auth.updateUser({
+                data: { avatar_url: dbProfilePicture }
+              });
+              console.log('✅ Profile picture synced successfully');
+            } catch (syncError) {
+              console.warn('⚠️ Failed to sync profile picture:', syncError.message);
+            }
+          }
+          
           if (userData.status && userData.status !== 'active') {
             localStorage.setItem('logout_reason', userData.status);
             await supabase.auth.signOut();
@@ -863,6 +1009,27 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const refreshUserData = async () => {
+    if (!user?.id) return;
+    
+    try {
+      // Get fresh user data from Supabase auth
+      const { data: { user: freshUser }, error } = await supabase.auth.getUser();
+      if (error) {
+        console.warn('⚠️ Failed to refresh user data:', error);
+        return;
+      }
+      
+      if (freshUser) {
+        setUser(freshUser);
+        localStorage.setItem('user', JSON.stringify(freshUser));
+        console.log('✅ User data refreshed successfully');
+      }
+    } catch (error) {
+      console.warn('⚠️ Error refreshing user data:', error);
+    }
+  };
+
   const value = {
     user,
     isAuthenticated,
@@ -879,6 +1046,7 @@ export const AuthProvider = ({ children }) => {
     uiRoleToDbRole,
     getUserRole,
     getCompleteUserProfile,
+    refreshUserData,
   };
 
   return React.createElement(AuthContext.Provider, { value }, children);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
@@ -52,6 +52,7 @@ import { useAnimations } from '../../hooks/useAnimations';
 import Logo from '../../components/Logo';
 import { useAuth, supabase } from '../../hooks/useAuth';
 import { apiService } from '../../services/api';
+import { toast } from 'react-hot-toast';
 import './SharedDashboard.css';
 import './AdminDashboard.css';
 
@@ -89,6 +90,9 @@ const AdminDashboard = () => {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const notificationsRef = useRef(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortKey, setSortKey] = useState('name_asc');
+  const [selectedRole, setSelectedRole] = useState('');
 
   // Services & Categories
   const [categories, setCategories] = useState([]);
@@ -117,7 +121,18 @@ const AdminDashboard = () => {
   const [statsRef, statsInView] = useInView({ threshold: 0.2, triggerOnce: true });
   
   const { useAnimatedInView, staggerAnimation } = useAnimations();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  const displayName = React.useMemo(() => {
+    return (
+      user?.user_metadata?.full_name ||
+      user?.user_metadata?.name ||
+      user?.email ||
+      'Admin'
+    );
+  }, [user]);
+
+  const [showWelcome, setShowWelcome] = useState(false);
 
   const formatUptime = (totalSeconds) => {
     if (typeof totalSeconds !== 'number' || totalSeconds < 0) return '—';
@@ -152,6 +167,28 @@ const AdminDashboard = () => {
       if (!silent) setIsRefreshing(false);
     }
   };
+
+  // One-time welcome overlay per session
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('session');
+      const parsed = raw ? JSON.parse(raw) : null;
+      const tokenFrag = parsed?.access_token?.slice(0, 16) || parsed?.user?.id || 'default';
+      const key = `welcome_admin_shown_${tokenFrag}`;
+      const alreadyShown = sessionStorage.getItem(key);
+      if (!alreadyShown) {
+        setShowWelcome(true);
+        sessionStorage.setItem(key, '1');
+        const t = setTimeout(() => setShowWelcome(false), 2600);
+        return () => clearTimeout(t);
+      }
+    } catch (_) {
+      // Fallback: show once
+      setShowWelcome(true);
+      const t = setTimeout(() => setShowWelcome(false), 2600);
+      return () => clearTimeout(t);
+    }
+  }, []);
 
   useEffect(() => {
     // Fetch real user data from the API
@@ -435,14 +472,30 @@ const AdminDashboard = () => {
     }
   }, [location.search]);
 
-  const handleUserAction = (userId, action) => {
-    setUsers(prev => 
-      prev.map(user => 
-        user.id === userId 
-          ? { ...user, status: action }
-          : user
-      )
-    );
+  const handleUserAction = async (userId, action) => {
+    try {
+      console.log('🔄 Updating user status:', userId, 'to', action);
+      
+      // Call the API to update user status
+      await apiService.updateUserStatus(userId, action);
+      
+      // Update local state
+      setUsers(prev => 
+        prev.map(user => 
+          user.id === userId 
+            ? { ...user, status: action }
+            : user
+        )
+      );
+      
+      // Show success message
+      const actionText = action === 'active' ? 'activated' : 'suspended';
+      toast.success(`User ${actionText} successfully`);
+      
+    } catch (error) {
+      console.error('❌ Error updating user status:', error);
+      toast.error(error?.message || 'Failed to update user status');
+    }
   };
 
   // Profile modal removed; profile view is now a dedicated page
@@ -522,8 +575,70 @@ const AdminDashboard = () => {
     return roles.map(r => ({ role: r, count: counts[r] || 0, percent: Math.round(((counts[r] || 0) / total) * 100) }));
   }, [users]);
 
+  // Hide admin accounts from User Management table
+  const usersForManagement = React.useMemo(() =>
+    users.filter(u => String(u?.role || '').toLowerCase() !== 'admin')
+  , [users]);
+
+  const managedUsersFilteredSorted = React.useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    let list = usersForManagement.filter(u => {
+      if (!query) return true;
+      const haystack = `${u.name || ''} ${u.email || ''} ${u.profile?.phone || ''}`.toLowerCase();
+      return haystack.includes(query);
+    });
+
+    if (selectedRole) {
+      list = list.filter(u => String(u.role || '').toLowerCase() === String(selectedRole).toLowerCase());
+    }
+
+    const comparator = {
+      name_asc: (a, b) => (a.name || '').localeCompare(b.name || ''),
+      name_desc: (a, b) => (b.name || '').localeCompare(a.name || ''),
+      last_login_desc: (a, b) => {
+        const ta = a.lastLogin ? new Date(a.lastLogin).getTime() : 0;
+        const tb = b.lastLogin ? new Date(b.lastLogin).getTime() : 0;
+        return tb - ta;
+      },
+      last_login_asc: (a, b) => {
+        const ta = a.lastLogin ? new Date(a.lastLogin).getTime() : 0;
+        const tb = b.lastLogin ? new Date(b.lastLogin).getTime() : 0;
+        return ta - tb;
+      }
+    }[sortKey] || (() => 0);
+
+    return list.slice().sort(comparator);
+  }, [usersForManagement, searchQuery, sortKey, selectedRole]);
+
   return (
     <div className="admin-dashboard">
+
+      {/* Welcome Overlay */}
+      <AnimatePresence>
+        {showWelcome && (
+          <motion.div
+            className="welcome-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <motion.div
+              className="welcome-card"
+              initial={{ y: -20, scale: 0.96, opacity: 0 }}
+              animate={{ y: 0, scale: 1, opacity: 1 }}
+              exit={{ y: 10, scale: 0.98, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 18 }}
+            >
+              <div className="welcome-title">Welcome, Admin</div>
+              <div className="welcome-subtitle">{displayName}</div>
+              <button className="btn-primary" onClick={() => setShowWelcome(false)}>
+                Enter Dashboard
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Header Section */}
       <motion.section 
@@ -537,6 +652,20 @@ const AdminDashboard = () => {
           <motion.div className="header-content" variants={itemVariants}>
             <div className="welcome-section">
               <Logo size="medium" />
+              <motion.h1
+                initial={{ y: 12, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 180, damping: 18, delay: 0.05 }}
+              >
+                Welcome, Admin
+              </motion.h1>
+              <motion.p
+                initial={{ y: 12, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 180, damping: 20, delay: 0.12 }}
+              >
+                {displayName}
+              </motion.p>
             </div>
             <div className="header-actions" ref={notificationsRef}>
               <div className="notifications-wrapper">
@@ -930,15 +1059,36 @@ const AdminDashboard = () => {
                   <div className="users-actions">
                     <div className="search-box">
                       <Search size={16} />
-                      <input type="text" placeholder="Search users..." />
+                      <input
+                        type="text"
+                        placeholder="Search users..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        aria-label="Search users"
+                      />
                     </div>
-                    <select className="filter-select">
-                      <option>All Roles</option>
-                      <option>Admin</option>
-                      <option>Supervisor</option>
-                      <option>Service Provider</option>
-                      <option>Customer</option>
-                      <option>Driver</option>
+                    <select
+                      className="filter-select"
+                      value={sortKey}
+                      onChange={(e) => setSortKey(e.target.value)}
+                      aria-label="Sort users"
+                    >
+                      <option value="name_asc">Name A–Z</option>
+                      <option value="name_desc">Name Z–A</option>
+                      <option value="last_login_desc">Last Login (newest)</option>
+                      <option value="last_login_asc">Last Login (oldest)</option>
+                    </select>
+                    <select
+                      className="filter-select"
+                      value={selectedRole}
+                      onChange={(e) => setSelectedRole(e.target.value)}
+                      aria-label="Filter by role"
+                    >
+                      <option value="">All Roles</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="service_provider">Service Provider</option>
+                      <option value="customer">Customer</option>
+                      <option value="driver">Driver</option>
                     </select>
                     <button className="btn-primary" onClick={() => navigate('/admin/add-user')}>
                       <Plus size={20} />
@@ -956,14 +1106,14 @@ const AdminDashboard = () => {
                     <div className="header-cell">Actions</div>
                   </div>
                   <div className="table-body">
-                    {users.length === 0 && (
+                    {managedUsersFilteredSorted.length === 0 && (
                       <div className="table-row">
                         <div className="table-cell" style={{ gridColumn: '1 / -1' }}>
                           No users found.
                         </div>
                       </div>
                     )}
-                    {users.map(user => (
+                    {managedUsersFilteredSorted.map(user => (
                       <div key={user.id} className="table-row">
                         <div className="table-cell user-info" onClick={() => navigate(`/admin/users/${user.id}`)} style={{ cursor: 'pointer' }}>
                           <div className="user-avatar">
@@ -1086,28 +1236,30 @@ const AdminDashboard = () => {
                     </div>
                   </motion.div>
 
-                  {/* Add Service */}
+                  {/* Services (Create + Manage) */}
                   <motion.div 
                     className="admin-form-card"
                     whileHover={{ scale: 1.02, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => navigate('/admin/add-service')}
                     variants={itemVariants}
                   >
                     <div className="form-card-icon">
                       <Zap size={32} />
                     </div>
                     <div className="form-card-content">
-                      <h3>Add Service</h3>
-                      <p>Create comprehensive service offerings with pricing</p>
+                      <h3>Services</h3>
+                      <p>Create and manage individual services with pricing and status</p>
                       <ul className="form-card-features">
-                        <li>Select Category & Pricing Model</li>
-                        <li>Duration & Provider Assignment</li>
-                        <li>Base Price Configuration</li>
+                        <li>Category & Pricing Model</li>
+                        <li>Base Price & Duration</li>
+                        <li>Status: Active, Inactive, Suspended</li>
                       </ul>
                     </div>
                     <div className="form-card-action">
-                      <span>Create Service →</span>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <button className="btn-primary" onClick={() => navigate('/admin/add-service')}>Create Service →</button>
+                        <button className="btn-secondary" onClick={() => navigate('/admin/services')}>Manage Services →</button>
+                      </div>
                     </div>
                   </motion.div>
 

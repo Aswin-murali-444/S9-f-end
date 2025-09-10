@@ -2892,6 +2892,20 @@
   font-size: 1rem;
   outline: none;
   background: transparent;
+  color: #1e293b; /* ensure text is visible like home page */
+  caret-color: #1e293b;
+}
+
+/* placeholder color similar to home page */
+.categories-search-input::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+/* match home search focus treatment */
+.categories-search-bar .search-container:focus-within {
+  border-color: #4f9cf9;
+  box-shadow: 0 0 0 3px rgba(79, 156, 249, 0.1);
 }
 
 .categories-search-btn {
@@ -3031,20 +3045,21 @@
 .wishlist-btn-small {
   width: 44px;
   height: 44px;
-  background: white;
-  border: 2px solid #e2e8f0;
+  background: #fef2f2; /* light red so the red outline is visible on white cards */
+  border: 2px solid #fecaca;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  color: #64748b;
+  color: #ef4444;
 }
 
 .wishlist-btn-small:hover {
+  background: #fee2e2;
   border-color: #ef4444;
-  color: #ef4444;
+  color: #b91c1c;
 }
 
 /* Popular Services */

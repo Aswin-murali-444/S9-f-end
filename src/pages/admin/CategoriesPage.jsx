@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/AdminLayout';
 import { apiService } from '../../services/api';
+import { supabase } from '../../hooks/useAuth';
 import './AdminPages.css';
 
 const CategoriesPage = () => {
@@ -20,7 +21,34 @@ const CategoriesPage = () => {
     setLoading(true);
     try {
       const data = await apiService.getCategories();
-      setCategories(Array.isArray(data) ? data : []);
+      const raw = Array.isArray(data) ? data : [];
+      // Resolve icon_url storage paths to public/signed URLs
+      const resolved = await Promise.all(raw.map(async (cat) => {
+        try {
+          let icon = cat.icon_url || '';
+          if (icon && !/^https?:\/\//i.test(icon)) {
+            const match = String(icon).match(/^([^\/]+)\/(.+)$/);
+            if (match) {
+              const bucket = match[1];
+              const key = match[2];
+              try {
+                const { data: pub } = supabase.storage.from(bucket).getPublicUrl(key);
+                if (pub?.publicUrl) icon = pub.publicUrl;
+              } catch (_) {}
+              if (!/^https?:\/\//i.test(icon)) {
+                try {
+                  const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(key, 3600);
+                  if (signed?.signedUrl) icon = signed.signedUrl;
+                } catch (_) {}
+              }
+            }
+          }
+          return { ...cat, icon_resolved: icon };
+        } catch (_) {
+          return { ...cat, icon_resolved: '' };
+        }
+      }));
+      setCategories(resolved);
     } catch (e) {
       toast.error('Failed to load categories');
     } finally {
@@ -140,7 +168,19 @@ const CategoriesPage = () => {
                 )}
                 {categories.map(cat => (
                   <div key={cat.id} className="table-row">
-                    <div className="table-cell" style={{ fontWeight: 600 }}>{cat.name}</div>
+                    <div className="table-cell">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {cat.icon_resolved ? (
+                          <img
+                            src={cat.icon_resolved}
+                            alt=""
+                            style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover', border: '1px solid #e2e8f0' }}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        ) : null}
+                        <span style={{ fontWeight: 600 }}>{cat.name}</span>
+                      </div>
+                    </div>
                     <div className="table-cell"><span className={statusColor(cat.status, cat.active)}>{(cat.status || (cat.active ? 'active' : 'inactive')).toString()}</span></div>
                     <div className="table-cell">{cat.updated_at ? new Date(cat.updated_at).toLocaleString() : '—'}</div>
                     <div className="table-cell actions">

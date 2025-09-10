@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth, supabase } from '../hooks/useAuth';
+import { apiService } from '../services/api';
 import toast from 'react-hot-toast';
 
 // Form to complete/update user_profiles for the current customer
 const CustomerProfileForm = () => {
-  const { user } = useAuth();
+  const { user, refreshUserData } = useAuth();
 
   const initialState = useMemo(() => ({
     first_name: '',
@@ -484,42 +485,26 @@ const CustomerProfileForm = () => {
 
       // Handle image upload if a new file was selected
       if (profileImageFile) {
-        const fileExt = profileImageFile.name.split('.').pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-        // Use auth user id to match storage policies that check auth.uid()
-        const filePath = `${user.id}/${fileName}`;
-
-        // Target the expected bucket explicitly
-        const bucket = 'profile-pictures';
-        const { error: uploadErr } = await supabase.storage
-          .from(bucket)
-          .upload(filePath, profileImageFile, { upsert: true, cacheControl: '3600' });
-
-        if (!uploadErr) {
-          const { data: pub } = supabase.storage.from(bucket).getPublicUrl(filePath);
-          if (pub?.publicUrl) {
-            uploadedImageUrl = pub.publicUrl;
-          } else {
-            // Fallback to path if bucket not public
-            uploadedImageUrl = `${bucket}/${filePath}`;
-          }
-          // Update auth user metadata so UI picks up the new avatar immediately
+        try {
+          const { publicUrl, path } = await apiService.uploadProfilePicture(profileImageFile, user.id);
+          uploadedImageUrl = publicUrl || path || '';
           try {
             const { error: metaErr } = await supabase.auth.updateUser({
               data: { avatar_url: uploadedImageUrl }
             });
             if (metaErr) {
               console.warn('Failed to update user metadata avatar_url:', metaErr.message);
+            } else {
+              // Refresh user data to update the UI immediately
+              await refreshUserData();
             }
           } catch (e) {
             console.warn('Error updating user metadata avatar_url:', e?.message);
           }
-          // Update local preview to the final uploaded URL
           setProfileImagePreviewUrl(uploadedImageUrl);
-        } else {
-          console.warn('Profile image upload failed:', uploadErr.message);
-          toast.error(`Failed to upload profile picture: ${uploadErr.message}`);
-          // Continue saving other fields even if image upload fails
+        } catch (uploadErr) {
+          console.warn('Profile image upload failed:', uploadErr?.message || uploadErr);
+          toast.error(`Failed to upload profile picture: ${uploadErr?.message || 'Upload error'}`);
         }
       }
 

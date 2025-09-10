@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Save, X, UploadCloud } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Save, X, UploadCloud, ArrowLeft } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/AdminLayout';
 import { apiService } from '../../services/api';
 import './AdminPages.css';
 
-const AddServicePage = () => {
+const EditServicePage = () => {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [formData, setFormData] = useState({
     categoryId: '',
     name: '',
@@ -18,27 +19,52 @@ const AddServicePage = () => {
   });
   const [categories, setCategories] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [iconFile, setIconFile] = useState(null);
   const [iconPreview, setIconPreview] = useState('');
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
 
-  // Fetch categories from API
+  // Fetch categories and service data
   useEffect(() => {
-    const fetchCategories = async () => {
+    const fetchData = async () => {
       try {
-        const data = await apiService.getCategories();
-        const activeCategories = Array.isArray(data) ? data.filter(cat => cat.active) : [];
+        setIsLoading(true);
+        
+        // Fetch categories
+        const categoriesData = await apiService.getCategories();
+        const activeCategories = Array.isArray(categoriesData) ? categoriesData.filter(cat => cat.active) : [];
         setCategories(activeCategories);
+        
+        // Fetch service data
+        const serviceData = await apiService.getService(id);
+        
+        const categoryId = serviceData.category_id || serviceData.categoryId || serviceData.category || serviceData.service_categories?.id || '';
+        
+        setFormData({
+          categoryId: categoryId,
+          name: serviceData.name || '',
+          description: serviceData.description || '',
+          duration: serviceData.duration || '',
+          active: serviceData.active !== undefined ? serviceData.active : true
+        });
+        
+        // Set existing icon if available
+        if (serviceData.icon_url) {
+          setIconPreview(serviceData.icon_url);
+        }
+        
       } catch (error) {
-        console.error('Failed to fetch categories:', error);
-        // Fallback to empty array
-        setCategories([]);
+        console.error('Failed to fetch data:', error);
+        toast.error('Failed to load service data');
+        navigate('/dashboard/admin?tab=services');
+      } finally {
+        setIsLoading(false);
       }
     };
     
-    fetchCategories();
-  }, []);
+    fetchData();
+  }, [id, navigate]);
 
   // Validation function
   const validateField = (name, value) => {
@@ -126,7 +152,7 @@ const AddServicePage = () => {
     const isImage = /^image\/(png|jpe?g)$/i.test(file.type || '');
     const under2mb = file.size <= 2 * 1024 * 1024;
     if (!isImage || !under2mb) {
-      alert('Please select a PNG or JPG up to 2MB.');
+      toast.error('Please select a PNG or JPG up to 2MB.');
       return;
     }
     setIconFile(file);
@@ -178,14 +204,14 @@ const AddServicePage = () => {
         iconMimeType: iconFile?.type || null
       };
       
-      await apiService.createService(serviceData);
-      toast.success('Service created successfully!');
+      await apiService.updateService(id, serviceData);
+      toast.success('Service updated successfully!');
       
       // Navigate back to services tab
       navigate('/dashboard/admin?tab=services');
     } catch (error) {
-      console.error('Error creating service:', error);
-      toast.error('Failed to create service');
+      console.error('Error updating service:', error);
+      toast.error('Failed to update service');
     } finally {
       setIsSubmitting(false);
     }
@@ -197,39 +223,56 @@ const AddServicePage = () => {
       opacity: 1,
       y: 0,
       transition: {
-        duration: 0.6,
+        duration: 0.3,
         staggerChildren: 0.1
       }
     }
   };
 
   const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.4 }
-    }
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0 }
   };
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="admin-page-content">
+          <div style={{ padding: '2rem', textAlign: 'center' }}>
+            <div className="spinner"></div>
+            <p>Loading service data...</p>
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
-      <motion.div
-        className="admin-page-content"
-        initial="hidden"
-        animate="visible"
+      <motion.div 
+        className="admin-page-content" 
+        initial="hidden" 
+        animate="visible" 
         variants={containerVariants}
       >
-        {/* Page Header */}
         <motion.div className="page-header" variants={itemVariants}>
           <div className="page-title">
-            <h1>Add Service</h1>
-            <p>Create a new service offering for your platform</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+              <button 
+                className="btn-secondary"
+                onClick={() => navigate('/dashboard/admin?tab=services')}
+                style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                <ArrowLeft size={16} />
+                Back
+              </button>
+            </div>
+            <h1>Edit Service</h1>
+            <p>Update service information and settings</p>
           </div>
         </motion.div>
 
-        {/* Form */}
-        <motion.form 
+        <motion.form
           className="admin-form"
           onSubmit={handleSubmit}
           variants={itemVariants}
@@ -319,28 +362,30 @@ const AddServicePage = () => {
               <h3>Visual & Settings</h3>
               <div className="form-grid">
                 <div className="form-group">
-                  <label>Service Icon</label>
+                  <label htmlFor="icon">Service Icon</label>
                   <div className="icon-upload-area">
-                    {!iconPreview ? (
-                      <label className="upload-placeholder" htmlFor="service-icon-input">
-                        <span>Upload Icon</span>
-                        <small>PNG, JPG up to 2MB</small>
-                      </label>
-                    ) : (
+                    {iconPreview ? (
                       <div className="icon-preview">
-                        <img src={iconPreview} alt="Service icon" />
+                        <img src={iconPreview} alt="Service Icon Preview" />
                         <button type="button" className="remove-icon" onClick={removeIcon}>
-                          <X aria-hidden="true" size={14} />
+                          <X size={16} />
                         </button>
                       </div>
+                    ) : (
+                      <label htmlFor="icon" className="upload-placeholder">
+                        <UploadCloud size={24} color="#64748b" />
+                        <span>Upload Icon</span>
+                        <small>PNG, JPG up to 2MB</small>
+                        <input
+                          id="icon"
+                          name="icon"
+                          type="file"
+                          accept="image/png, image/jpeg"
+                          onChange={handleIconChange}
+                          style={{ display: 'none' }}
+                        />
+                      </label>
                     )}
-                    <input
-                      id="service-icon-input"
-                      type="file"
-                      accept="image/png,image/jpeg"
-                      style={{ display: 'none' }}
-                      onChange={handleIconChange}
-                    />
                   </div>
                 </div>
 
@@ -361,7 +406,7 @@ const AddServicePage = () => {
                     </span>
                   </div>
                   <small style={{ color: '#64748b', marginTop: '0.5rem' }}>
-                    {formData.active 
+                    {formData.active
                       ? 'Service will be visible and bookable by customers'
                       : 'Service will be hidden from customers'
                     }
@@ -389,12 +434,12 @@ const AddServicePage = () => {
               {isSubmitting ? (
                 <>
                   <div className="spinner"></div>
-                  Creating...
+                  Updating...
                 </>
               ) : (
                 <>
                   <Save size={20} />
-                  Create Service
+                  Update Service
                 </>
               )}
             </button>
@@ -405,4 +450,4 @@ const AddServicePage = () => {
   );
 };
 
-export default AddServicePage;
+export default EditServicePage;

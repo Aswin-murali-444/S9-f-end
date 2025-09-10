@@ -6,6 +6,7 @@ import { apiService } from '../../services/api';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/AdminLayout';
 import './AdminPages.css';
+// Using backend upload endpoint for storage write
 
 const AddCategoryPage = () => {
   const navigate = useNavigate();
@@ -145,7 +146,17 @@ const AddCategoryPage = () => {
     
     try {
       // Optional visual settings
-      const iconUrl = null; // File upload not implemented yet; pass null
+      let iconUrl = null;
+      // Upload via backend to avoid client RLS issues
+      if (iconFile) {
+        try {
+          const { path, publicUrl } = await apiService.uploadCategoryIcon(iconFile);
+          iconUrl = publicUrl || path || null;
+        } catch (uploadEx) {
+          console.error('💥 Upload error via backend:', uploadEx);
+          toast.error('Failed to upload icon');
+        }
+      }
       const settings = null; // Additional settings optional
       const created = await apiService.createCategory({
         name: formData.name?.trim(),

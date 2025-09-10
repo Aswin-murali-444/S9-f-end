@@ -257,6 +257,45 @@
   margin: 0;
 }
 
+/* Welcome Overlay */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(1200px 600px at 80% -10%, rgba(255,255,255,0.35), transparent),
+              radial-gradient(800px 400px at 10% 110%, rgba(255,255,255,0.25), transparent),
+              rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5000;
+  backdrop-filter: blur(4px);
+}
+
+.welcome-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+  padding: 2rem 2.25rem;
+  width: min(540px, 92vw);
+  text-align: center;
+}
+
+.welcome-title {
+  font-size: 2rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #4f9cf9, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.welcome-subtitle {
+  margin-top: 0.25rem;
+  margin-bottom: 1rem;
+  color: #475569;
+  font-weight: 600;
+}
+
 .header-actions {
   display: flex;
   gap: 1rem;

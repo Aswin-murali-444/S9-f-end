@@ -195,6 +195,7 @@ const CustomerDashboard = () => {
               id: c.id,
               name: c.name,
               icon: iconForCategoryName(c.name),
+              imageUrl: c.icon_url || null,
               // Use placeholder service list to show "4+ Services" UX until counts are wired
               services: [1, 2, 3, 4]
             }))
@@ -535,7 +536,16 @@ const CustomerDashboard = () => {
                             variants={itemVariants}
                           >
                             <div className="category-icon-box">
-                              <IconComponent size={32} />
+                              {category.imageUrl ? (
+                                <img
+                                  src={category.imageUrl}
+                                  alt={`${category.name} icon`}
+                                  style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 12, border: '1px solid #e2e8f0' }}
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                              ) : (
+                                <IconComponent size={32} />
+                              )}
                             </div>
                             <h4>{category.name}</h4>
                             <p className="service-count">{category.services.length}+ Services</p>
@@ -701,7 +711,16 @@ const CustomerDashboard = () => {
                             variants={itemVariants}
                           >
                             <div className="category-image-large">
-                              <IconComponent size={56} />
+                              {category.imageUrl ? (
+                                <img
+                                  src={category.imageUrl}
+                                  alt={`${category.name} icon`}
+                                  style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 16, border: '1px solid #e2e8f0' }}
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                              ) : (
+                                <IconComponent size={56} />
+                              )}
                             </div>
                             <div className="category-content">
                               <h3>{category.name}</h3>
@@ -721,8 +740,8 @@ const CustomerDashboard = () => {
                               <button className="explore-btn-large" onClick={handleBookService}>
                                 Book Now
                               </button>
-                              <button className="wishlist-btn-small">
-                                <Heart size={16} />
+                              <button className="wishlist-btn">
+                                <Heart size={24} fill="currentColor" color="currentColor" />
                               </button>
                             </div>
                           </motion.div>

@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { Save, Trash2, Ban, RotateCcw, ArrowLeft } from 'lucide-react';
+import { Save, Trash2, Ban, RotateCcw, ArrowLeft, Upload, X } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
 import { apiService } from '../../services/api';
+import { supabase } from '../../hooks/useAuth';
 import './AdminPages.css';
 
 const EditCategoryPage = () => {
@@ -20,6 +21,9 @@ const EditCategoryPage = () => {
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('active');
   const [nameError, setNameError] = useState('');
+  const [iconPreview, setIconPreview] = useState(null);
+  const [iconFile, setIconFile] = useState(null);
+  const [iconError, setIconError] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -30,6 +34,28 @@ const EditCategoryPage = () => {
         setName(data?.name || '');
         setDescription(data?.description || '');
         setStatus((data?.status || (data?.active ? 'active' : 'inactive')));
+        // Resolve icon preview if present
+        try {
+          let icon = data?.icon_url || '';
+          if (icon && !/^https?:\/\//i.test(icon)) {
+            const match = String(icon).match(/^([^\/]+)\/(.+)$/);
+            if (match) {
+              const bucket = match[1];
+              const key = match[2];
+              try {
+                const { data: pub } = supabase.storage.from(bucket).getPublicUrl(key);
+                if (pub?.publicUrl) icon = pub.publicUrl;
+              } catch (_) {}
+              if (!/^https?:\/\//i.test(icon)) {
+                try {
+                  const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(key, 3600);
+                  if (signed?.signedUrl) icon = signed.signedUrl;
+                } catch (_) {}
+              }
+            }
+          }
+          if (icon) setIconPreview(icon);
+        } catch (_) {}
       } catch (e) {
         toast.error('Failed to load category');
         navigate('/admin/categories');
@@ -72,11 +98,22 @@ const EditCategoryPage = () => {
     }
     setSaving(true);
     try {
+      let iconUrl = undefined;
+      if (iconFile) {
+        try {
+          const { path, publicUrl } = await apiService.uploadCategoryIcon(iconFile);
+          iconUrl = publicUrl || path || null;
+        } catch (uploadErr) {
+          console.error('Icon upload failed:', uploadErr);
+          toast.error('Failed to upload icon');
+        }
+      }
       await apiService.updateCategory(id, {
         name: name.trim(),
         description: description || null,
         status: String(status).toLowerCase(),
-        active: String(status).toLowerCase() === 'active'
+        active: String(status).toLowerCase() === 'active',
+        ...(typeof iconUrl !== 'undefined' ? { iconUrl } : {})
       });
       toast.success('Category saved');
       navigate('/admin/categories');
@@ -116,6 +153,39 @@ const EditCategoryPage = () => {
     }
   };
 
+  const handleIconUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type?.startsWith('image/')) {
+        setIconError('Invalid file type. Please upload an image.');
+        toast.error('Invalid file type. Please upload an image.');
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        setIconError('File too large. Max size is 2MB.');
+        toast.error('File too large. Max size is 2MB.');
+        return;
+      }
+      setIconError('');
+      if (iconPreview && iconPreview.startsWith('blob:')) {
+        try { URL.revokeObjectURL(iconPreview); } catch (_) {}
+      }
+      const url = URL.createObjectURL(file);
+      setIconPreview(url);
+      setIconFile(file);
+    }
+  };
+
+  const removeIcon = () => {
+    if (iconPreview && iconPreview.startsWith('blob:')) {
+      try { URL.revokeObjectURL(iconPreview); } catch (_) {}
+    }
+    setIconPreview(null);
+    setIconFile(null);
+    const fileInput = document.getElementById('edit-icon-upload');
+    if (fileInput) fileInput.value = '';
+  };
+
   return (
     <AdminLayout>
       <div className="admin-page-content">
@@ -153,6 +223,41 @@ const EditCategoryPage = () => {
                   <div className="form-group full-width">
                     <label>Description</label>
                     <textarea rows="4" value={description} onChange={(e) => setDescription(e.target.value)} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-section">
+                <h3>Icon</h3>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Category Icon</label>
+                    <div className="icon-upload-area">
+                      {iconPreview ? (
+                        <div className="icon-preview">
+                          <img src={iconPreview} alt="Category icon" />
+                          <button type="button" className="remove-icon" onClick={removeIcon}>
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <label htmlFor="edit-icon-upload" className="upload-placeholder">
+                          <Upload size={24} />
+                          <span>Upload Icon</span>
+                          <small>PNG, JPG up to 2MB</small>
+                        </label>
+                      )}
+                      <input
+                        id="edit-icon-upload"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleIconUpload}
+                        hidden
+                      />
+                    </div>
+                    {iconError && (
+                      <small style={{ color: '#ef4444', fontWeight: 600 }}>{iconError}</small>
+                    )}
                   </div>
                 </div>
               </div>
