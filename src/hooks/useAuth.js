@@ -107,6 +107,8 @@ export const AuthProvider = ({ children }) => {
           setIsAuthenticated(false);
           localStorage.removeItem('user');
           localStorage.removeItem('session');
+          // Clear any persisted dashboard redirect to avoid navigation loops when signed out/deleted
+          localStorage.removeItem('dashboard_path');
         }
         setIsInitialized(true);
       } catch (error) {
@@ -114,6 +116,8 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(false);
         localStorage.removeItem('user');
         localStorage.removeItem('session');
+        // Safety: also clear stored dashboard on error states
+        localStorage.removeItem('dashboard_path');
         setIsInitialized(true);
       }
     };
@@ -183,6 +187,8 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(false);
         localStorage.removeItem('user');
         localStorage.removeItem('session');
+        // Ensure we don't bounce between public and protected routes
+        localStorage.removeItem('dashboard_path');
         if (event === 'SIGNED_OUT') {
           const reason = localStorage.getItem('logout_reason');
           if (reason) {
@@ -246,7 +252,7 @@ export const AuthProvider = ({ children }) => {
       const lastName = nameParts.slice(1).join(' ') || '';
       
       // Check if user already exists
-      const { data: existingUser, error: checkError } = await supabase
+        const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('*')
         .eq('auth_user_id', authUserId)
@@ -264,17 +270,23 @@ export const AuthProvider = ({ children }) => {
         // Update existing user
         console.log('📝 Updating existing user profile...');
         
+        const updatePayload = {
+          email: email,
+          full_name: fullName || '',
+          role: dbRole,
+          avatar_url: avatarUrl || null,
+          last_login: new Date().toISOString(),
+          supabase_auth: true,
+          email_verified: true
+        };
+        // For customers, force status to active
+        if (dbRole === 'customer') {
+          updatePayload.status = 'active';
+        }
+
         const { data, error: updateError } = await supabase
           .from('users')
-          .update({
-            email: email,
-            full_name: fullName || '',
-            role: dbRole,
-            avatar_url: avatarUrl || null,
-            last_login: new Date().toISOString(),
-            supabase_auth: true,
-            email_verified: true
-          })
+          .update(updatePayload)
           .eq('auth_user_id', authUserId)
           .select();
         
@@ -293,21 +305,27 @@ export const AuthProvider = ({ children }) => {
         // Insert new user
         console.log('🆕 Creating new user profile...');
         
+        const insertPayload = {
+          auth_user_id: authUserId,
+          email: email,
+          full_name: fullName || '',
+          role: dbRole,
+          avatar_url: avatarUrl || null,
+          last_login: new Date().toISOString(),
+          supabase_auth: true,
+          status: 'active',
+          email_verified: true,
+          password_hash: 'supabase_auth_user', // Placeholder for Supabase users
+          phone_verified: false
+        };
+        // Ensure customers are always active
+        if (dbRole === 'customer') {
+          insertPayload.status = 'active';
+        }
+
         const { data, error: insertError } = await supabase
           .from('users')
-          .insert({
-            auth_user_id: authUserId,
-            email: email,
-            full_name: fullName || '',
-            role: dbRole,
-            avatar_url: avatarUrl || null,
-            last_login: new Date().toISOString(),
-            supabase_auth: true,
-            status: 'active',
-            email_verified: true,
-            password_hash: 'supabase_auth_user', // Placeholder for Supabase users
-            phone_verified: false
-          })
+          .insert(insertPayload)
           .select();
         
         if (insertError) {
@@ -367,9 +385,27 @@ export const AuthProvider = ({ children }) => {
     console.log('🔧 Creating minimal user profile...');
     
     try {
+      const minimalPayload = {
+        auth_user_id: authUserId,
+        email: email,
+        role: dbRole,
+        full_name: fullName || '',
+        supabase_auth: true,
+        email_verified: true,
+        password_hash: 'supabase_auth_user',
+        avatar_url: avatarUrl || null,
+        status: dbRole === 'customer' ? 'active' : undefined
+      };
+
       const { data: insertData, error: insertError } = await supabase
         .from('users')
-        .insert({
+        .insert(minimalPayload)
+        .select();
+      
+      if (insertError) {
+        console.error('❌ Minimal user profile creation failed:', insertError);
+        // Try upsert as final fallback
+        const upsertPayload = {
           auth_user_id: authUserId,
           email: email,
           role: dbRole,
@@ -377,25 +413,13 @@ export const AuthProvider = ({ children }) => {
           supabase_auth: true,
           email_verified: true,
           password_hash: 'supabase_auth_user',
-          avatar_url: avatarUrl || null
-        })
-        .select();
-      
-      if (insertError) {
-        console.error('❌ Minimal user profile creation failed:', insertError);
-        // Try upsert as final fallback
+          avatar_url: avatarUrl || null,
+          status: dbRole === 'customer' ? 'active' : undefined
+        };
+
         const { data: upsertData, error: upsertError } = await supabase
           .from('users')
-          .upsert({
-            auth_user_id: authUserId,
-            email: email,
-            role: dbRole,
-            full_name: fullName || '',
-            supabase_auth: true,
-            email_verified: true,
-            password_hash: 'supabase_auth_user',
-            avatar_url: avatarUrl || null
-          }, {
+          .upsert(upsertPayload, {
             onConflict: 'auth_user_id'
           })
           .select();
@@ -553,7 +577,16 @@ export const AuthProvider = ({ children }) => {
               }
             }
             
-            if (userData.status && userData.status !== 'active') {
+            // For customers, auto-activate on login
+            if (userData.role === 'customer' && userData.status !== 'active') {
+              try {
+                await supabase
+                  .from('users')
+                  .update({ status: 'active' })
+                  .eq('auth_user_id', data.user.id);
+                userData.status = 'active';
+              } catch (_) {}
+            } else if (userData.status && userData.status !== 'active') {
               localStorage.setItem('logout_reason', userData.status);
               await supabase.auth.signOut();
               toast.error(
@@ -713,7 +746,7 @@ export const AuthProvider = ({ children }) => {
       let mappedRole = 'customer';
       let isNewUser = false;
       
-      try {
+        try {
         // First, try to get existing user profile
         const { data: userData, error: userError } = await supabase
           .from('users')
@@ -749,6 +782,34 @@ export const AuthProvider = ({ children }) => {
               console.warn('⚠️ Failed to sync profile picture:', syncError.message);
             }
           }
+
+            // If auth metadata is missing but Google provided an avatar, set it in auth
+            if (!authProfilePicture && avatarUrl) {
+              try {
+                await supabase.auth.updateUser({ data: { avatar_url: avatarUrl } });
+                // Update local user state to reflect the avatar immediately
+                const { data: { user: freshUser } } = await supabase.auth.getUser();
+                if (freshUser) {
+                  setUser(freshUser);
+                  localStorage.setItem('user', JSON.stringify(freshUser));
+                }
+              } catch (e) {
+                console.warn('⚠️ Could not set auth avatar from Google metadata:', e.message);
+              }
+            }
+
+            // Ensure users table has avatar if missing but Google provided one
+            if (!dbProfilePicture && avatarUrl) {
+              try {
+                await supabase
+                  .from('users')
+                  .update({ avatar_url: avatarUrl })
+                  .eq('auth_user_id', currentUser.id);
+                console.log('✅ Stored Google avatar in users table');
+              } catch (e) {
+                console.warn('⚠️ Could not store Google avatar in users table:', e.message);
+              }
+            }
           
           if (userData.status && userData.status !== 'active') {
             localStorage.setItem('logout_reason', userData.status);
@@ -786,6 +847,7 @@ export const AuthProvider = ({ children }) => {
                 last_login: new Date().toISOString(),
                 supabase_auth: true,
                 email_verified: true,
+                status: 'active',
                 password_hash: 'supabase_auth_user'
               })
               .select()
@@ -805,6 +867,7 @@ export const AuthProvider = ({ children }) => {
                   last_login: new Date().toISOString(),
                   supabase_auth: true,
                   email_verified: true,
+                  status: 'active',
                   password_hash: 'supabase_auth_user'
                 }, {
                   onConflict: 'auth_user_id'
@@ -821,6 +884,20 @@ export const AuthProvider = ({ children }) => {
             } else {
               console.log('✅ User profile created via insert:', newUserData);
             }
+
+              // Ensure auth metadata has the Google avatar too
+              if (avatarUrl) {
+                try {
+                  await supabase.auth.updateUser({ data: { avatar_url: avatarUrl } });
+                  const { data: { user: freshUser } } = await supabase.auth.getUser();
+                  if (freshUser) {
+                    setUser(freshUser);
+                    localStorage.setItem('user', JSON.stringify(freshUser));
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Could not set auth avatar for new OAuth user:', e.message);
+                }
+              }
             
             mappedRole = 'customer';
             isNewUser = true;

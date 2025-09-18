@@ -95,10 +95,17 @@ const Header = () => {
             {user ? (
               <>
                 <div className="user-menu">
-                  <div className="user-info hover-scale">
-                    <User size={20} className="user-icon animate-rotate-in" />
-                    <span className="user-name animate-fade-in">{user.name}</span>
-                  </div>
+                <div className="user-info hover-scale">
+                  {(() => {
+                    const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.photoURL;
+                    return avatar ? (
+                      <img src={avatar} alt="Profile" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <User size={20} className="user-icon animate-rotate-in" />
+                    );
+                  })()}
+                  <span className="user-name animate-fade-in">{user?.user_metadata?.full_name || user?.email || 'User'}</span>
+                </div>
                   <div className="dropdown-menu">
                     <Link to="/profile" className="dropdown-item hover-lift">
                       <Settings size={16} />

@@ -233,7 +233,7 @@ const HomePage = () => {
                 <li>🔒 Secure Access Control</li>
               </ul>
               <button 
-                onClick={() => handleServiceNavigation('#smart-monitoring')} 
+                onClick={() => handleServiceNavigation('#smart-security')} 
                 className="service-link btn-animate"
                 style={{ cursor: 'pointer', width: '100%', textAlign: 'left' }}
               >
@@ -289,7 +289,7 @@ const HomePage = () => {
                 <li>🧠 AI Route Optimization</li>
               </ul>
               <button 
-                onClick={() => handleServiceNavigation('#transport-delivery')} 
+                onClick={() => handleServiceNavigation('#delivery-transport')} 
                 className="service-link btn-animate"
                 style={{ cursor: 'pointer', width: '100%', textAlign: 'left' }}
               >
@@ -317,7 +317,7 @@ const HomePage = () => {
                 <li>🚨 Emergency Response</li>
               </ul>
               <button 
-                onClick={() => handleServiceNavigation('#remote-management')} 
+                onClick={() => handleServiceNavigation('#property-management')} 
                 className="service-link btn-animate"
                 style={{ cursor: 'pointer', width: '100%', textAlign: 'left' }}
               >
@@ -345,7 +345,7 @@ const HomePage = () => {
                 <li>🔍 Anomaly Detection</li>
               </ul>
               <button 
-                onClick={() => handleServiceNavigation('#ai-analytics')} 
+                onClick={() => handleServiceNavigation('#ai-coordination')} 
                 className="service-link btn-animate"
                 style={{ cursor: 'pointer', width: '100%', textAlign: 'left' }}
               >
@@ -505,6 +505,130 @@ const HomePage = () => {
               <ShieldCheck className="stat-icon animate-float" />
               <h3>99.9%</h3>
               <p>Reliability Score</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section className="testimonials">
+        <div className="container">
+          <div className="section-header fade-in-up">
+            <span className="section-badge animate-bounce-in">⭐ Customer Stories</span>
+            <h2>Loved by <span className="text-primary animate-shimmer">Families</span> and Professionals</h2>
+            <p>Real feedback from customers who rely on our platform for home services and care.</p>
+          </div>
+          <div className="testimonials-grid">
+            <div className="testimonial card-hover">
+              <p>“Booking a plumber was effortless and I could track everything from my phone.”</p>
+              <div className="author">Riya S.</div>
+              <div className="role">Homeowner</div>
+            </div>
+            <div className="testimonial card-hover">
+              <p>“Our parents receive consistent care with timely updates. It’s peace of mind.”</p>
+              <div className="author">Anish & Kavya</div>
+              <div className="role">Family</div>
+            </div>
+            <div className="testimonial card-hover">
+              <p>“Scheduling and routing saves us hours per week. Payments are seamless.”</p>
+              <div className="author">Mahesh K.</div>
+              <div className="role">Service Provider</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section className="pricing">
+        <div className="container">
+          <div className="section-header fade-in-up">
+            <span className="section-badge animate-bounce-in">💳 Simple Pricing</span>
+            <h2>Transparent plans for every <span className="text-primary animate-shimmer">household</span></h2>
+            <p>Start free and scale as you need. No hidden fees.</p>
+          </div>
+          <div className="pricing-grid">
+            <div className="price-card card-hover">
+              <div className="price-header">
+                <h3>Basic</h3>
+                <div className="price">Free</div>
+                <div className="sub">Book services, track status</div>
+              </div>
+              <ul className="price-features">
+                <li>Service booking</li>
+                <li>Status tracking</li>
+                <li>Standard support</li>
+              </ul>
+              <a href="/register" className="cta-button">Get Started</a>
+            </div>
+            <div className="price-card featured card-hover">
+              <div className="price-header">
+                <h3>Pro</h3>
+                <div className="price">$19/mo</div>
+                <div className="sub">AI scheduling, smart alerts</div>
+              </div>
+              <ul className="price-features">
+                <li>Everything in Basic</li>
+                <li>AI scheduling & allocation</li>
+                <li>Smart camera alerts</li>
+                <li>Priority support</li>
+              </ul>
+              <a href="/register" className="cta-button">Upgrade</a>
+            </div>
+            <div className="price-card card-hover">
+              <div className="price-header">
+                <h3>Enterprise</h3>
+                <div className="price">Custom</div>
+                <div className="sub">Tailored ops & SLAs</div>
+              </div>
+              <ul className="price-features">
+                <li>Custom workflows</li>
+                <li>Advanced analytics</li>
+                <li>Dedicated manager</li>
+              </ul>
+              <a href="/contact" className="cta-button">Contact Sales</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="faq">
+        <div className="container">
+          <div className="section-header fade-in-up">
+            <span className="section-badge animate-bounce-in">❓ FAQ</span>
+            <h2>Your questions, <span className="text-primary animate-shimmer">answered</span></h2>
+            <p>Everything you need to know about booking, providers, and support.</p>
+          </div>
+          <div className="faq-grid">
+            <div className="faq-item card">
+              <h4>How do I book a service?</h4>
+              <p>Visit the Services page, choose a category, and select “Book Now”.</p>
+            </div>
+            <div className="faq-item card">
+              <h4>Are providers vetted?</h4>
+              <p>Yes. We verify identity, credentials, and track performance ratings.</p>
+            </div>
+            <div className="faq-item card">
+              <h4>Can I reschedule?</h4>
+              <p>Yes. Manage bookings from your dashboard and reschedule anytime.</p>
+            </div>
+            <div className="faq-item card">
+              <h4>Is support available 24/7?</h4>
+              <p>Pro plan and above receive priority 24/7 support and alerts.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Banner */}
+      <section className="cta-banner">
+        <div className="container">
+          <div className="cta-content">
+            <h3>Ready to book a trusted professional?</h3>
+            <p>Join thousands of families using our smart platform for daily services.</p>
+            <div className="cta-actions">
+              <Link to="/services" className="btn-primary btn-animate">Browse Services</Link>
+              <Link to="/register" className="btn-secondary btn-animate">Create Account</Link>
             </div>
           </div>
         </div>

@@ -19,6 +19,7 @@ const ProfilePage = () => {
   });
   const [loading, setLoading] = useState(false);
   const [originalProfile, setOriginalProfile] = useState({});
+  const [avatarUrl, setAvatarUrl] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -35,28 +36,51 @@ const ProfilePage = () => {
     try {
       setLoading(true);
       
-      // First try to get profile from profiles table
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
+      // Fetch from users with related user_profiles to get avatar and details
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          full_name,
+          email,
+          phone,
+          address,
+          bio,
+          avatar_url,
+          user_profiles (
+            profile_picture_url,
+            first_name,
+            last_name,
+            phone,
+            address,
+            bio
+          )
+        `)
+        .eq('auth_user_id', user.id)
         .single();
 
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error('Error fetching profile:', profileError);
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching profile:', error);
       }
 
-      // Set profile data, falling back to auth user data
+      const profileRow = data || {};
       const profileInfo = {
-        full_name: profileData?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || '',
+        full_name: profileRow?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || '',
         email: user?.email || '',
-        phone: profileData?.phone || user?.user_metadata?.phone || '',
-        address: profileData?.address || '',
-        bio: profileData?.bio || ''
+        phone: profileRow?.user_profiles?.phone || user?.user_metadata?.phone || '',
+        address: profileRow?.user_profiles?.address || profileRow?.address || '',
+        bio: profileRow?.user_profiles?.bio || profileRow?.bio || ''
       };
 
       setProfile(profileInfo);
       setOriginalProfile(profileInfo);
+
+      const mergedAvatarUrl = user?.user_metadata?.avatar_url
+        || profileRow?.user_profiles?.profile_picture_url
+        || profileRow?.avatar_url
+        || user?.user_metadata?.picture
+        || user?.user_metadata?.photoURL
+        || '';
+      setAvatarUrl(mergedAvatarUrl);
     } catch (error) {
       console.error('Error fetching profile:', error);
       toast.error('Failed to fetch profile data');
@@ -140,7 +164,11 @@ const ProfilePage = () => {
       <div className="profile-card">
         <div className="profile-header">
           <div className="profile-avatar">
-            <User size={48} />
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Profile" style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover' }} onError={() => setAvatarUrl('')} />
+            ) : (
+              <User size={48} />
+            )}
           </div>
           <h1>My Profile</h1>
           <div className="profile-actions">

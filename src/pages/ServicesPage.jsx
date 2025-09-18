@@ -60,41 +60,49 @@ const ServicesPage = () => {
               <div className="service-icon">🔧</div>
               <h3>Plumbing & Electrical</h3>
               <p>Professional repairs with AI-monitored quality assurance</p>
+              <button className="book-service-btn" aria-label="Book plumbing and electrical service">Book Service</button>
             </div>
             <div className="service-card" data-aos="fade-up" data-aos-delay="100">
               <div className="service-icon">🔨</div>
               <h3>Carpentry & Repairs</h3>
               <p>Custom woodwork and repairs with smart scheduling</p>
+              <button className="book-service-btn" aria-label="Book carpentry and repairs service">Book Service</button>
             </div>
             <div className="service-card" data-aos="fade-up" data-aos-delay="150">
               <div className="service-icon">🧹</div>
               <h3>Cleaning & Maintenance</h3>
               <p>AI-coordinated cleaning services with quality monitoring</p>
+              <button className="book-service-btn" aria-label="Book cleaning and maintenance service">Book Service</button>
             </div>
             <div className="service-card" data-aos="fade-up" data-aos-delay="200">
               <div className="service-icon">🔧</div>
               <h3>Appliance Services</h3>
               <p>Smart appliance repair with predictive maintenance</p>
+              <button className="book-service-btn" aria-label="Book appliance services">Book Service</button>
             </div>
             <div className="service-card" data-aos="fade-up" data-aos-delay="250">
               <div className="service-icon">🌿</div>
               <h3>Landscaping & Gardening</h3>
               <p>AI-scheduled garden maintenance and landscaping</p>
+              <button className="book-service-btn" aria-label="Book landscaping and gardening service">Book Service</button>
             </div>
             <div className="service-card" data-aos="fade-up" data-aos-delay="300">
               <div className="service-icon">🐛</div>
               <h3>Pest Control</h3>
               <p>Smart pest control with monitoring and prevention</p>
+              <button className="book-service-btn" aria-label="Book pest control service">Book Service</button>
             </div>
             <div className="service-card" data-aos="fade-up" data-aos-delay="350">
               <div className="service-icon">🎨</div>
               <h3>Painting & Renovation</h3>
               <p>Professional painting with AI quality monitoring</p>
+              <button className="book-service-btn" aria-label="Book painting and renovation service">Book Service</button>
             </div>
             <div className="service-card" data-aos="fade-up" data-aos-delay="400">
               <div className="service-icon">📱</div>
               <h3>Smart Home Integration</h3>
               <p>IoT device installation and smart home setup</p>
+              <button className="book-service-btn" aria-label="Book smart home integration service">Book Service</button>
             </div>
           </div>
           
@@ -118,41 +126,49 @@ const ServicesPage = () => {
               <div className="service-icon">📹</div>
               <h3>Security Camera Installation</h3>
               <p>Professional camera setup with mobile app integration</p>
+              <button className="book-service-btn" aria-label="Book security camera installation">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">📱</div>
               <h3>Remote Monitoring Setup</h3>
               <p>24/7 remote access to your property via mobile</p>
+              <button className="book-service-btn" aria-label="Book remote monitoring setup">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🤖</div>
               <h3>AI Motion Detection</h3>
               <p>Smart alerts with false alarm filtering</p>
+              <button className="book-service-btn" aria-label="Book AI motion detection setup">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">📊</div>
               <h3>Cloud Storage Solutions</h3>
               <p>Secure cloud recording with easy access</p>
+              <button className="book-service-btn" aria-label="Book cloud storage solutions">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🌙</div>
               <h3>Night Vision & Analytics</h3>
               <p>Advanced night monitoring with AI analytics</p>
+              <button className="book-service-btn" aria-label="Book night vision and analytics setup">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🚨</div>
               <h3>Emergency Alert System</h3>
               <p>Instant notifications for security threats</p>
+              <button className="book-service-btn" aria-label="Book emergency alert system setup">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🏠</div>
               <h3>Property Surveillance</h3>
               <p>Comprehensive property monitoring coverage</p>
+              <button className="book-service-btn" aria-label="Book property surveillance service">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">📱</div>
               <h3>Mobile App Integration</h3>
               <p>Easy control and monitoring from anywhere</p>
+              <button className="book-service-btn" aria-label="Book mobile app integration service">Book Service</button>
             </div>
           </div>
           
@@ -176,31 +192,37 @@ const ServicesPage = () => {
               <div className="service-icon">⏰</div>
               <h3>Daily Routine Assistance</h3>
               <p>AI-coordinated daily care and routine support</p>
+              <button className="book-service-btn" aria-label="Book daily routine assistance">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">💊</div>
               <h3>Medication Management</h3>
               <p>Smart medication reminders and tracking</p>
+              <button className="book-service-btn" aria-label="Book medication management service">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🏥</div>
               <h3>Health Monitoring & Reports</h3>
               <p>AI-powered health tracking and family updates</p>
+              <button className="book-service-btn" aria-label="Book health monitoring service">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🚨</div>
               <h3>Emergency Response System</h3>
               <p>24/7 emergency detection and response</p>
+              <button className="book-service-btn" aria-label="Book emergency response system">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">👥</div>
               <h3>Companionship Services</h3>
               <p>AI-matched companionship and social interaction</p>
+              <button className="book-service-btn" aria-label="Book companionship services">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">📅</div>
               <h3>Appointment Coordination</h3>
               <p>Smart scheduling for medical appointments</p>
+              <button className="book-service-btn" aria-label="Book appointment coordination">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🛡️</div>
@@ -234,41 +256,49 @@ const ServicesPage = () => {
               <div className="service-icon">🚚</div>
               <h3>Home Essentials Delivery</h3>
               <p>AI-optimized delivery of daily necessities</p>
+              <button className="book-service-btn" aria-label="Book home essentials delivery">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">💊</div>
               <h3>Medicine & Healthcare Items</h3>
               <p>Priority delivery for medical supplies</p>
+              <button className="book-service-btn" aria-label="Book medicine and healthcare items delivery">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🚗</div>
               <h3>Elderly Transportation</h3>
               <p>Safe transport with real-time tracking</p>
+              <button className="book-service-btn" aria-label="Book elderly transportation">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">📦</div>
               <h3>Package & Grocery Delivery</h3>
               <p>Smart delivery scheduling and tracking</p>
+              <button className="book-service-btn" aria-label="Book package and grocery delivery">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🏥</div>
               <h3>Medical Appointment Transport</h3>
               <p>Reliable medical transportation service</p>
+              <button className="book-service-btn" aria-label="Book medical appointment transport">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">⚡</div>
               <h3>Same-Day Express Service</h3>
               <p>Urgent delivery with AI route optimization</p>
+              <button className="book-service-btn" aria-label="Book same-day express service">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">📱</div>
               <h3>Real-Time Tracking</h3>
               <p>Live delivery status and ETA updates</p>
+              <button className="book-service-btn" aria-label="Book real-time tracking service">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🤖</div>
               <h3>AI Route Optimization</h3>
               <p>Efficient delivery routes and scheduling</p>
+              <button className="book-service-btn" aria-label="Book AI route optimization service">Book Service</button>
             </div>
           </div>
           
@@ -292,41 +322,49 @@ const ServicesPage = () => {
               <div className="service-icon">📅</div>
               <h3>Long-Term Care Plans</h3>
               <p>AI-coordinated long-term care strategies</p>
+              <button className="book-service-btn" aria-label="Book long-term care plans">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">❤️</div>
               <h3>Personalized Care Routines</h3>
               <p>Customized care plans for individual needs</p>
+              <button className="book-service-btn" aria-label="Book personalized care routines">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🏥</div>
               <h3>Health Status Reporting</h3>
               <p>Regular health assessments and updates</p>
+              <button className="book-service-btn" aria-label="Book health status reporting">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🚨</div>
               <h3>Emergency Response</h3>
               <p>24/7 emergency care coordination</p>
+              <button className="book-service-btn" aria-label="Book emergency response service">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">👥</div>
               <h3>Family Communication</h3>
               <p>Real-time family updates and coordination</p>
+              <button className="book-service-btn" aria-label="Book family communication service">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">📱</div>
               <h3>Digital Care Records</h3>
               <p>AI-powered care documentation and tracking</p>
+              <button className="book-service-btn" aria-label="Book digital care records service">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🔄</div>
               <h3>Progress Monitoring</h3>
               <p>AI analytics for care quality improvement</p>
+              <button className="book-service-btn" aria-label="Book progress monitoring service">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🎯</div>
               <h3>Care Quality Assurance</h3>
               <p>Continuous quality monitoring and improvement</p>
+              <button className="book-service-btn" aria-label="Book care quality assurance">Book Service</button>
             </div>
           </div>
           
@@ -350,41 +388,49 @@ const ServicesPage = () => {
               <div className="service-icon">⚡</div>
               <h3>Automated Bill Payments</h3>
               <p>AI-scheduled automatic bill processing</p>
+              <button className="book-service-btn" aria-label="Book automated bill payments">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🏛️</div>
               <h3>Property Tax Management</h3>
               <p>Smart tax payment and tracking system</p>
+              <button className="book-service-btn" aria-label="Book property tax management service">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">💧</div>
               <h3>Utility Bill Processing</h3>
               <p>AI-optimized utility bill management</p>
+              <button className="book-service-btn" aria-label="Book utility bill processing">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🌐</div>
               <h3>Internet & Cable Services</h3>
               <p>Smart telecom bill coordination</p>
+              <button className="book-service-btn" aria-label="Book internet and cable services coordination">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">📱</div>
               <h3>Mobile & Phone Bills</h3>
               <p>Automated mobile bill management</p>
+              <button className="book-service-btn" aria-label="Book mobile and phone bill management">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">🏥</div>
               <h3>Insurance Premiums</h3>
               <p>AI-coordinated insurance payments</p>
+              <button className="book-service-btn" aria-label="Book insurance premium management">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">📋</div>
               <h3>Smart Reminders & Alerts</h3>
               <p>Intelligent payment reminders and notifications</p>
+              <button className="book-service-btn" aria-label="Book smart reminders and alerts setup">Book Service</button>
             </div>
             <div className="service-card">
               <div className="service-icon">📊</div>
               <h3>Payment Analytics</h3>
               <p>AI-powered spending analysis and insights</p>
+              <button className="book-service-btn" aria-label="Book payment analytics service">Book Service</button>
             </div>
           </div>
           

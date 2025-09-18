@@ -57,7 +57,7 @@ function AppShell() {
   return (
     <div className="App">
       {!isDashboard && !isAdminPage && <Header />}
-      <main className="main-content">
+      <main className={`main-content ${isDashboard || isAdminPage ? 'main-content--dashboard' : ''}`}>
                 <Suspense fallback={
                   <div style={{ 
                     display: 'flex', 

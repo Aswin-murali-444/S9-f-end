@@ -313,7 +313,7 @@ const CustomerDashboard = () => {
 
   return (
     <div className="admin-dashboard">
-      {/* Header Section - Same as Admin */}
+      {/* Header Section - restored */}
       <motion.section 
         className="dashboard-header"
         ref={headerRef}
@@ -380,11 +380,14 @@ const CustomerDashboard = () => {
                 onKeyDown={(e) => { if (e.key === 'Enter') setActiveTab('profile'); }}
               >
                 <div className="user-avatar">
-                  {user?.user_metadata?.avatar_url ? (
-                    <img src={user.user_metadata.avatar_url} alt="Profile" />
-                  ) : (
-                    <User size={20} />
-                  )}
+                  {(() => {
+                    const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.photoURL;
+                    return avatar ? (
+                      <img src={avatar} alt="Profile" />
+                    ) : (
+                      <User size={20} />
+                    );
+                  })()}
                 </div>
                 <div className="user-details">
                   <span className="user-name">{user?.user_metadata?.full_name || 'Customer'}</span>
@@ -1518,12 +1521,15 @@ const CustomerDashboard = () => {
                     <div className="profile-card">
                       <div className="profile-avatar-section">
                 <div className="profile-avatar">
-                  {user?.user_metadata?.avatar_url ? (
-                    <img src={user.user_metadata.avatar_url} alt="Profile" />
-                  ) : (
-                    <User size={40} />
-                  )}
-                        </div>
+                  {(() => {
+                    const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.photoURL;
+                    return avatar ? (
+                      <img src={avatar} alt="Profile" />
+                    ) : (
+                      <User size={40} />
+                    );
+                  })()}
+                </div>
                         <button 
                           className="btn-secondary"
                           onClick={() => document.getElementById('profile-image-input')?.click()}

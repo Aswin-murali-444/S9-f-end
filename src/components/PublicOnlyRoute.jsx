@@ -5,15 +5,15 @@ import { useAuth } from '../hooks/useAuth';
 const PublicOnlyRoute = ({ children }) => {
   const { isAuthenticated, isInitialized } = useAuth();
 
-  // If we already know the user's intended dashboard, redirect immediately
+  // Only honor stored dashboard path when authenticated to avoid loops
   const stored = typeof window !== 'undefined' ? localStorage.getItem('dashboard_path') : null;
-  if (stored) {
+  if (isAuthenticated && stored) {
     return <Navigate to={stored} replace />;
   }
 
-  // After initialization, if authenticated but without a stored path, fall back to home
+  // After initialization, if authenticated but without a stored path, send to default dashboard
   if (isInitialized && isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard/customer" replace />;
   }
 
   return children || null;

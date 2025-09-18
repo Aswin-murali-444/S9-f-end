@@ -842,6 +842,151 @@
   }
 }
 
+/* Testimonials */
+.testimonials {
+  background: #ffffff;
+  padding: 100px 0;
+  width: 100%;
+}
+
+.testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+}
+
+.testimonial {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.testimonial p {
+  color: #334155;
+  font-size: 1rem;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.testimonial .author {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.testimonial .role {
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+/* Pricing */
+.pricing {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  padding: 100px 0;
+  width: 100%;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+}
+
+.price-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 16px;
+  padding: 24px;
+  position: relative;
+}
+
+.price-card.featured {
+  border-color: rgba(79, 156, 249, 0.4);
+  box-shadow: 0 16px 40px rgba(79, 156, 249, 0.15);
+}
+
+.price-header h3 {
+  margin: 0 0 8px 0;
+  color: #1e293b;
+}
+
+.price-header .price {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.price-header .sub {
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+.price-features {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 24px 0;
+}
+
+.price-features li {
+  padding: 8px 0;
+  color: #475569;
+}
+
+/* FAQ */
+.faq {
+  background: #ffffff;
+  padding: 100px 0;
+  width: 100%;
+}
+
+.faq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+}
+
+.faq-item h4 {
+  margin: 0 0 8px 0;
+  color: #1e293b;
+}
+
+.faq-item p {
+  color: #64748b;
+}
+
+/* CTA Banner */
+.cta-banner {
+  background: linear-gradient(135deg, #4f9cf9 0%, #3b82f6 100%);
+  padding: 60px 0;
+  color: #ffffff;
+  width: 100%;
+}
+
+.cta-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  text-align: center;
+}
+
+.cta-actions {
+  display: flex;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .cta-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .cta-actions .btn-primary,
+  .cta-actions .btn-secondary {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .service-category:nth-child(even) .service-icon {
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
 }
