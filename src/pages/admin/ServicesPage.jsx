@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/AdminLayout';
 import { apiService } from '../../services/api';
+import { formatServicePricing } from '../../utils/pricingUtils';
 import './AdminPages.css';
 
 // NOTE: Backend services endpoints are assumed; if missing, wire later
@@ -82,6 +83,28 @@ const ServicesPage = () => {
     return 'status-badge inactive';
   };
 
+  const formatPricing = (svc) => {
+    const pricing = formatServicePricing(svc);
+    
+    if (!pricing.originalPrice) return '—';
+    
+    if (pricing.hasOffer) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontWeight: '600', color: '#059669' }}>₹{pricing.offerPrice}</span>
+            <span style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '0.875rem' }}>₹{pricing.originalPrice}</span>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: '500' }}>
+            {pricing.discountPercentage}% OFF
+          </div>
+        </div>
+      );
+    }
+    
+    return <span style={{ fontWeight: '600' }}>₹{pricing.originalPrice}</span>;
+  };
+
   return (
     <AdminLayout>
       <motion.div className="admin-page-content" initial="hidden" animate="visible" variants={containerVariants}>
@@ -104,6 +127,7 @@ const ServicesPage = () => {
                 <div className="header-cell">Service</div>
                 <div className="header-cell">Category</div>
                 <div className="header-cell">Duration</div>
+                <div className="header-cell">Pricing</div>
                 <div className="header-cell">Status</div>
                 <div className="header-cell">Updated</div>
                 <div className="header-cell">Actions</div>
@@ -129,6 +153,7 @@ const ServicesPage = () => {
                     </div>
                     <div className="table-cell">{svc.category_name || svc.category || '—'}</div>
                     <div className="table-cell">{svc.duration || '—'}</div>
+                    <div className="table-cell">{formatPricing(svc)}</div>
                     <div className="table-cell"><span className={statusBadge(svc)}>{svc.active ? 'Active' : 'Suspended'}</span></div>
                     <div className="table-cell">{svc.updated_at ? new Date(svc.updated_at).toLocaleString() : '—'}</div>
                     <div className="table-cell actions">

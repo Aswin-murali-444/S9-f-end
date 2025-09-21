@@ -111,12 +111,12 @@ export const SearchProvider = ({ children }) => {
         case 'services':
           try {
             const services = await apiService.getServices();
-            const categories = await apiService.getCategories();
+            const servicesCategories = await apiService.getCategories();
             
             // Create a map of category IDs to names for quick lookup
             const categoryMap = {};
-            if (Array.isArray(categories)) {
-              categories.forEach(cat => {
+            if (Array.isArray(servicesCategories)) {
+              servicesCategories.forEach(cat => {
                 if (cat.id && cat.name) {
                   categoryMap[cat.id] = cat.name;
                 }
@@ -124,7 +124,7 @@ export const SearchProvider = ({ children }) => {
             }
             
             // Debug logging to see categories and mapping
-            console.log('Categories fetched:', categories);
+            console.log('Categories fetched:', servicesCategories);
             console.log('Category Map created:', categoryMap);
             
             results = Array.isArray(services) ? services.filter(service => 

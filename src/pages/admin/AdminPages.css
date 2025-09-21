@@ -335,6 +335,80 @@ select::-ms-expand {
   min-height: 100px;
 }
 
+/* Price Input Container */
+.price-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.price-input-container .currency-symbol {
+  position: absolute;
+  left: 1rem;
+  font-weight: 600;
+  color: #6b7280;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.price-input-container input {
+  padding-left: 2.5rem !important;
+  text-align: right;
+}
+
+.price-input-container input::-webkit-outer-spin-button,
+.price-input-container input::-webkit-inner-spin-button {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.price-input-container input[type=number] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+/* Offer Toggle Group */
+.offer-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Percentage Input Container */
+.percentage-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.percentage-input-container .percentage-symbol {
+  position: absolute;
+  right: 1rem;
+  font-weight: 600;
+  color: #6b7280;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.percentage-input-container input {
+  padding-right: 2.5rem !important;
+  text-align: right;
+}
+
+.percentage-input-container input::-webkit-outer-spin-button,
+.percentage-input-container input::-webkit-inner-spin-button {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.percentage-input-container input[type=number] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
 .form-group select[multiple] {
   min-height: 120px;
 }
@@ -376,6 +450,8 @@ select::-ms-expand {
 .icon-preview {
   position: relative;
   display: inline-block;
+  width: 80px;
+  height: 80px;
 }
 
 .icon-preview img {
@@ -395,16 +471,98 @@ select::-ms-expand {
   border-radius: 50%;
   background: #ef4444;
   color: white;
-  border: none;
+  border: 2px solid white;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.3s ease;
+  transition: all 0.3s ease;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.remove-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5;
 }
 
 .remove-icon:hover {
   background: #dc2626;
+  transform: scale(1.1);
+}
+
+/* Dark mode styles for remove icon */
+.dark .remove-icon {
+  background: #ef4444;
+  border-color: #1f2937;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.dark .remove-icon:hover {
+  background: #dc2626;
+}
+
+/* Success state for form inputs */
+input.success {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1) !important;
+}
+
+.dark input.success {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2) !important;
+}
+
+/* Spinning animation for loader */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Validation status animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.validation-status {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.validation-error {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.validation-success {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.checking-status {
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 /* Toggle Switch */
@@ -1087,6 +1245,14 @@ select option:selected {
 
 .dark .form-group input::placeholder,
 .dark .form-group textarea::placeholder {
+  color: #94a3b8;
+}
+
+.dark .price-input-container .currency-symbol {
+  color: #94a3b8;
+}
+
+.dark .percentage-input-container .percentage-symbol {
   color: #94a3b8;
 }
 

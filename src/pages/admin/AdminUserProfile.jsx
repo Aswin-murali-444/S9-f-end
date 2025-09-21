@@ -134,19 +134,44 @@ const AdminUserProfile = () => {
           <div className="welcome-section" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <Logo size="medium" />
             <div>
-              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#1e293b' }}>User Profile</h1>
-              <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>Manage user details and settings</p>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#1e293b' }}>
+                {user ? `${user.name || user.email}'s Profile` : 'User Profile'}
+              </h1>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+                {user ? `Manage ${user.name || user.email}'s details and settings` : 'Manage user details and settings'}
+              </p>
             </div>
           </div>
-          <div className="header-actions" style={{ display: 'flex', gap: '12px' }}>
-            <button className="btn-secondary btn-animate" onClick={() => navigate('/dashboard/admin')}>
-              <Users size={16} />
-              Admin Dashboard
-            </button>
-            <button className="btn-primary btn-animate" onClick={() => navigate(-1)}>
-              <ArrowLeft size={16} />
-              Back
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            {user && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', backgroundColor: 'rgba(79, 156, 249, 0.1)', borderRadius: '12px', border: '1px solid rgba(79, 156, 249, 0.2)' }}>
+                <div className="user-avatar" style={{ width: '40px', height: '40px', borderWidth: 2, margin: 0 }}>
+                  {typeof user.avatar === 'string' && /^https?:\/\//i.test(user.avatar) ? (
+                    <img src={user.avatar} alt={user.name} />
+                  ) : (
+                    (user.name || user.email || 'NA').split(' ').filter(Boolean).map(p => p[0]).slice(0,2).join('').toUpperCase()
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>{user.name || user.email}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    <span className={`status-badge ${user.status || 'active'}`} style={{ fontSize: '0.7rem', padding: '2px 6px' }}>
+                      {user.status || 'active'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="header-actions" style={{ display: 'flex', gap: '12px' }}>
+              <button className="btn-secondary btn-animate" onClick={() => navigate('/dashboard/admin')}>
+                <Users size={16} />
+                Admin Dashboard
+              </button>
+              <button className="btn-primary btn-animate" onClick={() => navigate(-1)}>
+                <ArrowLeft size={16} />
+                Back
+              </button>
+            </div>
           </div>
         </motion.div>
       </div>
@@ -251,29 +276,36 @@ const AdminUserProfile = () => {
             </div>
             <h3 style={{ marginBottom: '20px', fontSize: '1.5rem', fontWeight: 600 }}>Address & Locations</h3>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 20 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Postal Code - First and Prominent */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: 'rgba(79, 156, 249, 0.1)', borderRadius: '12px', border: '1px solid rgba(79, 156, 249, 0.2)' }}>
+                <div style={{ minWidth: '100px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#4f9cf9', marginBottom: '4px', fontWeight: '600' }}>Postal Code</label>
+                  <div style={{ fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>{user.profile?.postal_code || '—'}</div>
+              </div>
+              </div>
+              
+              {/* Other Address Fields */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 20 }}>
+              <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>City</label>
+                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.city || '—'}</div>
+              </div>
+              <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>State</label>
+                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.state || '—'}</div>
+              </div>
+              <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>Country</label>
+                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.country || '—'}</div>
+              </div>
               <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>Address</label>
-                <div style={{ lineHeight: 1.6, padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.address || '—'}</div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>Address</label>
+                  <div style={{ lineHeight: 1.6, padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.address || '—'}</div>
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>City</label>
-                <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.city || '—'}</div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>State</label>
-                <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.state || '—'}</div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>Country</label>
-                <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.country || '—'}</div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>Postal Code</label>
-                <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.postal_code || '—'}</div>
-              </div>
-            </div>
-            
+          </div>
+
             {Array.isArray(user.locations) && user.locations.length > 0 && (
               <div style={{ marginTop: '20px' }}>
                 <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 8 }}>Saved Locations</label>
@@ -392,7 +424,7 @@ const AdminUserProfile = () => {
   return (
     <div className="home-page">
       <Header />
-      <ProfileContent />
+            <ProfileContent />
     </div>
   );
 };

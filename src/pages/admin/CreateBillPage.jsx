@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Save, DollarSign, Calendar, User, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/AdminLayout';
+import { validationUtils } from '../../utils/validation';
 import './AdminPages.css';
 
 const CreateBillPage = () => {
@@ -20,6 +21,8 @@ const CreateBillPage = () => {
   const [customers, setCustomers] = useState([]);
   const [services, setServices] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [touched, setTouched] = useState({});
 
   // Mock data - in real app, fetch from API
   useEffect(() => {
@@ -64,12 +67,79 @@ const CreateBillPage = () => {
     }));
   }, []);
 
+  const validateField = (fieldName, value) => {
+    switch (fieldName) {
+      case 'customerId': {
+        if (!value) return 'Please select a customer';
+        return undefined;
+      }
+      case 'serviceId': {
+        if (!value) return 'Please select a service';
+        return undefined;
+      }
+      case 'amount': {
+        const result = validationUtils.validateNumeric(value, {
+          min: 0.01,
+          max: 999999.99,
+          allowDecimals: true,
+          fieldName: 'Bill amount',
+          required: true
+        });
+        return result.isValid ? undefined : result.error;
+      }
+      case 'dueDate': {
+        const result = validationUtils.validateDate(value, {
+          minDate: new Date().toISOString().split('T')[0],
+          fieldName: 'Due date',
+          required: true
+        });
+        return result.isValid ? undefined : result.error;
+      }
+      case 'taxRate': {
+        const result = validationUtils.validateNumeric(value, {
+          min: 0,
+          max: 100,
+          allowDecimals: true,
+          fieldName: 'Tax rate',
+          required: false
+        });
+        return result.isValid ? undefined : result.error;
+      }
+      case 'discountAmount': {
+        const result = validationUtils.validateNumeric(value, {
+          min: 0,
+          max: parseFloat(formData.amount) || 999999.99,
+          allowDecimals: true,
+          fieldName: 'Discount amount',
+          required: false
+        });
+        return result.isValid ? undefined : result.error;
+      }
+      case 'description': {
+        if (!value) return undefined; // optional
+        const result = validationUtils.validateTextLength(value, {
+          max: 1000,
+          fieldName: 'Description',
+          required: false
+        });
+        return result.isValid ? undefined : result.error;
+      }
+      default:
+        return undefined;
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+    
+    // Mark as touched and validate
+    setTouched(prev => ({ ...prev, [name]: true }));
+    const error = validateField(name, value);
+    setValidationErrors(prev => ({ ...prev, [name]: error }));
   };
 
   const handleServiceSelect = (e) => {
@@ -108,6 +178,30 @@ const CreateBillPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate all fields
+    const errors = {};
+    const fieldsToValidate = ['customerId', 'serviceId', 'amount', 'dueDate', 'taxRate', 'discountAmount', 'description'];
+    
+    fieldsToValidate.forEach(field => {
+      const error = validateField(field, formData[field]);
+      if (error) errors[field] = error;
+    });
+    
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      setTouched({
+        customerId: true,
+        serviceId: true,
+        amount: true,
+        dueDate: true,
+        taxRate: true,
+        discountAmount: true,
+        description: true
+      });
+      return;
+    }
+    
     setIsSubmitting(true);
     
     try {
@@ -191,7 +285,9 @@ const CreateBillPage = () => {
                     name="customerId"
                     value={formData.customerId}
                     onChange={handleInputChange}
+                    onBlur={() => setTouched(prev => ({ ...prev, customerId: true }))}
                     required
+                    className={touched.customerId && validationErrors.customerId ? 'error' : ''}
                   >
                     <option value="">Choose a customer</option>
                     {customers.map(customer => (
@@ -200,6 +296,9 @@ const CreateBillPage = () => {
                       </option>
                     ))}
                   </select>
+                  {touched.customerId && validationErrors.customerId && (
+                    <small className="error-text">{validationErrors.customerId}</small>
+                  )}
                 </div>
 
                 {selectedCustomer && (
@@ -240,7 +339,9 @@ const CreateBillPage = () => {
                     name="serviceId"
                     value={formData.serviceId}
                     onChange={handleServiceSelect}
+                    onBlur={() => setTouched(prev => ({ ...prev, serviceId: true }))}
                     required
+                    className={touched.serviceId && validationErrors.serviceId ? 'error' : ''}
                   >
                     <option value="">Choose a service</option>
                     {services.map(service => (
@@ -249,6 +350,9 @@ const CreateBillPage = () => {
                       </option>
                     ))}
                   </select>
+                  {touched.serviceId && validationErrors.serviceId && (
+                    <small className="error-text">{validationErrors.serviceId}</small>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -262,10 +366,15 @@ const CreateBillPage = () => {
                       min="0"
                       value={formData.amount}
                       onChange={handleInputChange}
+                      onBlur={() => setTouched(prev => ({ ...prev, amount: true }))}
                       placeholder="0.00"
                       required
+                      className={touched.amount && validationErrors.amount ? 'error' : ''}
                     />
                   </div>
+                  {touched.amount && validationErrors.amount && (
+                    <small className="error-text">{validationErrors.amount}</small>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -276,8 +385,13 @@ const CreateBillPage = () => {
                     type="date"
                     value={formData.dueDate}
                     onChange={handleInputChange}
+                    onBlur={() => setTouched(prev => ({ ...prev, dueDate: true }))}
                     required
+                    className={touched.dueDate && validationErrors.dueDate ? 'error' : ''}
                   />
+                  {touched.dueDate && validationErrors.dueDate && (
+                    <small className="error-text">{validationErrors.dueDate}</small>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -291,8 +405,13 @@ const CreateBillPage = () => {
                     max="100"
                     value={formData.taxRate}
                     onChange={handleInputChange}
+                    onBlur={() => setTouched(prev => ({ ...prev, taxRate: true }))}
                     placeholder="0.00"
+                    className={touched.taxRate && validationErrors.taxRate ? 'error' : ''}
                   />
+                  {touched.taxRate && validationErrors.taxRate && (
+                    <small className="error-text">{validationErrors.taxRate}</small>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -306,9 +425,14 @@ const CreateBillPage = () => {
                       min="0"
                       value={formData.discountAmount}
                       onChange={handleInputChange}
+                      onBlur={() => setTouched(prev => ({ ...prev, discountAmount: true }))}
                       placeholder="0.00"
+                      className={touched.discountAmount && validationErrors.discountAmount ? 'error' : ''}
                     />
                   </div>
+                  {touched.discountAmount && validationErrors.discountAmount && (
+                    <small className="error-text">{validationErrors.discountAmount}</small>
+                  )}
                 </div>
 
                 <div className="form-group full-width">
@@ -318,9 +442,14 @@ const CreateBillPage = () => {
                     name="description"
                     value={formData.description}
                     onChange={handleInputChange}
+                    onBlur={() => setTouched(prev => ({ ...prev, description: true }))}
                     rows="3"
                     placeholder="Additional details about the service provided..."
+                    className={touched.description && validationErrors.description ? 'error' : ''}
                   />
+                  {touched.description && validationErrors.description && (
+                    <small className="error-text">{validationErrors.description}</small>
+                  )}
                 </div>
               </div>
             </div>

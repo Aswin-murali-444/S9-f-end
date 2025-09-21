@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth, supabase } from '../hooks/useAuth';
 import { apiService } from '../services/api';
+import { validationUtils } from '../utils/validation';
 import toast from 'react-hot-toast';
 
 // Form to complete/update user_profiles for the current customer
@@ -234,52 +235,38 @@ const CustomerProfileForm = () => {
     return dt.toISOString().split('T')[0];
   }, []);
 
-  // Live field-level validation
+  // Live field-level validation using centralized validation utils
   const validateField = (fieldName, rawValue) => {
     const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
 
     switch (fieldName) {
       case 'first_name': {
-        if (!value) return 'First name is required';
-        if (value.length < 2) return 'First name must be at least 2 characters';
-        if (!/^[A-Za-z\s\-']+$/.test(value)) return 'First name can contain letters, spaces, - and \' characters only';
-        return undefined;
+        const result = validationUtils.validateName(value, 'First name');
+        return result.isValid ? undefined : result.error;
       }
       case 'last_name': {
-        if (!value) return 'Last name is required';
-        if (value.length < 2) return 'Last name must be at least 2 characters';
-        if (!/^[A-Za-z\s\-']+$/.test(value)) return 'Last name can contain letters, spaces, - and \' characters only';
-        return undefined;
+        const result = validationUtils.validateName(value, 'Last name');
+        return result.isValid ? undefined : result.error;
       }
       case 'phone': {
-        if (!value) return 'Phone number is required';
-        // Allow digits, space, hyphen, parentheses, and optional leading plus
-        if (/[^0-9+\-\s()]/.test(value)) return 'Only numbers, spaces, (), - and + allowed';
-        const plusCount = (value.match(/\+/g) || []).length;
-        if (plusCount > 1 || (plusCount === 1 && !String(value).trim().startsWith('+'))) {
-          return 'Plus sign is only allowed at the start';
-        }
-        const digitCount = (String(value).match(/\d/g) || []).length;
-        if (digitCount < 10) return 'Enter at least 10 digits';
-        if (digitCount > 15) return 'Enter at most 15 digits';
-        // If starts with +, enforce basic E.164 shape
-        if (String(value).trim().startsWith('+')) {
-          const e164 = String(value).replace(/[^\d+]/g, '');
-          if (!/^\+[1-9]\d{9,14}$/.test(e164)) {
-            return 'Enter a valid international number, e.g. +14155552671';
-          }
-        }
-        return undefined;
+        const result = validationUtils.validatePhone(value);
+        return result.isValid ? undefined : result.error;
       }
       case 'date_of_birth': {
         if (!value) return undefined; // optional
-        const dob = new Date(value);
         const now = new Date();
-        if (isNaN(dob.getTime())) return 'Enter a valid date of birth';
-        if (dob > now) return 'Date of birth cannot be in the future';
-        // Minimum age 18
         const minAge = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate());
-        if (dob > minAge) return 'You must be at least 18 years old';
+        const result = validationUtils.validateDate(value, {
+          maxDate: now.toISOString().split('T')[0],
+          minDate: minAge.toISOString().split('T')[0],
+          fieldName: 'Date of birth',
+          required: false
+        });
+        if (!result.isValid) {
+          return result.error === 'Date of birth cannot be after today' 
+            ? 'Date of birth cannot be in the future'
+            : result.error;
+        }
         return undefined;
       }
       case 'gender': {
@@ -292,8 +279,12 @@ const CustomerProfileForm = () => {
       case 'city':
       case 'state': {
         if (!value) return undefined; // optional
-        if (String(value).length > 200) return 'Too long (max 200 characters)';
-        return undefined;
+        const result = validationUtils.validateTextLength(value, {
+          max: 200,
+          fieldName: fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
+          required: false
+        });
+        return result.isValid ? undefined : result.error;
       }
       case 'country': {
         if (!value) return undefined; // optional
@@ -307,8 +298,12 @@ const CustomerProfileForm = () => {
       }
       case 'bio': {
         if (!value) return undefined; // optional
-        if (String(value).length > 500) return 'Bio is too long (max 500 characters)';
-        return undefined;
+        const result = validationUtils.validateTextLength(value, {
+          max: 500,
+          fieldName: 'Bio',
+          required: false
+        });
+        return result.isValid ? undefined : result.error;
       }
       default:
         return undefined;
@@ -809,33 +804,6 @@ const CustomerProfileForm = () => {
 
         <div className="form-row">
           <div className="form-group">
-            <label>City</label>
-            <input
-              type="text"
-              value={form.city || ''}
-              onChange={(e) => updateField('city', e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label>State</label>
-            <input
-              type="text"
-              value={form.state || ''}
-              onChange={(e) => updateField('state', e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="form-row">
-          <div className="form-group">
-            <label>Country</label>
-            <input
-              type="text"
-              value={form.country || ''}
-              onChange={(e) => updateField('country', e.target.value)}
-            />
-          </div>
-          <div className="form-group">
             <label>Postal Code</label>
             <input
               type="text"
@@ -848,6 +816,33 @@ const CustomerProfileForm = () => {
             {!pinLookupLoading && pinLookupMessage && (
               <small className="helper-text">{pinLookupMessage}</small>
             )}
+          </div>
+          <div className="form-group">
+            <label>City</label>
+            <input
+              type="text"
+              value={form.city || ''}
+              onChange={(e) => updateField('city', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label>State</label>
+            <input
+              type="text"
+              value={form.state || ''}
+              onChange={(e) => updateField('state', e.target.value)}
+            />
+          </div>
+          <div className="form-group">
+            <label>Country</label>
+            <input
+              type="text"
+              value={form.country || ''}
+              onChange={(e) => updateField('country', e.target.value)}
+            />
           </div>
         </div>
 

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Save, User, Mail, Phone, MapPin, Key, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/AdminLayout';
+import { validationUtils } from '../../utils/validation';
 import './AdminPages.css';
 
 const AddUserPage = () => {
@@ -21,6 +22,8 @@ const AddUserPage = () => {
   });
   const [services, setServices] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [touched, setTouched] = useState({});
 
   // Mock data - in real app, fetch from API
   useEffect(() => {
@@ -33,12 +36,67 @@ const AddUserPage = () => {
     ]);
   }, []);
 
+  const validateField = (fieldName, value) => {
+    switch (fieldName) {
+      case 'fullName': {
+        const result = validationUtils.validateName(value, 'Full name');
+        return result.isValid ? undefined : result.error;
+      }
+      case 'email': {
+        const result = validationUtils.validateEmail(value);
+        return result.isValid ? undefined : result.error;
+      }
+      case 'phone': {
+        if (!value) return undefined; // optional
+        const result = validationUtils.validatePhone(value);
+        return result.isValid ? undefined : result.error;
+      }
+      case 'address': {
+        if (!value) return undefined; // optional
+        const result = validationUtils.validateTextLength(value, {
+          max: 500,
+          fieldName: 'Address',
+          required: false
+        });
+        return result.isValid ? undefined : result.error;
+      }
+      case 'department': {
+        if (!value) return undefined; // optional
+        const result = validationUtils.validateTextLength(value, {
+          max: 100,
+          fieldName: 'Department',
+          required: false
+        });
+        return result.isValid ? undefined : result.error;
+      }
+      case 'manualPassword': {
+        if (!formData.autoPassword && !value) {
+          return 'Password is required when auto-generate is disabled';
+        }
+        if (!formData.autoPassword && value) {
+          const result = validationUtils.validatePassword(value);
+          return result.isValid ? undefined : result.error;
+        }
+        return undefined;
+      }
+      default:
+        return undefined;
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
+    const newValue = type === 'checkbox' ? checked : value;
+    
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: newValue
     }));
+    
+    // Mark as touched and validate
+    setTouched(prev => ({ ...prev, [name]: true }));
+    const error = validateField(name, newValue);
+    setValidationErrors(prev => ({ ...prev, [name]: error }));
   };
 
   const handleServiceToggle = (serviceId) => {
@@ -52,6 +110,29 @@ const AddUserPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate all fields
+    const errors = {};
+    const fieldsToValidate = ['fullName', 'email', 'phone', 'address', 'department', 'manualPassword'];
+    
+    fieldsToValidate.forEach(field => {
+      const error = validateField(field, formData[field]);
+      if (error) errors[field] = error;
+    });
+    
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      setTouched({
+        fullName: true,
+        email: true,
+        phone: true,
+        address: true,
+        department: true,
+        manualPassword: true
+      });
+      return;
+    }
+    
     setIsSubmitting(true);
     
     try {
@@ -140,9 +221,14 @@ const AddUserPage = () => {
                     type="text"
                     value={formData.fullName}
                     onChange={handleInputChange}
+                    onBlur={() => setTouched(prev => ({ ...prev, fullName: true }))}
                     placeholder="John Doe"
                     required
+                    className={touched.fullName && validationErrors.fullName ? 'error' : ''}
                   />
+                  {touched.fullName && validationErrors.fullName && (
+                    <small className="error-text">{validationErrors.fullName}</small>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -153,9 +239,14 @@ const AddUserPage = () => {
                     type="email"
                     value={formData.email}
                     onChange={handleInputChange}
+                    onBlur={() => setTouched(prev => ({ ...prev, email: true }))}
                     placeholder="john.doe@example.com"
                     required
+                    className={touched.email && validationErrors.email ? 'error' : ''}
                   />
+                  {touched.email && validationErrors.email && (
+                    <small className="error-text">{validationErrors.email}</small>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -166,8 +257,13 @@ const AddUserPage = () => {
                     type="tel"
                     value={formData.phone}
                     onChange={handleInputChange}
+                    onBlur={() => setTouched(prev => ({ ...prev, phone: true }))}
                     placeholder="+1 (555) 123-4567"
+                    className={touched.phone && validationErrors.phone ? 'error' : ''}
                   />
+                  {touched.phone && validationErrors.phone && (
+                    <small className="error-text">{validationErrors.phone}</small>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -178,8 +274,13 @@ const AddUserPage = () => {
                     type="text"
                     value={formData.address}
                     onChange={handleInputChange}
+                    onBlur={() => setTouched(prev => ({ ...prev, address: true }))}
                     placeholder="123 Main St, City, State 12345"
+                    className={touched.address && validationErrors.address ? 'error' : ''}
                   />
+                  {touched.address && validationErrors.address && (
+                    <small className="error-text">{validationErrors.address}</small>
+                  )}
                 </div>
               </div>
             </div>
@@ -219,8 +320,13 @@ const AddUserPage = () => {
                     type="text"
                     value={formData.department}
                     onChange={handleInputChange}
+                    onBlur={() => setTouched(prev => ({ ...prev, department: true }))}
                     placeholder="Operations, IT, Customer Service, etc."
+                    className={touched.department && validationErrors.department ? 'error' : ''}
                   />
+                  {touched.department && validationErrors.department && (
+                    <small className="error-text">{validationErrors.department}</small>
+                  )}
                 </div>
               </div>
             </div>
@@ -260,10 +366,15 @@ const AddUserPage = () => {
                       type="password"
                       value={formData.manualPassword}
                       onChange={handleInputChange}
+                      onBlur={() => setTouched(prev => ({ ...prev, manualPassword: true }))}
                       placeholder="Enter secure password"
                       required={!formData.autoPassword}
                       minLength="8"
+                      className={touched.manualPassword && validationErrors.manualPassword ? 'error' : ''}
                     />
+                    {touched.manualPassword && validationErrors.manualPassword && (
+                      <small className="error-text">{validationErrors.manualPassword}</small>
+                    )}
                     <small style={{ color: '#64748b', marginTop: '0.5rem' }}>
                       Minimum 8 characters, include letters, numbers, and symbols
                     </small>

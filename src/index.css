@@ -1,5 +1,6 @@
 /* Import Bootstrap CSS */
 @import 'bootstrap/dist/css/bootstrap.min.css';
+@import './styles/validation.css';
 
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;

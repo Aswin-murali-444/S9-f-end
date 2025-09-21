@@ -7,22 +7,28 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import toast from 'react-hot-toast';
 import { apiService } from '../services/api';
+import { validationUtils } from '../utils/validation';
 import Logo from '../components/Logo';
 import './RegisterPage.css';
 
-// Validation schema
+// Enhanced validation schema using centralized validation utils
 const registerSchema = yup.object({
   name: yup
     .string()
     .required('Full name is required')
-    .min(2, 'Name must be at least 2 characters')
-    .max(50, 'Name must be less than 50 characters')
-    .matches(/^[a-zA-Z\s]+$/, 'Name can only contain letters and spaces'),
+    .test('name-format', 'Name can only contain letters, spaces, - and \' characters', function(value) {
+      if (!value) return true;
+      const result = validationUtils.validateName(value, 'Full name');
+      return result.isValid || this.createError({ message: result.error });
+    }),
   email: yup
     .string()
     .required('Email is required')
-    .email('Please enter a valid email address')
-    .matches(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Invalid email format')
+    .test('email-format', 'Please enter a valid email address', function(value) {
+      if (!value) return true;
+      const result = validationUtils.validateEmail(value);
+      return result.isValid || this.createError({ message: result.error });
+    })
     .test('email-unique', 'Email already registered', function(value) {
       // This will be validated by the custom validation logic
       return true;
@@ -30,9 +36,11 @@ const registerSchema = yup.object({
   password: yup
     .string()
     .required('Password is required')
-    .min(8, 'Password must be at least 8 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/, 
-      'Password must contain uppercase, lowercase, number, and special character'),
+    .test('password-strength', 'Password must contain uppercase, lowercase, number, and special character', function(value) {
+      if (!value) return true;
+      const result = validationUtils.validatePassword(value);
+      return result.isValid || this.createError({ message: result.error });
+    }),
   confirmPassword: yup
     .string()
     .required('Please confirm your password')

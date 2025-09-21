@@ -232,10 +232,10 @@ class ApiService {
     return this.request('/services');
   }
 
-  async createService({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, active = true }) {
+  async createService({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, active = true }) {
     return this.request('/services', {
       method: 'POST',
-      body: JSON.stringify({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, active })
+      body: JSON.stringify({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, active })
     });
   }
 
@@ -243,11 +243,18 @@ class ApiService {
     return this.request(`/services/${encodeURIComponent(id)}`);
   }
 
+  async checkServiceNameAvailability(name, categoryId, excludeId = null) {
+    return this.request('/services/check-name', {
+      method: 'POST',
+      body: JSON.stringify({ name, categoryId, excludeId })
+    });
+  }
+
   async updateService(id, updates) {
-    const { categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, active } = updates;
+    const { categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, active } = updates;
     return this.request(`/services/${encodeURIComponent(id)}`, {
       method: 'PUT',
-      body: JSON.stringify({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, active })
+      body: JSON.stringify({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, active })
     });
   }
 

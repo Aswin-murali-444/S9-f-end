@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Mail, Phone, MapPin, Calendar, LogOut, Edit3, Save, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../hooks/useAuth';
+import { validationUtils } from '../utils/validation';
 import toast from 'react-hot-toast';
 import './ProfilePage.css';
 
@@ -20,6 +21,8 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(false);
   const [originalProfile, setOriginalProfile] = useState({});
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [validationErrors, setValidationErrors] = useState({});
+  const [touched, setTouched] = useState({});
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -89,15 +92,75 @@ const ProfilePage = () => {
     }
   };
 
+  const validateField = (fieldName, value) => {
+    switch (fieldName) {
+      case 'full_name': {
+        const result = validationUtils.validateName(value, 'Full name');
+        return result.isValid ? undefined : result.error;
+      }
+      case 'phone': {
+        if (!value) return undefined; // optional
+        const result = validationUtils.validatePhone(value);
+        return result.isValid ? undefined : result.error;
+      }
+      case 'address': {
+        if (!value) return undefined; // optional
+        const result = validationUtils.validateTextLength(value, {
+          max: 500,
+          fieldName: 'Address',
+          required: false
+        });
+        return result.isValid ? undefined : result.error;
+      }
+      case 'bio': {
+        if (!value) return undefined; // optional
+        const result = validationUtils.validateTextLength(value, {
+          max: 1000,
+          fieldName: 'Bio',
+          required: false
+        });
+        return result.isValid ? undefined : result.error;
+      }
+      default:
+        return undefined;
+    }
+  };
+
   const handleInputChange = (field, value) => {
     setProfile(prev => ({
       ...prev,
       [field]: value
     }));
+    
+    // Mark as touched and validate
+    setTouched(prev => ({ ...prev, [field]: true }));
+    const error = validateField(field, value);
+    setValidationErrors(prev => ({ ...prev, [field]: error }));
   };
 
   const handleSave = async () => {
     if (!user?.id) return;
+
+    // Validate all fields before saving
+    const errors = {};
+    Object.keys(profile).forEach(field => {
+      if (field !== 'email') { // email is read-only
+        const error = validateField(field, profile[field]);
+        if (error) errors[field] = error;
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      setTouched({
+        full_name: true,
+        phone: true,
+        address: true,
+        bio: true
+      });
+      toast.error('Please fix the validation errors before saving');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -132,6 +195,9 @@ const ProfilePage = () => {
       setOriginalProfile(profile);
       setIsEditing(false);
       toast.success('Profile updated successfully!');
+      
+      // Refresh profile data from database to ensure form shows updated values
+      await fetchProfile();
     } catch (error) {
       console.error('Error updating profile:', error);
       toast.error('Failed to update profile');
@@ -221,12 +287,19 @@ const ProfilePage = () => {
               Full Name
             </label>
             {isEditing ? (
-              <input
-                type="text"
-                value={profile.full_name}
-                onChange={(e) => handleInputChange('full_name', e.target.value)}
-                placeholder="Enter your full name"
-              />
+              <div>
+                <input
+                  type="text"
+                  value={profile.full_name}
+                  onChange={(e) => handleInputChange('full_name', e.target.value)}
+                  onBlur={() => setTouched(prev => ({ ...prev, full_name: true }))}
+                  placeholder="Enter your full name"
+                  className={touched.full_name && validationErrors.full_name ? 'error' : ''}
+                />
+                {touched.full_name && validationErrors.full_name && (
+                  <small className="error-text">{validationErrors.full_name}</small>
+                )}
+              </div>
             ) : (
               <p>{profile.full_name || 'Not provided'}</p>
             )}
@@ -247,12 +320,19 @@ const ProfilePage = () => {
               Phone Number
             </label>
             {isEditing ? (
-              <input
-                type="tel"
-                value={profile.phone}
-                onChange={(e) => handleInputChange('phone', e.target.value)}
-                placeholder="Enter your phone number"
-              />
+              <div>
+                <input
+                  type="tel"
+                  value={profile.phone}
+                  onChange={(e) => handleInputChange('phone', e.target.value)}
+                  onBlur={() => setTouched(prev => ({ ...prev, phone: true }))}
+                  placeholder="Enter your phone number"
+                  className={touched.phone && validationErrors.phone ? 'error' : ''}
+                />
+                {touched.phone && validationErrors.phone && (
+                  <small className="error-text">{validationErrors.phone}</small>
+                )}
+              </div>
             ) : (
               <p>{profile.phone || 'Not provided'}</p>
             )}
@@ -264,12 +344,19 @@ const ProfilePage = () => {
               Address
             </label>
             {isEditing ? (
-              <textarea
-                value={profile.address}
-                onChange={(e) => handleInputChange('address', e.target.value)}
-                placeholder="Enter your address"
-                rows="3"
-              />
+              <div>
+                <textarea
+                  value={profile.address}
+                  onChange={(e) => handleInputChange('address', e.target.value)}
+                  onBlur={() => setTouched(prev => ({ ...prev, address: true }))}
+                  placeholder="Enter your address"
+                  rows="3"
+                  className={touched.address && validationErrors.address ? 'error' : ''}
+                />
+                {touched.address && validationErrors.address && (
+                  <small className="error-text">{validationErrors.address}</small>
+                )}
+              </div>
             ) : (
               <p>{profile.address || 'Not provided'}</p>
             )}
@@ -281,12 +368,19 @@ const ProfilePage = () => {
               Bio
             </label>
             {isEditing ? (
-              <textarea
-                value={profile.bio}
-                onChange={(e) => handleInputChange('bio', e.target.value)}
-                placeholder="Tell us about yourself"
-                rows="4"
-              />
+              <div>
+                <textarea
+                  value={profile.bio}
+                  onChange={(e) => handleInputChange('bio', e.target.value)}
+                  onBlur={() => setTouched(prev => ({ ...prev, bio: true }))}
+                  placeholder="Tell us about yourself"
+                  rows="4"
+                  className={touched.bio && validationErrors.bio ? 'error' : ''}
+                />
+                {touched.bio && validationErrors.bio && (
+                  <small className="error-text">{validationErrors.bio}</small>
+                )}
+              </div>
             ) : (
               <p>{profile.bio || 'Not provided'}</p>
             )}
