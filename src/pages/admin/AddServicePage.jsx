@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Save, X, UploadCloud } from 'lucide-react';
+import { Save, X, UploadCloud, Bell, Sun, Moon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/AdminLayout';
@@ -22,6 +22,25 @@ const AddServicePage = () => {
   const [iconPreview, setIconPreview] = useState('');
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
+  // Mock notifications data
+  const notifications = [
+    { id: 1, type: 'security', title: 'Security Alert', message: 'Failed login attempts detected', severity: 'high', timestamp: '2 min ago' },
+    { id: 2, type: 'performance', title: 'Performance', message: 'High CPU usage detected', severity: 'medium', timestamp: '5 min ago' },
+    { id: 3, type: 'system', title: 'System', message: 'Backup completed successfully', severity: 'low', timestamp: '10 min ago' }
+  ];
+
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+    // Apply dark mode class to document
+    if (!isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   // Fetch categories from API
   useEffect(() => {
@@ -226,6 +245,7 @@ const AddServicePage = () => {
             <h1>Add Service</h1>
             <p>Create a new service offering for your platform</p>
           </div>
+          
         </motion.div>
 
         {/* Form */}

@@ -46,7 +46,11 @@ import {
   LineChart,
   BarChart,
   Activity as ActivityIcon,
-  LogOut
+  LogOut,
+  Menu,
+  X,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
 import Logo from '../../components/Logo';
@@ -88,11 +92,13 @@ const AdminDashboard = () => {
   const [performanceData, setPerformanceData] = useState({});
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const notificationsRef = useRef(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState('name_asc');
   const [selectedRole, setSelectedRole] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   // Services & Categories
   const [categories, setCategories] = useState([]);
@@ -131,6 +137,16 @@ const AdminDashboard = () => {
       'Admin'
     );
   }, [user]);
+
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+    // Apply dark mode class to document
+    if (!isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   const [showWelcome, setShowWelcome] = useState(false);
 
@@ -611,8 +627,7 @@ const AdminDashboard = () => {
   }, [usersForManagement, searchQuery, sortKey, selectedRole]);
 
   return (
-    <div className="admin-dashboard">
-
+    <div className="admin-dashboard-new">
       {/* Welcome Overlay */}
       <AnimatePresence>
         {showWelcome && (
@@ -640,193 +655,162 @@ const AdminDashboard = () => {
         )}
       </AnimatePresence>
 
-      {/* Header Section */}
-      <motion.section 
-        className="dashboard-header"
-        ref={headerRef}
-        initial="hidden"
-        animate={headerInView ? "visible" : "hidden"}
-        variants={containerVariants}
-      >
-        <div className="container">
-          <motion.div className="header-content" variants={itemVariants}>
-            <div className="welcome-section">
-              <Logo size="medium" />
-              <motion.h1
-                initial={{ y: 12, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ type: 'spring', stiffness: 180, damping: 18, delay: 0.05 }}
-              >
-                Welcome, Admin
-              </motion.h1>
-              <motion.p
-                initial={{ y: 12, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ type: 'spring', stiffness: 180, damping: 20, delay: 0.12 }}
-              >
-                {displayName}
-              </motion.p>
-            </div>
-            <div className="header-actions" ref={notificationsRef}>
-              <div className="notifications-wrapper">
-                <button 
-                  className="btn-secondary"
-                  onClick={() => setIsNotificationsOpen(v => !v)}
-                  aria-haspopup="true"
-                  aria-expanded={isNotificationsOpen}
-                >
-                  <Bell size={20} />
-                  Notifications
-                </button>
-                {isNotificationsOpen && (
-                  <div className="notifications-dropdown">
-                    <div className="dropdown-header">
-                      <span>Notifications</span>
-                      <button className="link-button" onClick={() => setAlerts(prev => prev.map(a => ({...a, status: 'reviewed'})))}>Mark all read</button>
-                    </div>
-                    <div className="dropdown-list">
-                      {alerts.slice(0,6).map(item => (
-                        <div key={item.id} className={`notification-item ${item.severity}`}>
-                          <div className="notification-icon">
-                            {item.type === 'security' && <Shield size={16} />}
-                            {item.type === 'performance' && <Activity size={16} />}
-                            {item.type === 'system' && <Server size={16} />}
-                          </div>
-                          <div className="notification-content">
-                            <div className="notification-title">{item.title}</div>
-                            <div className="notification-message">{item.message}</div>
-                            <div className="notification-meta">
-                              <span className={`severity ${item.severity}`}>{item.severity}</span>
-                              <span className="timestamp">{item.timestamp}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="dropdown-footer">
-                      <button className="btn-secondary" onClick={() => setIsNotificationsOpen(false)}>Close</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              <button className="btn-primary" onClick={() => navigate('/admin/add-user')}>
-                <Plus size={20} />
-                Add User
-              </button>
-              <button 
-                className="btn-secondary"
-                onClick={logout}
-                aria-label="Logout"
-                title="Logout"
-              >
-                <LogOut size={20} />
-                Logout
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      </motion.section>
-
-      {isAddUserOpen && (
-        <div className="modal-backdrop" onClick={() => setIsAddUserOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h4>Add User</h4>
-            </div>
-            <form className="modal-body" onSubmit={handleAddUser}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="name">Name</label>
-                  <input id="name" name="name" type="text" placeholder="Jane Doe" required />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="email">Email</label>
-                  <input id="email" name="email" type="email" placeholder="jane@example.com" required />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="role">Role</label>
-                  <select id="role" name="role" required>
-                    <option value="admin">Admin</option>
-                    <option value="supervisor">Supervisor</option>
-                    <option value="service_provider">Service Provider</option>
-                    <option value="customer">Customer</option>
-                    <option value="driver">Driver</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="department">Department</label>
-                  <input id="department" name="department" type="text" placeholder="Operations" />
-                </div>
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={() => setIsAddUserOpen(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Create User</button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* Mobile Sidebar Backdrop */}
+      {isSidebarOpen && (
+        <div 
+          className="sidebar-backdrop"
+          onClick={() => setIsSidebarOpen(false)}
+        />
       )}
 
-      {/* Stats Section */}
-      <motion.section 
-        className="stats-section"
-        ref={statsRef}
-        initial="hidden"
-        animate={statsInView ? "visible" : "hidden"}
-        variants={containerVariants}
-      >
-        <div className="container">
-          <div className="stats-grid">
-            {stats.map((stat, index) => (
-              <motion.div 
-                key={stat.label}
-                className="stat-card"
-                variants={itemVariants}
-                whileHover={{ scale: 1.05 }}
-                transition={{ type: "spring", stiffness: 300 }}
-              >
-                <div className="stat-icon" style={{ backgroundColor: stat.color }}>
-                  <stat.icon size={24} color="white" />
-                </div>
-                <div className="stat-content">
-                  <h3>{stat.value}</h3>
-                  <p>{stat.label}</p>
-                  {stat.change && (
-                    <span className={`change ${stat.changeType}`}>
-                      {stat.change}
-                    </span>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </div>
+      {/* Fixed Sidebar */}
+      <aside className={`admin-sidebar ${isSidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <Logo size="small" />
+          <button 
+            className="sidebar-toggle mobile-only"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <X size={20} />
+          </button>
         </div>
-      </motion.section>
+        
+        <nav className="sidebar-nav">
+          {navItems.map(item => (
+            <button
+              key={item.key}
+              className={`nav-item ${activeTab === item.key ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab(item.key);
+                setIsSidebarOpen(false);
+              }}
+            >
+              <item.icon size={18} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        
+        <div className="sidebar-footer">
+          <button className="nav-item logout-btn" onClick={logout}>
+            <LogOut size={18} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
 
-      {/* Main Content */}
-      <section className="dashboard-content">
-        <div className="container">
-          <div className="dashboard-layout">
-            <aside className="dashboard-sidebar">
-              <nav className="sidebar-nav">
-                {navItems.map(item => (
-                  <button
-                    key={item.key}
-                    className={`nav-item ${activeTab === item.key ? 'active' : ''}`}
-                    onClick={() => setActiveTab(item.key)}
-                  >
-                    <item.icon size={18} />
-                    {item.label}
-                  </button>
-                ))}
-                <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '8px 0' }} />
-              </nav>
-            </aside>
+      {/* Main Content Area */}
+      <div className="admin-main">
+        {/* Top Header */}
+        <header className="admin-header">
+          <div className="header-left">
+            <button 
+              className="mobile-menu-btn"
+              onClick={() => setIsSidebarOpen(true)}
+            >
+              <Menu size={24} />
+            </button>
+            <h1>Admin Dashboard</h1>
+          </div>
+          
+          <div className="header-right" ref={notificationsRef}>
+            <button 
+              className="admin-theme-toggle" 
+              title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              onClick={toggleDarkMode}
+            >
+              <div className="admin-theme-icon">
+                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </div>
+            </button>
+            
+            <div className="notifications-wrapper">
+              <button 
+                className="notification-btn"
+                onClick={() => setIsNotificationsOpen(v => !v)}
+                aria-haspopup="true"
+                aria-expanded={isNotificationsOpen}
+              >
+                <div className="bell-icon-text">🔔</div>
+                <span className="notification-badge">3</span>
+              </button>
+              {isNotificationsOpen && (
+                <div className="notifications-dropdown">
+                  <div className="dropdown-header">
+                    <span>Notifications</span>
+                    <button className="link-button" onClick={() => setAlerts(prev => prev.map(a => ({...a, status: 'reviewed'})))}>Mark all read</button>
+                  </div>
+                  <div className="dropdown-list">
+                    {alerts.slice(0,6).map(item => (
+                      <div key={item.id} className={`notification-item ${item.severity}`}>
+                        <div className="notification-icon">
+                          {item.type === 'security' && <Shield size={16} />}
+                          {item.type === 'performance' && <Activity size={16} />}
+                          {item.type === 'system' && <Server size={16} />}
+                        </div>
+                        <div className="notification-content">
+                          <div className="notification-title">{item.title}</div>
+                          <div className="notification-message">{item.message}</div>
+                          <div className="notification-meta">
+                            <span className={`severity ${item.severity}`}>{item.severity}</span>
+                            <span className="timestamp">{item.timestamp}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="dropdown-footer">
+                    <button className="btn-secondary" onClick={() => setIsNotificationsOpen(false)}>Close</button>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <button className="btn-primary" onClick={() => navigate('/admin/add-user')}>
+              <Plus size={20} />
+              Add User
+            </button>
+          </div>
+        </header>
 
-            <div className="tab-content">
+        {/* Content Area */}
+        <main className="admin-content">
+          {/* Stats Section */}
+          <motion.section 
+            className="stats-section"
+            ref={statsRef}
+            initial="hidden"
+            animate={statsInView ? "visible" : "hidden"}
+            variants={containerVariants}
+          >
+            <div className="stats-grid">
+              {stats.map((stat, index) => (
+                <motion.div 
+                  key={stat.label}
+                  className="stat-card"
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.05 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  <div className="stat-icon" style={{ backgroundColor: stat.color }}>
+                    <stat.icon size={24} color="white" />
+                  </div>
+                  <div className="stat-content">
+                    <h3>{stat.value}</h3>
+                    <p>{stat.label}</p>
+                    {stat.change && (
+                      <span className={`change ${stat.changeType}`}>
+                        {stat.change}
+                      </span>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.section>
+
+          {/* Tab Content */}
+          <div className="tab-content">
             {activeTab === 'overview' && (
               <motion.div 
                 className="overview-tab"
@@ -1846,10 +1830,51 @@ const AdminDashboard = () => {
               </motion.div>
             )}
           </div>
+        </main>
+      </div>
+
+      {/* Add User Modal */}
+      {isAddUserOpen && (
+        <div className="modal-backdrop" onClick={() => setIsAddUserOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h4>Add User</h4>
+            </div>
+            <form className="modal-body" onSubmit={handleAddUser}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="name">Name</label>
+                  <input id="name" name="name" type="text" placeholder="Jane Doe" required />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="email">Email</label>
+                  <input id="email" name="email" type="email" placeholder="jane@example.com" required />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="role">Role</label>
+                  <select id="role" name="role" required>
+                    <option value="admin">Admin</option>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="service_provider">Service Provider</option>
+                    <option value="customer">Customer</option>
+                    <option value="driver">Driver</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="department">Department</label>
+                  <input id="department" name="department" type="text" placeholder="Operations" />
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-secondary" onClick={() => setIsAddUserOpen(false)}>Cancel</button>
+                <button type="submit" className="btn-primary">Create User</button>
+              </div>
+            </form>
           </div>
         </div>
-      </section>
-      {/* Profile modal removed */}
+      )}
     </div>
   );
 };

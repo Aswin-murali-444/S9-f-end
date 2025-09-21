@@ -6,10 +6,12 @@ import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/AdminLayout';
 import { apiService } from '../../services/api';
 import { supabase } from '../../hooks/useAuth';
+import { useSearch } from '../../contexts/SearchContext';
 import './AdminPages.css';
 
 const CategoriesPage = () => {
   const navigate = useNavigate();
+  const { searchQuery, searchResults } = useSearch();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -138,6 +140,31 @@ const CategoriesPage = () => {
     return 'status-badge inactive';
   };
 
+  // Filter categories based on search query
+  const filteredCategories = useMemo(() => {
+    let filtered = [];
+    
+    if (!searchQuery.trim()) {
+      filtered = categories;
+    } else if (searchResults.length > 0) {
+      // If we have search results from the context, use them
+      filtered = searchResults;
+    } else {
+      // Otherwise, filter locally
+      filtered = categories.filter(cat => 
+        cat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (cat.description && cat.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    }
+    
+    // Sort categories by name alphabetically
+    return filtered.sort((a, b) => {
+      const nameA = (a.name || '').toLowerCase();
+      const nameB = (b.name || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  }, [categories, searchQuery, searchResults]);
+
   return (
     <AdminLayout>
       <motion.div className="admin-page-content" initial="hidden" animate="visible" variants={containerVariants}>
@@ -163,10 +190,14 @@ const CategoriesPage = () => {
                 <div className="header-cell">Actions</div>
               </div>
               <div className="table-body">
-                {categories.length === 0 && (
-                  <div className="table-row"><div className="table-cell" style={{ gridColumn: '1 / -1' }}>No categories</div></div>
+                {filteredCategories.length === 0 && (
+                  <div className="table-row">
+                    <div className="table-cell" style={{ gridColumn: '1 / -1' }}>
+                      {searchQuery ? `No categories found for "${searchQuery}"` : 'No categories'}
+                    </div>
+                  </div>
                 )}
-                {categories.map(cat => (
+                {filteredCategories.map(cat => (
                   <div key={cat.id} className="table-row">
                     <div className="table-cell">
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

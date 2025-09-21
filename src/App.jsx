@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-route
 import { Toaster } from 'react-hot-toast';
 import QueryProvider from './providers/QueryProvider';
 import { AuthProvider } from './hooks/useAuth';
+import { SearchProvider } from './contexts/SearchContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';
 import Header from './components/Header';
@@ -251,9 +252,11 @@ function App() {
     <ErrorBoundary>
       <QueryProvider>
         <AuthProvider>
-          <Router>
-            <AppShell />
-          </Router>
+          <SearchProvider>
+            <Router>
+              <AppShell />
+            </Router>
+          </SearchProvider>
         </AuthProvider>
       </QueryProvider>
     </ErrorBoundary>

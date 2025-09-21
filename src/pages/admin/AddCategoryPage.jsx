@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, Save, X } from 'lucide-react';
+import { Upload, Save, X, Bell, Sun, Moon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../services/api';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/AdminLayout';
+import { useSearch } from '../../contexts/SearchContext';
 import './AdminPages.css';
 // Using backend upload endpoint for storage write
 
 const AddCategoryPage = () => {
   const navigate = useNavigate();
+  const { searchQuery, searchResults } = useSearch();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -22,6 +24,25 @@ const AddCategoryPage = () => {
   const [nameError, setNameError] = useState('');
   const [nameAvailable, setNameAvailable] = useState(false);
   const [iconError, setIconError] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
+  // Mock notifications data
+  const notifications = [
+    { id: 1, type: 'security', title: 'Security Alert', message: 'Failed login attempts detected', severity: 'high', timestamp: '2 min ago' },
+    { id: 2, type: 'performance', title: 'Performance', message: 'High CPU usage detected', severity: 'medium', timestamp: '5 min ago' },
+    { id: 3, type: 'system', title: 'System', message: 'Backup completed successfully', severity: 'low', timestamp: '10 min ago' }
+  ];
+
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+    // Apply dark mode class to document
+    if (!isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   // Live validate category name (length, characters, uniqueness)
   useEffect(() => {
@@ -213,7 +234,76 @@ const AddCategoryPage = () => {
             <h1>Add Service Category</h1>
             <p>Create a new service category for your platform</p>
           </div>
+          
         </motion.div>
+
+        {/* Search Results - Show existing categories when searching */}
+        {searchQuery && (
+          <motion.div className="search-results-section" variants={itemVariants}>
+            <div className="search-results-header">
+              <h3>
+                {searchResults.length > 0 
+                  ? `Existing Categories (${searchResults.length})` 
+                  : 'No Categories Found'
+                }
+              </h3>
+              <p>
+                {searchResults.length > 0 
+                  ? `Categories matching your search: "${searchQuery}"`
+                  : `No categories found for "${searchQuery}"`
+                }
+              </p>
+            </div>
+            {searchResults.length > 0 ? (
+              <div className="categories-grid">
+                {searchResults
+                  .sort((a, b) => {
+                    // Sort by name alphabetically
+                    const nameA = (a.name || '').toLowerCase();
+                    const nameB = (b.name || '').toLowerCase();
+                    return nameA.localeCompare(nameB);
+                  })
+                  .map((category, index) => (
+                    <div key={index} className="category-card">
+                      <div className="category-info">
+                        <div className="category-header">
+                          {category.icon_url && (
+                            <div className="category-icon">
+                              <img 
+                                src={category.icon_url} 
+                                alt={category.name}
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
+                            </div>
+                          )}
+                          <h4>{category.name}</h4>
+                        </div>
+                        {category.description && (
+                          <p className="category-description">{category.description}</p>
+                        )}
+                        {category.formattedDuration && (
+                          <div className="category-duration">Duration: {category.formattedDuration}</div>
+                        )}
+                      </div>
+                      <div className="category-status">
+                        <span className={`status-badge ${category.status}`}>
+                          {category.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <div className="no-results-message">
+                <div className="no-results-icon">🔍</div>
+                <div className="no-results-text">
+                  <h4>No categories found for "{searchQuery}"</h4>
+                  <p>This might be a new category you can create, or try adjusting your search terms</p>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* Form */}
         <motion.form 

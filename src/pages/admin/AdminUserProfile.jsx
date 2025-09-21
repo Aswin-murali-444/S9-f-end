@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { apiService } from '../../services/api';
 import Logo from '../../components/Logo';
-import { Users, Settings, Target, Activity, DollarSign, Star, Server, Shield, PieChart, MapPin, Mail, Phone, User as UserIcon } from 'lucide-react';
+import { Users, Settings, Target, Activity, DollarSign, Star, Server, Shield, PieChart, MapPin, Mail, Phone, User as UserIcon, ArrowLeft, Calendar, Clock, ShieldCheck } from 'lucide-react';
 import '../dashboards/SharedDashboard.css';
 import '../dashboards/AdminDashboard.css';
+import '../HomePage.css';
 
 const AdminUserProfile = () => {
   const { userId } = useParams();
@@ -120,139 +122,162 @@ const AdminUserProfile = () => {
   }, [userId]);
 
   const Header = () => (
-    <section className="dashboard-header">
+    <section className="hero-section" style={{ padding: '60px 0 40px', background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)' }}>
       <div className="container">
-        <div className="header-content">
-          <div className="welcome-section">
+        <motion.div 
+          className="header-content"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        >
+          <div className="welcome-section" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <Logo size="medium" />
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#1e293b' }}>User Profile</h1>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>Manage user details and settings</p>
+            </div>
           </div>
-          <div className="header-actions">
-            <button className="btn-secondary" onClick={() => navigate('/dashboard/admin')}>Admin Dashboard</button>
-            <button className="btn-primary" onClick={() => navigate(-1)}>Back</button>
+          <div className="header-actions" style={{ display: 'flex', gap: '12px' }}>
+            <button className="btn-secondary btn-animate" onClick={() => navigate('/dashboard/admin')}>
+              <Users size={16} />
+              Admin Dashboard
+            </button>
+            <button className="btn-primary btn-animate" onClick={() => navigate(-1)}>
+              <ArrowLeft size={16} />
+              Back
+            </button>
           </div>
-        </div>
+        </motion.div>
       </div>
     </section>
   );
 
-  const Sidebar = () => (
-    <aside className="dashboard-sidebar">
-      <nav className="sidebar-nav">
-        {navItems.map(item => (
-          <button
-            key={item.key}
-            className={`nav-item ${item.key === 'users' ? 'active' : ''}`}
-            onClick={() => navigate(`/dashboard/admin?tab=${encodeURIComponent(item.key)}`)}
-          >
-            <item.icon size={18} />
-            {item.label}
-          </button>
-        ))}
-        <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '8px 0' }} />
-      </nav>
-    </aside>
-  );
 
   const ProfileContent = () => (
-    <div className="tab-content">
-      <div className="users-tab">
-        <div className="users-header" style={{ justifyContent: 'space-between' }}>
-          <h3>{user.name || user.email}</h3>
-          <button className="btn-secondary" onClick={() => navigate(-1)}>Back</button>
-        </div>
+    <div className="services-overview" style={{ padding: '40px 0' }}>
+      <div className="container">
+        <motion.div 
+          className="section-header fade-in-up"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          style={{ textAlign: 'center', marginBottom: '40px' }}
+        >
+          <span className="section-badge animate-bounce-in">👤 User Profile</span>
+          <h2 style={{ margin: '16px 0', fontSize: '2.5rem', fontWeight: 700, color: '#1e293b' }}>
+            {user.name || user.email}
+          </h2>
+          <p style={{ color: '#64748b', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto' }}>
+            Complete user information and account details
+          </p>
+        </motion.div>
 
-        <div className="admin-forms-grid">
-          <div className="admin-form-card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div className="card-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <UserIcon size={18} />
-              <h4 style={{ margin: 0 }}>Profile</h4>
+        <div className="services-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
+          {/* Profile Card */}
+          <motion.div 
+            className="service-category card-hover"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+          >
+            <div className="service-icon animate-float" style={{ marginBottom: '20px' }}>
+              <UserIcon size={32} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 24, alignItems: 'center' }}>
-              <div className="user-avatar" style={{ width: 124, height: 128, borderWidth: 4, margin: '0 auto' }}>
+            <h3 style={{ marginBottom: '20px', fontSize: '1.5rem', fontWeight: 600 }}>Personal Information</h3>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px', padding: '20px', backgroundColor: '#f8fafc', borderRadius: '12px' }}>
+              <div className="user-avatar" style={{ width: '80px', height: '80px', borderWidth: 3, margin: 0 }}>
                 {typeof user.avatar === 'string' && /^https?:\/\//i.test(user.avatar) ? (
                   <img src={user.avatar} alt={user.name} />
                 ) : (
                   (user.name || user.email || 'NA').split(' ').filter(Boolean).map(p => p[0]).slice(0,2).join('').toUpperCase()
                 )}
               </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <div style={{ fontWeight: 800, fontSize: 20 }}>{user.name || user.email}</div>
-                  <span className={`status-badge ${user.status || 'active'}`}>{user.status || 'active'}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                  <h4 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>{user.name || user.email}</h4>
+                  <span className={`status-badge ${user.status || 'active'}`} style={{ fontSize: '0.75rem', padding: '4px 8px' }}>
+                    {user.status || 'active'}
+                  </span>
                 </div>
-                <div title={user.email} style={{ color: '#64748b', marginTop: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{user.email}</div>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>{user.email}</p>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 20 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>First Name</label>
-                <div>{user.profile?.first_name || '—'}</div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Last Name</label>
-                <div>{user.profile?.last_name || '—'}</div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Gender</label>
-                <div>{user.profile?.gender || '—'}</div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Date of Birth</label>
-                <div>{user.profile?.date_of_birth || '—'}</div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Phone</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Phone size={14} /> {user.profile?.phone || '—'}
-                </div>
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Email</label>
-                <div title={user.email} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, maxWidth: '100%' }}>
-                  <Mail size={14} />
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email || '—'}</span>
-                </div>
-              </div>
-            </div>
-            {user.profile?.bio && (
-              <div style={{ marginTop: 6 }}>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Bio</label>
-                <div style={{ lineHeight: 1.6 }}>{user.profile.bio}</div>
-              </div>
-            )}
-          </div>
 
-          <div className="admin-form-card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div className="card-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <MapPin size={18} />
-              <h4 style={{ margin: 0 }}>Address & Locations</h4>
+            <ul className="service-list" style={{ textAlign: 'left', margin: 0, padding: 0, listStyle: 'none' }}>
+              <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#64748b' }}>First Name:</span>
+                <span style={{ fontWeight: 500 }}>{user.profile?.first_name || '—'}</span>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#64748b' }}>Last Name:</span>
+                <span style={{ fontWeight: 500 }}>{user.profile?.last_name || '—'}</span>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#64748b' }}>Date of Birth:</span>
+                <span style={{ fontWeight: 500 }}>{user.profile?.date_of_birth || '—'}</span>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#64748b' }}>Gender:</span>
+                <span style={{ fontWeight: 500 }}>{user.profile?.gender || '—'}</span>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#64748b' }}>Phone:</span>
+                <span style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Phone size={14} />
+                  {user.profile?.phone || '—'}
+                </span>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                <span style={{ color: '#64748b' }}>Email:</span>
+                <span style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Mail size={14} />
+                  {user.email || '—'}
+                </span>
+              </li>
+            </ul>
+          </motion.div>
+
+          {/* Address Card */}
+          <motion.div 
+            className="service-category card-hover"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+          >
+            <div className="service-icon animate-float" style={{ marginBottom: '20px' }}>
+              <MapPin size={32} />
             </div>
+            <h3 style={{ marginBottom: '20px', fontSize: '1.5rem', fontWeight: 600 }}>Address & Locations</h3>
+            
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 20 }}>
               <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Address</label>
-                <div style={{ lineHeight: 1.6 }}>{user.profile?.address || '—'}</div>
+                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>Address</label>
+                <div style={{ lineHeight: 1.6, padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.address || '—'}</div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>City</label>
-                <div>{user.profile?.city || '—'}</div>
+                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>City</label>
+                <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.city || '—'}</div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>State</label>
-                <div>{user.profile?.state || '—'}</div>
+                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>State</label>
+                <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.state || '—'}</div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Country</label>
-                <div>{user.profile?.country || '—'}</div>
+                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>Country</label>
+                <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.country || '—'}</div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Postal Code</label>
-                <div>{user.profile?.postal_code || '—'}</div>
+                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: '8px' }}>Postal Code</label>
+                <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>{user.profile?.postal_code || '—'}</div>
               </div>
             </div>
+            
             {Array.isArray(user.locations) && user.locations.length > 0 && (
-              <div>
+              <div style={{ marginTop: '20px' }}>
                 <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 8 }}>Saved Locations</label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
                   {user.locations.map((loc, idx) => (
                     <a
                       key={`${loc.label}-${idx}`}
@@ -265,7 +290,8 @@ const AdminUserProfile = () => {
                         alignItems: 'center',
                         gap: 8,
                         padding: '12px 14px',
-                        textDecoration: 'none'
+                        textDecoration: 'none',
+                        borderRadius: '8px'
                       }}
                     >
                       <MapPin size={16} />
@@ -280,34 +306,47 @@ const AdminUserProfile = () => {
                 </div>
               </div>
             )}
-          </div>
+          </motion.div>
 
-          <div className="admin-form-card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div className="card-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Shield size={18} />
-              <h4 style={{ margin: 0 }}>Account</h4>
+          {/* Account Card */}
+          <motion.div 
+            className="service-category card-hover"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+          >
+            <div className="service-icon animate-float" style={{ marginBottom: '20px' }}>
+              <ShieldCheck size={32} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 20 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Role</label>
-                <div>{user.role || '—'}</div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Status</label>
-                <div>
-                  <span className={`status-badge ${user.status || 'active'}`}>{user.status || 'active'}</span>
-                </div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Created</label>
-                <div>{user.created_at ? new Date(user.created_at).toLocaleString() : '—'}</div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b' }}>Last Updated</label>
-                <div>{user.updated_at ? new Date(user.updated_at).toLocaleString() : '—'}</div>
-              </div>
-            </div>
-          </div>
+            <h3 style={{ marginBottom: '20px', fontSize: '1.5rem', fontWeight: 600 }}>Account Information</h3>
+            
+            <ul className="service-list" style={{ textAlign: 'left', margin: 0, padding: 0, listStyle: 'none' }}>
+              <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#64748b' }}>Role:</span>
+                <span style={{ fontWeight: 500 }}>{user.role || '—'}</span>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#64748b' }}>Status:</span>
+                <span className={`status-badge ${user.status || 'active'}`} style={{ fontSize: '0.75rem', padding: '4px 8px' }}>
+                  {user.status || 'active'}
+                </span>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>
+                <span style={{ color: '#64748b' }}>Created:</span>
+                <span style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Calendar size={14} />
+                  {user.created_at ? new Date(user.created_at).toLocaleDateString() : '—'}
+                </span>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                <span style={{ color: '#64748b' }}>Last Updated:</span>
+                <span style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Clock size={14} />
+                  {user.updated_at ? new Date(user.updated_at).toLocaleDateString() : '—'}
+                </span>
+              </li>
+            </ul>
+          </motion.div>
         </div>
       </div>
     </div>
@@ -315,26 +354,35 @@ const AdminUserProfile = () => {
 
   if (loading) {
     return (
-      <div className="admin-dashboard">
+      <div className="home-page">
         <Header />
-        <section className="dashboard-content">
+        <div className="services-overview" style={{ padding: '40px 0' }}>
           <div className="container">
-            <div>Loading…</div>
+            <div style={{ textAlign: 'center', padding: '60px 0' }}>
+              <div className="spinner" style={{ margin: '0 auto 20px' }}></div>
+              <p style={{ color: '#64748b', fontSize: '1.1rem' }}>Loading user profile...</p>
+            </div>
           </div>
-        </section>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="admin-dashboard">
+      <div className="home-page">
         <Header />
-        <section className="dashboard-content">
+        <div className="services-overview" style={{ padding: '40px 0' }}>
           <div className="container">
-            <div>{error}</div>
+            <div style={{ textAlign: 'center', padding: '60px 0' }}>
+              <div style={{ color: '#ef4444', fontSize: '1.1rem', marginBottom: '20px' }}>❌ Error</div>
+              <p style={{ color: '#64748b', fontSize: '1rem' }}>{error}</p>
+              <button className="btn-primary btn-animate" onClick={() => window.location.reload()} style={{ marginTop: '20px' }}>
+                Try Again
+              </button>
+            </div>
           </div>
-        </section>
+        </div>
       </div>
     );
   }
@@ -342,16 +390,9 @@ const AdminUserProfile = () => {
   if (!user) return null;
 
   return (
-    <div className="admin-dashboard">
+    <div className="home-page">
       <Header />
-      <section className="dashboard-content">
-        <div className="container">
-          <div className="dashboard-layout">
-            <Sidebar />
-            <ProfileContent />
-          </div>
-        </div>
-      </section>
+      <ProfileContent />
     </div>
   );
 };
