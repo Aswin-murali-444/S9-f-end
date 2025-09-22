@@ -121,10 +121,8 @@ const EditServicePage = () => {
           newErrors.name = 'Service name must be at least 2 characters';
         } else if (value.trim().length > 200) {
           newErrors.name = 'Service name must be less than 200 characters';
-        } else if (/\d/.test(value.trim())) {
-          newErrors.name = 'Service name cannot contain numbers';
-        } else if (!/^[a-zA-Z\s\-&.,()]+$/.test(value.trim())) {
-          newErrors.name = 'Service name can only contain letters, spaces, hyphens, ampersands, commas, periods, and parentheses';
+        } else if (!/^[a-zA-Z0-9\s\-&.,()]+$/.test(value.trim())) {
+          newErrors.name = 'Service name can only contain letters, numbers, spaces, hyphens, ampersands, commas, periods, and parentheses';
         } else if (value.trim().startsWith(' ') || value.trim().endsWith(' ')) {
           newErrors.name = 'Service name cannot start or end with spaces';
         } else if (/\s{2,}/.test(value.trim())) {
@@ -141,7 +139,9 @@ const EditServicePage = () => {
         }
         break;
       case 'duration':
-        if (value && value.trim().length > 100) {
+        if (!value || value.trim() === '') {
+          newErrors.duration = 'Please select a duration or choose Custom';
+        } else if (value && value.trim().length > 100) {
           newErrors.duration = 'Duration must be less than 100 characters';
         } else if (value && value.trim().startsWith(' ')) {
           newErrors.duration = 'Duration cannot start with spaces';
@@ -420,18 +420,17 @@ const EditServicePage = () => {
     };
     setTouched(allTouched);
     
-    // Validate all fields
-    const isCategoryValid = validateField('categoryId', formData.categoryId);
-    const isNameValid = validateField('name', formData.name);
-    const isDescriptionValid = validateField('description', formData.description);
-    const isDurationValid = validateField('duration', formData.duration);
-    const isCustomDurationValid = validateField('customDuration', formData.customDuration);
-    const isPriceValid = validateField('price', formData.price);
-    const isOfferPriceValid = validateField('offerPrice', formData.offerPrice);
-    const isOfferPercentageValid = validateField('offerPercentage', formData.offerPercentage);
-    
-    if (!isCategoryValid || !isNameValid || !isDescriptionValid || !isDurationValid || !isCustomDurationValid || !isPriceValid || !isOfferPriceValid || !isOfferPercentageValid) {
-      return; // Don't submit if there are validation errors
+    // Minimal required validation to prevent false blocks when only duration changes
+    const resolvedDuration = formData.duration === 'custom' ? formData.customDuration : formData.duration;
+    const hasCategory = Boolean(formData.categoryId && formData.categoryId.trim());
+    const hasName = Boolean(formData.name && formData.name.trim().length >= 2 && formData.name.trim().length <= 200);
+    const hasDuration = Boolean(resolvedDuration && String(resolvedDuration).trim());
+    const priceValue = formData.price && formData.price.trim() !== '' ? parseFloat(formData.price) : NaN;
+    const hasPrice = !Number.isNaN(priceValue) && priceValue >= 0;
+
+    if (!hasCategory || !hasName || !hasDuration || !hasPrice) {
+      toast.error('Please complete required fields: category, name, duration, price');
+      return;
     }
     
     setIsSubmitting(true);
@@ -452,6 +451,11 @@ const EditServicePage = () => {
         iconMimeType: iconFile?.type || null
       };
       
+      // Safety: ensure duration is non-empty
+      if (!serviceData.duration || String(serviceData.duration).trim() === '') {
+        throw new Error('Duration cannot be empty');
+      }
+
       await apiService.updateService(id, serviceData);
       toast.success('Service updated successfully!');
       

@@ -39,6 +39,8 @@ const ServicesPage = () => {
   };
 
   const toggleSuspend = async (svc) => {
+    // If we're in delete confirmation for this row, ignore suspend clicks
+    if (confirmingId === svc.id) return;
     try {
       const isSuspended = svc.active === false;
       
@@ -122,7 +124,7 @@ const ServicesPage = () => {
           {loading ? (
             <div style={{ padding: '1rem' }}>Loading…</div>
           ) : (
-            <div className="list-table">
+            <div className="list-table services-table">
               <div className="table-header">
                 <div className="header-cell">Service</div>
                 <div className="header-cell">Category</div>
@@ -165,12 +167,12 @@ const ServicesPage = () => {
                         </div>
                       ) : (
                         <>
-                          <button className="btn-icon" title="Edit" onClick={() => openEdit(svc)}><Edit size={16} /></button>
-                          <button className="btn-icon danger" title="Delete" onClick={() => setConfirmingId(svc.id)}><Trash2 size={16} /></button>
+                          <button className="btn-icon" title="Edit" onClick={(e) => { e.stopPropagation(); openEdit(svc); }}><Edit size={16} /></button>
+                          <button className="btn-icon danger" title="Delete" onClick={(e) => { e.stopPropagation(); setConfirmingId(svc.id); }}><Trash2 size={16} /></button>
                           {svc.active === false ? (
-                            <button className="btn-icon success" title="Activate" onClick={() => toggleSuspend(svc)}><RotateCcw size={16} /></button>
+                            <button className="btn-icon success" title="Activate" onClick={(e) => { e.stopPropagation(); toggleSuspend(svc); }}><RotateCcw size={16} /></button>
                           ) : (
-                            <button className="btn-icon warning" title="Suspend" onClick={() => toggleSuspend(svc)}><Ban size={16} /></button>
+                            <button className="btn-icon warning" title="Suspend" onClick={(e) => { e.stopPropagation(); toggleSuspend(svc); }}><Ban size={16} /></button>
                           )}
                         </>
                       )}

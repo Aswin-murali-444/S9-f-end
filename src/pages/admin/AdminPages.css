@@ -418,6 +418,19 @@ select::-ms-expand {
   position: relative;
 }
 
+/* Services table explicit grid so header and rows align */
+.services-table .table-header {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 0.8fr 0.9fr 0.8fr 1.2fr 1fr;
+  gap: 1rem;
+}
+
+.services-table .table-row {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 0.8fr 0.9fr 0.8fr 1.2fr 1fr;
+  gap: 1rem;
+}
+
 .upload-placeholder {
   display: flex;
   flex-direction: column;
@@ -469,8 +482,8 @@ select::-ms-expand {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #ef4444;
-  color: white;
+  background: #e5e7eb; /* neutral gray instead of red */
+  color: #374151;
   border: 2px solid white;
   cursor: pointer;
   display: flex;
@@ -481,26 +494,48 @@ select::-ms-expand {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
+/* CSS fallback cross to ensure visibility even if SVG fails */
+.remove-icon::before,
+.remove-icon::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.remove-icon::before {
+  transform: rotate(45deg);
+}
+
+.remove-icon::after {
+  transform: rotate(-45deg);
+}
+
 .remove-icon svg {
   width: 14px;
   height: 14px;
   stroke-width: 2.5;
+  stroke: currentColor; /* ensure icon uses button text color */
+  fill: none;
 }
 
 .remove-icon:hover {
-  background: #dc2626;
+  background: #d1d5db; /* slightly darker gray on hover */
   transform: scale(1.1);
 }
 
 /* Dark mode styles for remove icon */
 .dark .remove-icon {
-  background: #ef4444;
+  background: #475569; /* slate gray in dark mode */
+  color: #f1f5f9;
   border-color: #1f2937;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
 .dark .remove-icon:hover {
-  background: #dc2626;
+  background: #334155;
 }
 
 /* Success state for form inputs */

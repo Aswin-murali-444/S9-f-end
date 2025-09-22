@@ -54,6 +54,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
+import AllServicesIcon from '../../components/AllServicesIcon';
 import Logo from '../../components/Logo';
 import CustomerProfileForm from '../../components/CustomerProfileForm';
 import './SharedDashboard.css';
@@ -191,14 +192,22 @@ const CustomerDashboard = () => {
         const data = await apiService.getCategories();
         if (isCancelled) return;
         const mapped = Array.isArray(data)
-          ? data.map((c) => ({
-              id: c.id,
-              name: c.name,
-              icon: iconForCategoryName(c.name),
-              imageUrl: c.icon_url || null,
-              // Use placeholder service list to show "4+ Services" UX until counts are wired
-              services: [1, 2, 3, 4]
-            }))
+          ? [
+              {
+                id: '__all__',
+                name: 'All',
+                icon: () => AllServicesIcon,
+                imageUrl: null,
+                services: [1, 2, 3, 4]
+              },
+              ...data.map((c) => ({
+                id: c.id,
+                name: c.name,
+                icon: iconForCategoryName(c.name),
+                imageUrl: c.icon_url || null,
+                services: [1, 2, 3, 4]
+              }))
+            ]
           : [];
         setCategories(mapped);
       } catch (e) {
@@ -529,7 +538,9 @@ const CustomerDashboard = () => {
                     </div>
                     <div className="categories-grid">
                       {categories.map(category => {
-                        const IconComponent = category.icon;
+                        const IconComponent = category.icon === AllServicesIcon || category.id === '__all__'
+                          ? AllServicesIcon
+                          : category.icon;
                         return (
                           <motion.div 
                             key={category.id} 
