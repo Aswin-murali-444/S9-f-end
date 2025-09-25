@@ -42,6 +42,7 @@ const CategoriesPage = lazy(() => import('./pages/admin/CategoriesPage'));
 const EditCategoryPage = lazy(() => import('./pages/admin/EditCategoryPage'));
 const AdminServicesPage = lazy(() => import('./pages/admin/ServicesPage'));
 const EditServicePage = lazy(() => import('./pages/admin/EditServicePage'));
+const DataDisplayPage = lazy(() => import('./pages/DataDisplayPage'));
 
 const Placeholder = ({ title }) => (
   <div style={{ minHeight: '50vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
@@ -81,6 +82,7 @@ function AppShell() {
                     <Route path="/services" element={<PublicOnlyRoute><ServicesPage /></PublicOnlyRoute>} />
                     <Route path="/about" element={<PublicOnlyRoute><AboutPage /></PublicOnlyRoute>} />
                     <Route path="/contact" element={<PublicOnlyRoute><ContactPage /></PublicOnlyRoute>} />
+                    <Route path="/data-display" element={<DataDisplayPage />} />
                     <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
                     <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
                     <Route path="/profile" element={<ProfilePage />} />

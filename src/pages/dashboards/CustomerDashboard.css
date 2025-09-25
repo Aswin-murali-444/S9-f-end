@@ -1,4 +1,187 @@
 /* Customer Dashboard Styles - Flipkart Model with Admin Colors */
+
+/* Loading and empty states */
+.loading-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+.no-services {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #64748b;
+  text-align: center;
+}
+
+.no-services p {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.service-description {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0.25rem 0;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-height: 2.8em;
+}
+
+.duration-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: #334155;
+  margin: 0.5rem 0 0.25rem 0;
+  font-weight: 600;
+}
+
+/* Clarify relation between price and duration */
+.price-row + .duration-row,
+.duration-row + .price-row {
+  margin-top: 0.5rem;
+}
+
+.duration-hint {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+/* Services by Category Section */
+.services-by-category-section {
+  margin: 2rem 0;
+}
+
+.category-services-block {
+  margin-bottom: 3rem;
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.category-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.category-title {
+  display: flex;
+  align-items: center;
+}
+
+.category-title h4 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.category-title p {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.category-services-grid {
+  /* Deprecated in favor of .deals-grid for consistency */
+}
+
+.service-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.service-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  border-color: #4f9cf9;
+}
+
+.service-badge {
+  position: absolute;
+  top: -8px;
+  right: 12px;
+  background: #ef4444;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.service-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  height: 60px;
+}
+
+.service-content h5 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.service-duration {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: #64748b;
+  margin: 0.5rem 0;
+}
+
+.service-pricing {
+  margin: 1rem 0;
+}
+
+.service-pricing .current-price {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #059669;
+}
+
+.service-pricing .original-price {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  text-decoration: line-through;
+  margin-left: 0.5rem;
+}
+
+.service-book-btn {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.service-book-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(79, 156, 249, 0.3);
+}
 .customer-dashboard,
 .admin-dashboard {
   min-height: 100vh;
@@ -835,6 +1018,12 @@
 /* Notifications */
 .notifications-wrapper {
   position: relative;
+}
+
+.notifications-wrapper .btn-secondary svg {
+  color: #f59e0b;
+  fill: #f59e0b;
+  filter: drop-shadow(0 1px 2px rgba(245, 158, 11, 0.35));
 }
 
 .notification-badge {
@@ -2110,19 +2299,45 @@
 .marketplace-search-bar {
   display: flex;
   gap: 1rem;
-  max-width: 700px;
+  max-width: 600px;
   margin: 0 auto 1rem;
+  align-items: center;
+}
+
+.search-suggestions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem auto 0.25rem auto;
+  flex-wrap: wrap;
+  max-width: 700px;
+}
+
+.suggestion-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  font-weight: 600;
+}
+
+.suggestion-item:hover {
+  background: #e2e8f0;
 }
 
 .search-input-wrapper {
   flex: 1;
   display: flex;
   align-items: center;
-  background: #f8fafc;
+  background: #ffffff;
   border: 2px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 0 1rem;
+  border-radius: 999px;
+  padding: 0 0.25rem 0 0.75rem;
   transition: all 0.3s ease;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.04);
 }
 
 .search-input-wrapper:focus-within {
@@ -2132,17 +2347,100 @@
 
 .search-input-wrapper svg {
   color: #64748b;
-  margin-right: 0.75rem;
+  margin-right: 0.5rem;
 }
 
 .search-input-wrapper input {
   flex: 1;
   border: none;
   background: none;
-  padding: 1rem 0;
-  font-size: 1rem;
+  padding: 0.6rem 0;
+  font-size: 0.95rem;
   outline: none;
   color: #1e293b;
+}
+
+.search-input-wrapper .search-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: none;
+  background: #4f9cf9;
+  color: white;
+  margin: 0 2px 0 6px;
+  position: relative;
+}
+
+.search-input-wrapper .search-submit:hover {
+  background: #3b82f6;
+}
+
+.search-input-wrapper .search-submit svg {
+  margin: 0;
+  color: #ffffff !important;
+  width: 18px;
+  height: 18px;
+  display: block;
+  stroke: #ffffff !important;
+}
+
+/* Fallback: show unicode magnifier if SVG fails */
+.search-input-wrapper .search-submit::before {
+  content: '\1F50D';
+  position: absolute;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Search results tighten spacing so cards don't look oversized */
+.search-results .deals-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.search-results .deal-card {
+  min-height: 300px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+}
+
+/* Highlighted text in search results */
+mark.search-match {
+  background: #fff3c4;
+  color: #1f2937;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+/* Subtle accent for results section header */
+.search-results .section-header h3 {
+  display: inline-block;
+  padding-bottom: 4px;
+  border-bottom: 3px solid #4f9cf9;
+}
+
+/* Center the search results section and content */
+.search-results {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.search-results .section-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.search-results .duration-row,
+.search-results .price-row,
+.search-results .deal-actions {
+  justify-content: center;
 }
 
 .search-action {
@@ -2366,8 +2664,11 @@
 
 .deals-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  max-width: 100%;
+  padding: 1rem 0;
+  align-items: start;
 }
 
 .deal-card {
@@ -2378,6 +2679,11 @@
   text-align: center;
   position: relative;
   transition: all 0.3s ease;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
 }
 
 .deal-card:hover {
@@ -2410,11 +2716,175 @@
   color: #64748b;
 }
 
+.deal-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 0;
+}
+
 .deal-content h4 {
   font-size: 1.1rem;
   font-weight: 600;
   color: #1e293b;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.deal-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: auto;
+  justify-content: center;
+  flex-shrink: 0;
+  padding-top: 1rem;
+}
+
+.deal-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 100px;
+  justify-content: center;
+}
+
+.deal-btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.deal-btn-primary:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.deal-btn-secondary {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.deal-btn-secondary:hover {
+  background: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+.deal-btn-liked {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.deal-btn-liked:hover {
+  background: #fee2e2;
+}
+
+/* Service Actions Styles */
+.service-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.service-btn {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 80px;
+  justify-content: center;
+}
+
+.service-btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.service-btn-primary:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.service-btn-secondary {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.service-btn-secondary:hover {
+  background: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+.service-btn-liked {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.service-btn-liked:hover {
+  background: #fee2e2;
+}
+
+.service-btn-carted {
+  background: #10b981;
+  color: white;
+}
+
+.service-btn-carted:hover {
+  background: #059669;
+}
+
+.service-btn-book {
+  background: #8b5cf6;
+  color: white;
+}
+
+.service-btn-book:hover {
+  background: #7c3aed;
+  transform: translateY(-1px);
+}
+
+.deal-btn-carted {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.deal-btn-carted:hover {
+  background: #dcfce7;
+}
+
+.deal-btn-book {
+  background: #8b5cf6;
+  color: white;
+}
+
+.deal-btn-book:hover {
+  background: #7c3aed;
+  transform: translateY(-1px);
 }
 
 .provider-name {
@@ -2450,7 +2920,8 @@
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  margin-bottom: 1rem;
+  margin: 0.5rem 0;
+  flex-shrink: 0;
 }
 
 .current-price {

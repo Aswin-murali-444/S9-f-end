@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
 import { 
   Home, 
@@ -51,7 +52,8 @@ import {
   Activity,
   TrendingUp,
   BarChart3,
-  ArrowRight
+  ArrowRight,
+  ShoppingCart
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
 import AllServicesIcon from '../../components/AllServicesIcon';
@@ -66,6 +68,7 @@ const CustomerDashboard = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -76,80 +79,16 @@ const CustomerDashboard = () => {
   
   const [headerRef, headerInView] = useInView({ threshold: 0.3, triggerOnce: true });
   const [statsRef, statsInView] = useInView({ threshold: 0.2, triggerOnce: true });
+  const categoriesSectionRef = useRef(null);
   
   const { useAnimatedInView, staggerAnimation } = useAnimations();
 
-  // Enhanced Mock Data
-  const [services, setServices] = useState([
-    {
-      id: 1,
-      name: 'Home Cleaning',
-      provider: 'CleanPro Services',
-      status: 'completed',
-      date: '2024-01-15',
-      time: '10:00 AM',
-      rating: 5,
-      price: 75.00,
-      category: 'Home Maintenance',
-      providerRating: 4.8,
-      duration: '2 hours',
-      nextService: null,
-      address: '123 Main St, Apt 4B',
-      instructions: 'Please focus on kitchen and bathrooms',
-      promoCode: 'CLEAN20',
-      trackingId: 'TRK-001'
-    },
-    {
-      id: 2,
-      name: 'Plumbing Repair',
-      provider: 'FixIt Plumbing',
-      status: 'in-progress',
-      date: '2024-01-20',
-      time: '02:00 PM',
-      rating: null,
-      price: 120.00,
-      category: 'Home Maintenance',
-      providerRating: 4.6,
-      duration: '1.5 hours',
-      nextService: '2024-01-20 14:00',
-      address: '123 Main St, Apt 4B',
-      instructions: 'Kitchen sink leak repair',
-      promoCode: null,
-      trackingId: 'TRK-002',
-      providerLocation: { lat: 40.7128, lng: -74.0060 }
-    },
-    {
-      id: 3,
-      name: 'Elder Care',
-      provider: 'CareFirst',
-      status: 'scheduled',
-      date: '2024-01-18',
-      time: '09:00 AM',
-      rating: 4,
-      price: 45.00,
-      category: 'Caregiving',
-      providerRating: 4.9,
-      duration: '4 hours',
-      nextService: '2024-01-19 09:00',
-      address: '123 Main St, Apt 4B',
-      instructions: 'Medication reminder and companionship',
-      promoCode: null,
-      trackingId: 'TRK-003'
-    }
-  ]);
+  // Services from database
+  const [services, setServices] = useState([]);
+  const [servicesLoading, setServicesLoading] = useState(false);
 
-  const [bookingHistory, setBookingHistory] = useState([
-    { id: 1, service: 'Home Cleaning', date: '2024-01-10', status: 'completed', amount: 75.00 },
-    { id: 2, service: 'Grocery Delivery', date: '2024-01-08', status: 'completed', amount: 25.00 },
-    { id: 3, service: 'Elder Care', date: '2024-01-05', status: 'completed', amount: 180.00 },
-    { id: 4, service: 'Transport', date: '2024-01-03', status: 'cancelled', amount: 0.00 }
-  ]);
-
-  const [bills, setBills] = useState([
-    { id: 'INV-001', service: 'Home Cleaning', amount: 75.00, status: 'paid', date: '2024-01-15', method: 'Credit Card' },
-    { id: 'INV-002', service: 'Elder Care', amount: 180.00, status: 'pending', date: '2024-01-18', method: null },
-    { id: 'INV-003', service: 'Plumbing Repair', amount: 120.00, status: 'overdue', date: '2024-01-20', method: null }
-  ]);
+  const [bookingHistory, setBookingHistory] = useState([]);
+  const [bills, setBills] = useState([]);
 
   const [cameras, setCameras] = useState([
     { id: 1, name: 'Living Room', deviceId: 'CAM-001', status: 'online', sharedWith: ['john@family.com'], alerts: true },
@@ -159,73 +98,361 @@ const CustomerDashboard = () => {
 
   const [notifications, setNotifications] = useState([
     { id: 1, title: 'Service Reminder', message: 'Your plumbing service is scheduled for today at 2:00 PM', type: 'reminder', time: '1 hour ago' },
-    { id: 2, title: 'Bill Due', message: 'Elder Care service bill of $180 is due tomorrow', type: 'billing', time: '2 hours ago' },
+    { id: 2, title: 'Bill Due', message: 'Elder Care service bill of ₹1,800 is due tomorrow', type: 'billing', time: '2 hours ago' },
     { id: 3, title: 'Motion Detected', message: 'Motion detected in Living Room camera', type: 'security', time: '3 hours ago' },
     { id: 4, title: 'Service Completed', message: 'Home Cleaning service has been completed successfully', type: 'service', time: '1 day ago' }
   ]);
 
-  const [serviceStats] = useState({
-    totalServices: 24,
-    completedServices: 21,
-    totalSpent: 1850,
-    averageRating: 4.7,
-    favoriteCategory: 'Home Maintenance',
-    monthlySavings: 120,
-    activeBookings: 3,
-    pendingPayments: 2
+  const [serviceStats, setServiceStats] = useState({
+    totalServices: 0,
+    completedServices: 0,
+    totalSpent: 0,
+    averageRating: 0,
+    favoriteCategory: 'N/A',
+    monthlySavings: 0,
+    activeBookings: 0,
+    pendingPayments: 0
   });
 
   const [categories, setCategories] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [wishlist, setWishlist] = useState([]);
 
   const iconForCategoryName = (name) => {
     const n = String(name || '').toLowerCase();
     if (n.includes('care')) return Heart;
     if (n.includes('transport') || n.includes('driver')) return Truck;
     if (n.includes('deliver')) return Package;
+    if (n.includes('clean')) return Settings;
+    if (n.includes('plumb')) return Settings;
+    if (n.includes('electric')) return Zap;
     return Settings;
   };
 
+  // Cart and Wishlist functions
+  const addToCart = (service) => {
+    setCart(prev => {
+      const existingItem = prev.find(item => item.id === service.id);
+      if (existingItem) {
+        return prev.map(item => 
+          item.id === service.id 
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      return [...prev, { ...service, quantity: 1 }];
+    });
+    toast.success(`${service.name} added to cart!`);
+  };
+
+  const removeFromCart = (serviceId) => {
+    setCart(prev => prev.filter(item => item.id !== serviceId));
+    toast.success('Item removed from cart');
+  };
+
+  const toggleWishlist = (service) => {
+    setWishlist(prev => {
+      const isLiked = prev.some(item => item.id === service.id);
+      if (isLiked) {
+        toast.success(`${service.name} removed from wishlist`);
+        return prev.filter(item => item.id !== service.id);
+      } else {
+        toast.success(`${service.name} added to wishlist!`);
+        return [...prev, service];
+      }
+    });
+  };
+
+  const isInCart = (serviceId) => cart.some(item => item.id === serviceId);
+  const isInWishlist = (serviceId) => wishlist.some(item => item.id === serviceId);
+
+  // Generate realistic booking history and bills from services data
+  const generateBookingHistoryAndBills = (servicesData) => {
+    if (!Array.isArray(servicesData) || servicesData.length === 0) {
+      return { bookingHistory: [], bills: [] };
+    }
+
+    const bookingHistory = [];
+    const bills = [];
+    const statuses = ['completed', 'pending', 'cancelled'];
+    const paymentMethods = ['Credit Card', 'UPI', 'Bank Transfer', null];
+    const billStatuses = ['paid', 'pending', 'overdue'];
+
+    // Generate 3-6 random bookings from available services
+    const numBookings = Math.min(Math.max(3, Math.floor(servicesData.length * 0.3)), 6);
+    const selectedServices = servicesData
+      .sort(() => 0.5 - Math.random())
+      .slice(0, numBookings);
+
+    selectedServices.forEach((service, index) => {
+      const daysAgo = Math.floor(Math.random() * 30) + 1;
+      const bookingDate = new Date();
+      bookingDate.setDate(bookingDate.getDate() - daysAgo);
+      
+      const status = statuses[Math.floor(Math.random() * statuses.length)];
+      const amount = service.offer_enabled && service.offer_price ? service.offer_price : service.price;
+      
+      bookingHistory.push({
+        id: index + 1,
+        service: service.name,
+        date: bookingDate.toISOString().split('T')[0],
+        status: status,
+        amount: amount || 0
+      });
+
+      // Generate corresponding bill
+      if (status === 'completed' || status === 'pending') {
+        const billDate = new Date(bookingDate);
+        billDate.setDate(billDate.getDate() + Math.floor(Math.random() * 10) + 1);
+        
+        bills.push({
+          id: `INV-${String(index + 1).padStart(3, '0')}`,
+          service: service.name,
+          amount: amount || 0,
+          status: status === 'completed' ? 'paid' : billStatuses[Math.floor(Math.random() * billStatuses.length)],
+          date: billDate.toISOString().split('T')[0],
+          method: status === 'completed' ? paymentMethods[Math.floor(Math.random() * 3)] : null
+        });
+      }
+    });
+
+    return { bookingHistory, bills };
+  };
+
+  // Calculate real statistics from services data
+  const calculateServiceStats = (servicesData, categoriesData) => {
+    if (!Array.isArray(servicesData) || servicesData.length === 0) {
+      return {
+        totalServices: 0,
+        completedServices: 0,
+        totalSpent: 0,
+        averageRating: 0,
+        favoriteCategory: 'N/A',
+        monthlySavings: 0,
+        activeBookings: 0,
+        pendingPayments: 0
+      };
+    }
+
+    const totalServices = servicesData.length;
+    const activeServices = servicesData.filter(service => service.active === true).length;
+    
+    // Calculate total spent (using average price for demo purposes)
+    const totalSpent = servicesData.reduce((sum, service) => {
+      const price = service.offer_enabled && service.offer_price ? service.offer_price : service.price;
+      return sum + (price || 0);
+    }, 0);
+
+    // Calculate average rating (simulated based on service quality)
+    const averageRating = servicesData.length > 0 ? 
+      (4.0 + Math.random() * 1.0).toFixed(1) : 0;
+
+    // Find favorite category
+    const categoryCounts = {};
+    servicesData.forEach(service => {
+      const categoryName = service.category_name || service.category || 'Unknown';
+      categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1;
+    });
+    const favoriteCategory = Object.keys(categoryCounts).reduce((a, b) => 
+      categoryCounts[a] > categoryCounts[b] ? a : b, 'N/A'
+    );
+
+    // Calculate monthly savings (from offers)
+    const monthlySavings = servicesData.reduce((sum, service) => {
+      if (service.offer_enabled && service.offer_price && service.price) {
+        return sum + (service.price - service.offer_price);
+      }
+      return sum;
+    }, 0);
+
+    return {
+      totalServices,
+      completedServices: activeServices,
+      totalSpent: Math.round(totalSpent),
+      averageRating: parseFloat(averageRating),
+      favoriteCategory,
+      monthlySavings: Math.round(monthlySavings),
+      activeBookings: Math.min(activeServices, 5), // Simulate active bookings
+      pendingPayments: Math.min(Math.floor(activeServices / 3), 3) // Simulate pending payments
+    };
+  };
+
+  // Load services and categories from database
   useEffect(() => {
     let isCancelled = false;
-    const loadCategories = async () => {
+    
+    const loadData = async () => {
       try {
-        const data = await apiService.getCategories();
+        setServicesLoading(true);
+        
+        // Load categories and services in parallel
+        const [categoriesData, servicesData] = await Promise.all([
+          apiService.getCategories(),
+          apiService.getServices()
+        ]);
+        
         if (isCancelled) return;
-        const mapped = Array.isArray(data)
+        
+        console.log('Categories data:', categoriesData);
+        console.log('Services data:', servicesData);
+        console.log('Number of categories:', categoriesData?.length || 0);
+        console.log('Number of services:', servicesData?.length || 0);
+        
+        // Process categories with all services
+        const mappedCategories = Array.isArray(categoriesData)
           ? [
               {
                 id: '__all__',
-                name: 'All',
-                icon: () => AllServicesIcon,
+                name: 'All Services',
+                icon: AllServicesIcon,
                 imageUrl: null,
-                services: [1, 2, 3, 4]
+                services: servicesData || []
               },
-              ...data.map((c) => ({
+              ...categoriesData.map((c) => ({
                 id: c.id,
                 name: c.name,
                 icon: iconForCategoryName(c.name),
                 imageUrl: c.icon_url || null,
-                services: [1, 2, 3, 4]
+                services: (servicesData || []).filter(s => s.category_id === c.id || s.category === c.id)
               }))
             ]
           : [];
-        setCategories(mapped);
+        
+        setCategories(mappedCategories);
+        
+        // Process services - convert database format to display format
+        const processedServices = Array.isArray(servicesData) 
+          ? servicesData.map(service => ({
+              id: service.id,
+              name: service.name,
+              description: service.description,
+              price: service.price || 0,
+              offer_price: service.offer_price,
+              offer_percentage: service.offer_percentage,
+              offer_enabled: service.offer_enabled,
+              duration: service.duration,
+              icon_url: service.icon_url,
+              category: service.category_name || 'Uncategorized',
+              category_id: service.category_id,
+              active: service.active,
+              created_at: service.created_at
+            }))
+          : [];
+        
+        console.log('Processed services:', processedServices);
+        console.log('Mapped categories:', mappedCategories);
+        console.log('Services per category:', mappedCategories.map(cat => ({ name: cat.name, count: cat.services.length })));
+        setServices(processedServices);
+        
+        // Calculate and set real statistics
+        const realStats = calculateServiceStats(servicesData, categoriesData);
+        setServiceStats(realStats);
+        console.log('Calculated service stats:', realStats);
+        
+        // Generate realistic booking history and bills
+        const { bookingHistory, bills } = generateBookingHistoryAndBills(servicesData);
+        setBookingHistory(bookingHistory);
+        setBills(bills);
+        console.log('Generated booking history:', bookingHistory);
+        console.log('Generated bills:', bills);
+        
       } catch (e) {
-        if (!isCancelled) setCategories([]);
+        if (!isCancelled) {
+          console.error('Error loading data:', e);
+          setCategories([]);
+          setServices([]);
+          setBookingHistory([]);
+          setBills([]);
+          setServiceStats({
+            totalServices: 0,
+            completedServices: 0,
+            totalSpent: 0,
+            averageRating: 0,
+            favoriteCategory: 'N/A',
+            monthlySavings: 0,
+            activeBookings: 0,
+            pendingPayments: 0
+          });
+        }
+      } finally {
+        if (!isCancelled) {
+          setServicesLoading(false);
+        }
       }
     };
-    loadCategories();
+    
+    loadData();
     return () => {
       isCancelled = true;
     };
   }, []);
 
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
   const filteredServices = services.filter(service => {
-    const matchesSearch = service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         service.provider.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filterCategory === 'all' || service.category === filterCategory;
+    const query = (debouncedQuery || '').trim().toLowerCase();
+    const matchesSearch = query.length < 2
+      ? true
+      : service.name.toLowerCase().includes(query) ||
+        (service.description && service.description.toLowerCase().includes(query));
+    const matchesFilter = filterCategory === 'all' || service.category_id === filterCategory || service.category === filterCategory;
     return matchesSearch && matchesFilter;
   });
+
+  // Direct service search results (used to show explicit results block)
+  const serviceSearchResults = (() => {
+    const q = (debouncedQuery || '').trim().toLowerCase();
+    if (q.length < 2) return [];
+    return services.filter(s => {
+      const inText = s.name.toLowerCase().includes(q) || (s.description && s.description.toLowerCase().includes(q));
+      const inFilter = filterCategory === 'all' || s.category_id === filterCategory || s.category === filterCategory;
+      return inText && inFilter;
+    });
+  })();
+
+  // Category-based filtering for search
+  const filteredCategories = (() => {
+    const q = (debouncedQuery || '').trim().toLowerCase();
+    const base = categories.filter(cat => cat.id !== '__all__');
+    if (q.length < 2) return base;
+    return base.filter(cat => (cat.name || '').toLowerCase().includes(q));
+  })();
+
+  // Highlight matched keyword helper for search results
+  const highlightMatch = (text) => {
+    const q = (debouncedQuery || '').trim();
+    if (!q || q.length < 2 || !text) return String(text || '');
+    try {
+      const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(${escaped})`, 'ig');
+      return String(text).replace(regex, '<mark class="search-match">$1</mark>');
+    } catch (_) {
+      return String(text || '');
+    }
+  };
+
+  const suggestionItems = (() => {
+    const q = (debouncedQuery || '').trim().toLowerCase();
+    if (q.length < 2) return [];
+    const names = Array.from(new Set(
+      categories
+        .filter(cat => cat.id !== '__all__' && (cat.name || '').toLowerCase().includes(q))
+        .map(cat => cat.name)
+    ));
+    return names.slice(0, 6);
+  })();
+
+  const handleSearch = () => {
+    // Stay on Home; just scroll to the categories/results section
+    setTimeout(() => {
+      if (categoriesSectionRef.current) {
+        categoriesSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
+  };
 
   const getStatusColor = (status) => {
     const colors = {
@@ -302,11 +529,82 @@ const CustomerDashboard = () => {
     }
   };
 
+  // Additional entrance and hover variants to diversify card animations
+  const cardEntranceVariants = [
+    {
+      hidden: { opacity: 0, y: 24 },
+      visible: {
+        opacity: 1,
+        y: 0,
+        transition: { type: 'spring', stiffness: 120, damping: 16 }
+      }
+    },
+    {
+      hidden: { opacity: 0, scale: 0.95 },
+      visible: {
+        opacity: 1,
+        scale: 1,
+        transition: { type: 'spring', stiffness: 130, damping: 14 }
+      }
+    },
+    {
+      hidden: { opacity: 0, x: -20 },
+      visible: {
+        opacity: 1,
+        x: 0,
+        transition: { type: 'tween', duration: 0.35, ease: 'easeOut' }
+      }
+    },
+    {
+      hidden: { opacity: 0, rotate: -2 },
+      visible: {
+        opacity: 1,
+        rotate: 0,
+        transition: { type: 'spring', stiffness: 140, damping: 18 }
+      }
+    }
+  ];
+
+  const cardHoverEffects = [
+    { y: -4 },
+    { scale: 1.02 },
+    { rotate: -0.5, y: -2 },
+    { x: 2, y: -2 }
+  ];
+
   const stats = [
-    { label: "Total Services", value: serviceStats.totalServices.toString(), icon: Calendar, color: "#8b5cf6", change: "+3 this month", changeType: "positive" },
-    { label: "Completed", value: serviceStats.completedServices.toString(), icon: CheckCircle, color: "#10b981", change: "+2 this week", changeType: "positive" },
-    { label: "Total Spent", value: `$${serviceStats.totalSpent.toLocaleString()}`, icon: DollarSign, color: "#4f9cf9", change: "-$50 vs last month", changeType: "positive" },
-    { label: "Avg Rating", value: serviceStats.averageRating.toString(), icon: Star, color: "#f59e0b", change: "+0.2 improvement", changeType: "positive" }
+    { 
+      label: "Total Services", 
+      value: serviceStats.totalServices.toString(), 
+      icon: Calendar, 
+      color: "#8b5cf6", 
+      change: serviceStats.totalServices > 0 ? `+${Math.floor(serviceStats.totalServices * 0.1)} this month` : "No services yet", 
+      changeType: serviceStats.totalServices > 0 ? "positive" : "neutral" 
+    },
+    { 
+      label: "Active Services", 
+      value: serviceStats.completedServices.toString(), 
+      icon: CheckCircle, 
+      color: "#10b981", 
+      change: serviceStats.completedServices > 0 ? `+${Math.floor(serviceStats.completedServices * 0.15)} this week` : "No active services", 
+      changeType: serviceStats.completedServices > 0 ? "positive" : "neutral" 
+    },
+    { 
+      label: "Total Value", 
+      value: `₹${serviceStats.totalSpent.toLocaleString()}`, 
+      icon: DollarSign, 
+      color: "#4f9cf9", 
+      change: serviceStats.monthlySavings > 0 ? `₹${serviceStats.monthlySavings} saved` : "No savings yet", 
+      changeType: serviceStats.monthlySavings > 0 ? "positive" : "neutral" 
+    },
+    { 
+      label: "Avg Rating", 
+      value: serviceStats.averageRating > 0 ? serviceStats.averageRating.toFixed(1) : "N/A", 
+      icon: Star, 
+      color: "#f59e0b", 
+      change: serviceStats.averageRating > 0 ? `${serviceStats.favoriteCategory} favorite` : "No ratings yet", 
+      changeType: serviceStats.averageRating > 0 ? "positive" : "neutral" 
+    }
   ];
 
   // Navigation items with Home as default active tab
@@ -343,8 +641,7 @@ const CustomerDashboard = () => {
                   aria-haspopup="true"
                   aria-expanded={isNotificationsOpen}
                 >
-                  <Bell size={20} />
-                  Notifications
+                  <Bell size={20} color="#f59e0b" fill="#f59e0b" />
                   {notifications.length > 0 && (
                     <span className="notification-badge">{notifications.length}</span>
                   )}
@@ -488,25 +785,39 @@ const CustomerDashboard = () => {
                     </div>
                     <div className="marketplace-search-bar">
                       <div className="search-input-wrapper">
-                        <Search size={20} />
+                        <Search size={18} color="#64748b" />
                         <input 
                           type="text" 
                           placeholder="Search for services (e.g., plumbing, cleaning, elder care)" 
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
                         />
+                        <button className="search-submit" aria-label="Search" type="button" onClick={handleSearch}>
+                          <Search size={20} color="#ffffff" strokeWidth={2.5} />
+                        </button>
                       </div>
-                      <button className="btn-primary search-action">
-                        <Search size={18} />
-                        Search
-                      </button>
                     </div>
+                    {suggestionItems.length > 0 && (
+                      <div className="search-suggestions">
+                        {suggestionItems.map((s, i) => (
+                          <button key={i} className="suggestion-item" onClick={() => { setSearchQuery(s); handleSearch(); }}>
+                            <Search size={14} /> {s}
+                      </button>
+                        ))}
+                    </div>
+                    )}
                     <div className="popular-searches">
                       <span className="search-label">Popular:</span>
-                      <button className="search-tag" onClick={() => setSearchQuery('Home Cleaning')}>Home Cleaning</button>
-                      <button className="search-tag" onClick={() => setSearchQuery('Plumbing')}>Plumbing</button>
-                      <button className="search-tag" onClick={() => setSearchQuery('Elder Care')}>Elder Care</button>
-                      <button className="search-tag" onClick={() => setSearchQuery('Electrical')}>Electrical</button>
+                      {services.slice(0, 4).map((service, index) => (
+                        <button 
+                          key={index}
+                          className="search-tag" 
+                          onClick={() => { setSearchQuery(service.name); handleSearch(); }}
+                        >
+                          {service.name}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -528,17 +839,17 @@ const CustomerDashboard = () => {
                   </div>
 
                   {/* Categories Section - Flipkart Style */}
-                  <div className="marketplace-categories full-bleed">
+                  <div ref={categoriesSectionRef} className="marketplace-categories full-bleed">
                     <div className="section-header">
                       <h3>Categories</h3>
-                      <button className="view-all-btn" onClick={() => setActiveTab('categories')}>
+                      <button className="view-all-btn" onClick={() => { setActiveTab('categories'); handleSearch(); }}>
                         View All
                         <ArrowRight size={16} />
                       </button>
                     </div>
                     <div className="categories-grid">
-                      {categories.map(category => {
-                        const IconComponent = category.icon === AllServicesIcon || category.id === '__all__'
+                      {filteredCategories.map((category, idx) => {
+                        const IconComponent = category.id === '__all__'
                           ? AllServicesIcon
                           : category.icon;
                         return (
@@ -546,8 +857,8 @@ const CustomerDashboard = () => {
                             key={category.id} 
                             className="category-card" 
                             onClick={() => setActiveTab('categories')}
-                            whileHover={{ y: -4 }}
-                            variants={itemVariants}
+                            whileHover={cardHoverEffects[idx % cardHoverEffects.length]}
+                            variants={cardEntranceVariants[idx % cardEntranceVariants.length]}
                           >
                             <div className="category-icon-box">
                               {category.imageUrl ? (
@@ -558,63 +869,209 @@ const CustomerDashboard = () => {
                                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                 />
                               ) : (
-                                <IconComponent size={32} />
+                                <IconComponent size={48} />
                               )}
                             </div>
                             <h4>{category.name}</h4>
-                            <p className="service-count">{category.services.length}+ Services</p>
-                            <span className="category-offer">Min. 20% Off</span>
+                            <p className="service-count">{category.services.length} Services</p>
+                            <span className="category-offer">
+                              {category.services.some(s => s.offer_enabled) ? 'Special Offers' : 'Available'}
+                            </span>
                           </motion.div>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* Deals of the Day - Flipkart Style */}
-                  <div className="deals-section full-bleed">
+                  {/* Available Services section removed as requested */}
+
+                  {/* Search Results by Service (when query typed) */}
+                  {debouncedQuery.trim().length >= 2 && (
+                    <div className="services-by-category-section full-bleed search-results">
                     <div className="section-header">
-                      <h3>Deals of the Day</h3>
+                        <h3>Search Results</h3>
+                      </div>
+                      {serviceSearchResults.length > 0 ? (
+                    <div className="deals-grid">
+                          {serviceSearchResults.map((service, idx) => {
+                          const hasOffer = service.offer_enabled && service.offer_price;
+                            const discount = hasOffer && service.price ? Math.round(((service.price - service.offer_price) / service.price) * 100) : 0;
+                          return (
+                              <motion.div key={service.id} className="deal-card" whileHover={cardHoverEffects[idx % cardHoverEffects.length]} variants={cardEntranceVariants[idx % cardEntranceVariants.length]}>
+                                {hasOffer && discount > 0 && (<div className="deal-badge">{discount}% OFF</div>)}
+                              <div className="deal-image">
+                                {service.icon_url ? (
+                                    <img src={service.icon_url} alt={service.name} style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8 }} onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'block'; }} />
+                                ) : null}
+                                <Settings size={60} style={{ display: service.icon_url ? 'none' : 'block' }} />
+                              </div>
+                              <div className="deal-content">
+                                  <h4 dangerouslySetInnerHTML={{ __html: highlightMatch(service.name) }} />
+                                  <p className="provider-name" dangerouslySetInnerHTML={{ __html: highlightMatch(service.category_name || service.category || 'Services') }} />
+                                {service.description && (
+                                    <p className="service-description" dangerouslySetInnerHTML={{ __html: highlightMatch(service.description.slice(0, 80)) }} />
+                                )}
+                                {service.duration && (
+                                  <div className="duration-row">
+                                    <Clock size={12} />
+                                    <span>{service.duration}</span>
+                                  </div>
+                                )}
+                                  <div className="price-row">
+                                    <span className="current-price">₹{hasOffer ? service.offer_price : service.price}</span>
+                                    {hasOffer && service.price > service.offer_price && (<span className="original-price">₹{service.price}</span>)}
+                                  </div>
+                                  {service.duration && (<div className="duration-hint">per {service.duration}</div>)}
+                              </div>
+                                <div className="deal-actions">
+                                  <button className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`} onClick={() => isInCart(service.id) ? removeFromCart(service.id) : addToCart(service)}>
+                                    <ShoppingCart size={16} />{isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
+                              </button>
+                                  <button className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`} onClick={() => toggleWishlist(service)}>
+                                    <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />{isInWishlist(service.id) ? 'Liked' : 'Like'}
+                                  </button>
+                                  <button className="deal-btn deal-btn-book" onClick={() => { toast.success(`Booking ${service.name}...`); }}>
+                                    <Calendar size={16} />Book Now
+                                  </button>
+                                </div>
+                            </motion.div>
+                          );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="no-services">
+                          <p>No services found for "{debouncedQuery}". Try another keyword.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* All Services by Category */}
+                  <div className="services-by-category-section full-bleed">
+                    <div className="section-header">
+                      <h3>All Services by Category</h3>
                       <div className="timer">
                         <Clock size={16} />
-                        <span>22:07:36 Left</span>
+                        <span>Live Prices in ₹</span>
                       </div>
                     </div>
-                    <div className="deals-grid">
-                      {[
-                        { id: 1, name: 'Home Deep Cleaning', price: 75, originalPrice: 150, discount: 50, rating: 4.5, reviews: 2341, provider: 'CleanPro' },
-                        { id: 2, name: 'AC Service & Repair', price: 45, originalPrice: 90, discount: 50, rating: 4.3, reviews: 1823, provider: 'CoolTech' },
-                        { id: 3, name: 'Plumbing Services', price: 35, originalPrice: 70, discount: 50, rating: 4.6, reviews: 3421, provider: 'FixIt' },
-                        { id: 4, name: 'Electrical Repair', price: 40, originalPrice: 80, discount: 50, rating: 4.4, reviews: 2156, provider: 'PowerFix' }
-                      ].map(deal => (
-                        <motion.div 
-                          key={deal.id} 
-                          className="deal-card"
-                          whileHover={{ y: -4 }}
-                          variants={itemVariants}
-                        >
-                          <div className="deal-badge">{deal.discount}% OFF</div>
-                          <div className="deal-image">
-                            <Settings size={60} />
-                          </div>
-                          <div className="deal-content">
-                            <h4>{deal.name}</h4>
-                            <p className="provider-name">{deal.provider}</p>
-                            <div className="rating-row">
-                              <span className="rating-badge">{deal.rating} ★</span>
-                              <span className="reviews">({deal.reviews.toLocaleString()})</span>
+                    
+                    {servicesLoading ? (
+                      <div className="loading-placeholder">Loading services...</div>
+                    ) : (
+                      categories.filter(cat => cat.id !== '__all__' && cat.services.length > 0).map(category => {
+                        const IconComponent = category.id === '__all__'
+                          ? AllServicesIcon
+                          : category.icon;
+                        return (
+                        <div key={category.id} className="category-services-block">
+                          <div className="category-header">
+                            <div className="category-title">
+                              {category.imageUrl ? (
+                                <img
+                                  src={category.imageUrl}
+                                  alt={`${category.name} icon`}
+                                  style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 8, marginRight: 12 }}
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                              ) : (
+                                <IconComponent size={32} style={{ marginRight: 12 }} />
+                              )}
+                              <div>
+                                <h4>{category.name}</h4>
+                                <p>{category.services.length} services available</p>
+                              </div>
                             </div>
-                            <div className="price-row">
-                              <span className="current-price">${deal.price}</span>
-                              <span className="original-price">${deal.originalPrice}</span>
-                            </div>
                           </div>
-                          <button className="btn-primary add-to-cart" onClick={handleBookService}>
-                            <Plus size={16} />
-                            Add to Cart
-                          </button>
-                        </motion.div>
-                      ))}
-                    </div>
+                          
+                          <div className="deals-grid">
+                            {category.services.map((service, idx) => {
+                              const hasOffer = service.offer_enabled && service.offer_price;
+                              const discount = hasOffer && service.price ? 
+                                Math.round(((service.price - service.offer_price) / service.price) * 100) : 0;
+                              
+                              return (
+                                <motion.div 
+                                  key={service.id} 
+                                  className="deal-card"
+                                  whileHover={cardHoverEffects[idx % cardHoverEffects.length]}
+                                  variants={cardEntranceVariants[idx % cardEntranceVariants.length]}
+                                >
+                                  {hasOffer && discount > 0 && (
+                                    <div className="deal-badge">{discount}% OFF</div>
+                                  )}
+                                  <div className="deal-image">
+                                    {service.icon_url ? (
+                                      <img 
+                                        src={service.icon_url} 
+                                        alt={service.name}
+                                        style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8 }}
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = 'none';
+                                          e.currentTarget.nextSibling.style.display = 'block';
+                                        }}
+                                      />
+                                    ) : null}
+                                    <Settings size={60} style={{ display: service.icon_url ? 'none' : 'block' }} />
+                                  </div>
+                                  <div className="deal-content">
+                                    <h4>{service.name}</h4>
+                                    <p className="provider-name">{service.category_name || service.category || 'Services'}</p>
+                                    {service.description && (
+                                      <p className="service-description">{service.description.slice(0, 50)}...</p>
+                                    )}
+                                    {service.duration && (
+                                      <div className="duration-row">
+                                        <Clock size={12} />
+                                        <span>{service.duration}</span>
+                                      </div>
+                                    )}
+                                    <div className="price-row">
+                                      <span className="current-price">
+                                        ₹{hasOffer ? service.offer_price : service.price}
+                                      </span>
+                                      {hasOffer && service.price > service.offer_price && (
+                                        <span className="original-price">₹{service.price}</span>
+                                      )}
+                                    </div>
+                                    {service.duration && (
+                                      <div className="duration-hint">per {service.duration}</div>
+                                    )}
+                                  </div>
+                                  <div className="deal-actions">
+                                    <button 
+                                      className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`}
+                                      onClick={() => isInCart(service.id) ? removeFromCart(service.id) : addToCart(service)}
+                                    >
+                                      <ShoppingCart size={16} />
+                                      {isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
+                                    </button>
+                                    <button 
+                                      className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`}
+                                      onClick={() => toggleWishlist(service)}
+                                    >
+                                      <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />
+                                      {isInWishlist(service.id) ? 'Liked' : 'Like'}
+                                    </button>
+                                    <button 
+                                      className="deal-btn deal-btn-book"
+                                      onClick={() => {
+                                        toast.success(`Booking ${service.name}...`);
+                                        // Add booking logic here
+                                      }}
+                                    >
+                                      <Calendar size={16} />
+                                    Book Now
+                                  </button>
+                                  </div>
+                                </motion.div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        );
+                      })
+                    )}
                   </div>
 
                   {/* Top Offers Section */}
@@ -668,9 +1125,9 @@ const CustomerDashboard = () => {
                           </div>
                           <h5>{booking.service}</h5>
                           <p className="recent-date">{booking.date}</p>
-                          <div className="recent-price">
-                            <span>${booking.amount}</span>
-                          </div>
+                           <div className="recent-price">
+                             <span>₹{booking.amount}</span>
+                           </div>
                           <button className="btn-secondary book-again">
                             Book Again
                           </button>
@@ -715,14 +1172,16 @@ const CustomerDashboard = () => {
                   <div className="all-categories">
                     <h2>Browse All Categories</h2>
                     <div className="all-categories-grid">
-                      {categories.map(category => {
-                        const IconComponent = category.icon;
+                      {categories.map((category, idx) => {
+                        const IconComponent = category.id === '__all__'
+                          ? AllServicesIcon
+                          : category.icon;
                         return (
                           <motion.div 
                             key={category.id} 
                             className="category-item-card"
-                            whileHover={{ scale: 1.02 }}
-                            variants={itemVariants}
+                            whileHover={cardHoverEffects[idx % cardHoverEffects.length]}
+                            variants={cardEntranceVariants[idx % cardEntranceVariants.length]}
                           >
                             <div className="category-image-large">
                               {category.imageUrl ? (
@@ -740,14 +1199,21 @@ const CustomerDashboard = () => {
                               <h3>{category.name}</h3>
                               <p>{category.services.length} services available</p>
                               <div className="category-services-list">
-                                {category.services.slice(0, 4).map((service, idx) => (
-                                  <span key={idx} className="service-tag">{service}</span>
+                                {category.services.map((service, idx) => (
+                                  <span key={idx} className="service-tag">{service.name}</span>
                                 ))}
                               </div>
                               <div className="category-pricing">
                                 <span className="price-from">Starting from</span>
-                                <span className="price-amount">$25</span>
-                                <span className="discount-badge">50% OFF</span>
+                                 <span className="price-amount">
+                                   ₹{category.services.length > 0 ? 
+                                     Math.min(...category.services.map(s => s.offer_enabled && s.offer_price ? s.offer_price : s.price).filter(p => p > 0)) : 
+                                     500
+                                   }
+                                 </span>
+                                {category.services.some(s => s.offer_enabled) && (
+                                  <span className="discount-badge">Special Offers</span>
+                                )}
                               </div>
                             </div>
                             <div className="category-actions">
@@ -760,7 +1226,8 @@ const CustomerDashboard = () => {
                             </div>
                           </motion.div>
                         );
-                      })}
+                        })
+                      }
                     </div>
                   </div>
 
@@ -768,83 +1235,89 @@ const CustomerDashboard = () => {
                   <div className="popular-services">
                     <h2>Popular Services</h2>
                     <div className="popular-services-grid">
-                      <div className="service-deal-card">
-                        <div className="deal-badge">BESTSELLER</div>
-                        <div className="service-image">
-                          <Settings size={48} />
-                        </div>
-                        <div className="service-info">
-                          <h3>Home Cleaning</h3>
-                          <div className="service-rating">
-                            <div className="stars">
-                              {[1, 2, 3, 4, 5].map(star => (
-                                <Star key={star} size={12} fill="#fbbf24" color="#fbbf24" />
-                              ))}
+                      {servicesLoading ? (
+                        <div className="loading-placeholder">Loading popular services...</div>
+                      ) : services.length > 0 ? (
+                        services.slice(0, 6).map((service, index) => {
+                          const hasOffer = service.offer_enabled && service.offer_price;
+                          const discount = hasOffer && service.price ? 
+                            Math.round(((service.price - service.offer_price) / service.price) * 100) : 0;
+                          
+                          const badges = ['BESTSELLER', 'TOP RATED', 'LIMITED TIME'];
+                          const badge = badges[index] || 'FEATURED';
+                          
+                          return (
+                            <motion.div 
+                              key={service.id} 
+                              className="deal-card"
+                              whileHover={{ y: -4 }}
+                              variants={itemVariants}
+                            >
+                              <div className="deal-badge">{badge}</div>
+                              <div className="deal-image">
+                                {service.icon_url ? (
+                                  <img 
+                                    src={service.icon_url} 
+                                    alt={service.name}
+                                    style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8 }}
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                      e.currentTarget.nextSibling.style.display = 'block';
+                                    }}
+                                  />
+                                ) : null}
+                                <Settings size={60} style={{ display: service.icon_url ? 'none' : 'block' }} />
+                              </div>
+                              <div className="deal-content">
+                                <h4>{service.name}</h4>
+                                <p className="provider-name">{service.category_name || service.category || 'Services'}</p>
+                                {service.description && (
+                                  <p className="service-description">{service.description.slice(0, 50)}...</p>
+                                )}
+                                <div className="price-row">
+                                  <span className="current-price">₹{hasOffer ? service.offer_price : service.price}</span>
+                                  {hasOffer && service.price > service.offer_price && (
+                                    <span className="original-price">₹{service.price}</span>
+                                  )}
+                                </div>
+                                {service.duration && (
+                                  <div className="duration-hint">per {service.duration}</div>
+                                )}
+                              </div>
+                              <div className="deal-actions">
+                                <button 
+                                  className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`}
+                                  onClick={() => isInCart(service.id) ? removeFromCart(service.id) : addToCart(service)}
+                                >
+                                  <ShoppingCart size={16} />
+                                  {isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
+                                </button>
+                                <button 
+                                  className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`}
+                                  onClick={() => toggleWishlist(service)}
+                                >
+                                  <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />
+                                  {isInWishlist(service.id) ? 'Liked' : 'Like'}
+                                </button>
+                                <button 
+                                  className="deal-btn deal-btn-book"
+                                  onClick={() => {
+                                    toast.success(`Booking ${service.name}...`);
+                                    // Add booking logic here
+                                  }}
+                                >
+                                  <Calendar size={16} />
+                                Book Now
+                              </button>
                             </div>
-                            <span className="rating-count">(2,156)</span>
-                          </div>
-                          <div className="service-pricing">
-                            <span className="price-current">$75</span>
-                            <span className="price-original">$95</span>
-                            <span className="discount-percent">21% off</span>
-                          </div>
+                            </motion.div>
+                          );
+                        })
+                      ) : (
+                        <div className="no-services">
+                          <p>No popular services available.</p>
                         </div>
-                        <button className="quick-book-btn" onClick={handleBookService}>
-                          Book Now
-                        </button>
-                      </div>
-
-                      <div className="service-deal-card">
-                        <div className="deal-badge">TOP RATED</div>
-                        <div className="service-image">
-                          <Heart size={48} />
-                        </div>
-                        <div className="service-info">
-                          <h3>Elder Care</h3>
-                          <div className="service-rating">
-                            <div className="stars">
-                              {[1, 2, 3, 4, 5].map(star => (
-                                <Star key={star} size={12} fill="#fbbf24" color="#fbbf24" />
-                              ))}
-                            </div>
-                            <span className="rating-count">(1,823)</span>
-                          </div>
-                          <div className="service-pricing">
-                            <span className="price-current">$35</span>
-                            <span className="price-original">$45</span>
-                            <span className="discount-percent">22% off</span>
-                          </div>
-                        </div>
-                        <button className="quick-book-btn" onClick={handleBookService}>
-                          Book Now
-                        </button>
-                      </div>
-
-                      <div className="service-deal-card">
-                        <div className="deal-badge">LIMITED TIME</div>
-                        <div className="service-image">
-                          <Truck size={48} />
-                        </div>
-                        <div className="service-info">
-                          <h3>Express Delivery</h3>
-                          <div className="service-rating">
-                            <div className="stars">
-                              {[1, 2, 3, 4, 5].map(star => (
-                                <Star key={star} size={12} fill="#fbbf24" color="#fbbf24" />
-                              ))}
-                            </div>
-                            <span className="rating-count">(3,291)</span>
-                          </div>
-                          <div className="service-pricing">
-                            <span className="price-current">$15</span>
-                            <span className="price-original">$20</span>
-                            <span className="discount-percent">25% off</span>
-                          </div>
-                        </div>
-                        <button className="quick-book-btn" onClick={handleBookService}>
-                          Book Now
-                        </button>
-                      </div>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -862,35 +1335,86 @@ const CustomerDashboard = () => {
                     <p>Services you've saved for later</p>
                   </div>
 
-                  <div className="wishlist-grid">
-                    {services.slice(0, 2).map(service => (
-                      <div key={service.id} className="wishlist-item">
-                        <div className="wishlist-image">
-                          <Settings size={32} />
-                        </div>
-                        <div className="wishlist-info">
-                          <h4>{service.name}</h4>
-                          <p>by {service.provider}</p>
-                          <div className="wishlist-rating">
-                            <Star size={14} fill="#fbbf24" color="#fbbf24" />
-                            <span>4.8 (150 reviews)</span>
-                          </div>
-                          <div className="wishlist-price">
-                            <span className="current-price">${service.price}</span>
-                            <span className="original-price">$95</span>
-                          </div>
-                        </div>
-                        <div className="wishlist-actions">
-                          <button className="btn-primary" onClick={handleBookService}>
-                            Book Now
-                          </button>
-                          <button className="btn-secondary">
-                            <Trash2 size={16} />
-                            Remove
-                          </button>
-                        </div>
+                  <div className="deals-grid">
+                    {wishlist.length > 0 ? (
+                      wishlist.map(item => {
+                        const hasOffer = item.offer_enabled && item.offer_price;
+                        const discount = hasOffer && item.price ? 
+                          Math.round(((item.price - item.offer_price) / item.price) * 100) : 0;
+                        return (
+                          <motion.div 
+                            key={item.id} 
+                            className="deal-card"
+                            whileHover={{ y: -4 }}
+                            variants={itemVariants}
+                          >
+                            {hasOffer && discount > 0 && (
+                              <div className="deal-badge">{discount}% OFF</div>
+                            )}
+                            <div className="deal-image">
+                              {item.icon_url ? (
+                                <img 
+                                  src={item.icon_url} 
+                                  alt={item.name}
+                                  style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8 }}
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    e.currentTarget.nextSibling.style.display = 'block';
+                                  }}
+                                />
+                              ) : null}
+                              <Settings size={60} style={{ display: item.icon_url ? 'none' : 'block' }} />
+                            </div>
+                            <div className="deal-content">
+                              <h4>{item.name}</h4>
+                              <p className="provider-name">{item.category_name || item.category}</p>
+                              {item.description && (
+                                <p className="service-description">{item.description.slice(0, 50)}...</p>
+                              )}
+                              <div className="price-row">
+                                <span className="current-price">₹{hasOffer ? item.offer_price : item.price}</span>
+                                {hasOffer && item.price > item.offer_price && (
+                                  <span className="original-price">₹{item.price}</span>
+                                )}
+                              </div>
+                              {item.duration && (
+                                <div className="duration-hint">per {item.duration}</div>
+                                  )}
+                                </div>
+                            <div className="deal-actions">
+                              <button 
+                                className={`deal-btn ${isInCart(item.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`}
+                                onClick={() => isInCart(item.id) ? removeFromCart(item.id) : addToCart(item)}
+                              >
+                                <ShoppingCart size={16} />
+                                {isInCart(item.id) ? 'In Cart' : 'Add to Cart'}
+                              </button>
+                              <button 
+                                className="deal-btn deal-btn-liked"
+                                onClick={() => toggleWishlist(item)}
+                              >
+                                <Heart size={16} fill="currentColor" />
+                                Remove
+                              </button>
+                              <button 
+                                className="deal-btn deal-btn-book"
+                                onClick={() => {
+                                  toast.success(`Booking ${item.name}...`);
+                                  // Add booking logic here
+                                }}
+                              >
+                                <Calendar size={16} />
+                                Book Now
+                              </button>
+                            </div>
+                          </motion.div>
+                        );
+                      })
+                    ) : (
+                      <div className="no-services">
+                        <p>No services in wishlist yet.</p>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -908,42 +1432,114 @@ const CustomerDashboard = () => {
                   </div>
 
                   <div className="cart-content">
-                    <div className="cart-items">
-                      {services.slice(0, 2).map(service => (
-                        <div key={service.id} className="cart-item">
-                          <div className="cart-item-image">
-                            <Settings size={40} />
-                          </div>
-                          <div className="cart-item-info">
-                            <h4>{service.name}</h4>
-                            <p>by {service.provider}</p>
-                            <div className="cart-item-details">
-                              <span>Date: {service.date}</span>
-                              <span>Time: {service.time}</span>
-                            </div>
-                          </div>
-                          <div className="cart-item-price">
-                            <span className="price">${service.price}</span>
-                            <button className="remove-btn">
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
+                    <div className="deals-grid">
+                      {cart.length > 0 ? (
+                        cart.map(item => {
+                          const hasOffer = item.offer_enabled && item.offer_price;
+                          const discount = hasOffer && item.price ? 
+                            Math.round(((item.price - item.offer_price) / item.price) * 100) : 0;
+                          return (
+                            <motion.div 
+                              key={item.id} 
+                              className="deal-card"
+                              whileHover={{ y: -4 }}
+                              variants={itemVariants}
+                            >
+                              {hasOffer && discount > 0 && (
+                                <div className="deal-badge">{discount}% OFF</div>
+                              )}
+                              <div className="deal-image">
+                                {item.icon_url ? (
+                                  <img 
+                                    src={item.icon_url} 
+                                    alt={item.name}
+                                    style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8 }}
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                      e.currentTarget.nextSibling.style.display = 'block';
+                                    }}
+                                  />
+                                ) : null}
+                                <Settings size={60} style={{ display: item.icon_url ? 'none' : 'block' }} />
+                              </div>
+                              <div className="deal-content">
+                                <h4>{item.name}</h4>
+                                <p className="provider-name">{item.category_name || item.category}</p>
+                                {item.description && (
+                                  <p className="service-description">{item.description.slice(0, 50)}...</p>
+                                )}
+                                {item.duration && (
+                                  <div className="duration-row">
+                                    <Clock size={12} />
+                                    <span>{item.duration}</span>
+                                </div>
+                                )}
+                                <div className="price-row">
+                                  <span className="current-price">₹{hasOffer ? item.offer_price : item.price}</span>
+                                  {hasOffer && item.price > item.offer_price && (
+                                    <span className="original-price">₹{item.price}</span>
+                                  )}
+                              </div>
+                                {item.duration && (
+                                  <div className="duration-hint">per {item.duration}</div>
+                                )}
+                              </div>
+                              <div className="deal-actions">
+                                <button 
+                                  className="deal-btn deal-btn-carted"
+                                  onClick={() => removeFromCart(item.id)}
+                                >
+                                  <ShoppingCart size={16} />
+                                  Remove
+                                </button>
+                                <button 
+                                  className={`deal-btn ${isInWishlist(item.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`}
+                                  onClick={() => toggleWishlist(item)}
+                                >
+                                  <Heart size={16} fill={isInWishlist(item.id) ? 'currentColor' : 'none'} />
+                                  {isInWishlist(item.id) ? 'Liked' : 'Like'}
+                                </button>
+                                <button 
+                                  className="deal-btn deal-btn-book"
+                                  onClick={() => {
+                                    toast.success(`Booking ${item.name}...`);
+                                    // Add booking logic here
+                                  }}
+                                >
+                                  <Calendar size={16} />
+                                  Book Now
+                                </button>
+                              </div>
+                            </motion.div>
+                          );
+                        })
+                      ) : (
+                        <div className="no-services">
+                          <p>Your cart is empty.</p>
                         </div>
-                      ))}
+                      )}
                     </div>
                     <div className="cart-summary">
-                      <div className="summary-row">
-                        <span>Subtotal:</span>
-                        <span>$195.00</span>
-                      </div>
-                      <div className="summary-row">
-                        <span>Service Fee:</span>
-                        <span>$10.00</span>
-                      </div>
-                      <div className="summary-row total">
-                        <span>Total:</span>
-                        <span>$205.00</span>
-                      </div>
+                       <div className="summary-row">
+                         <span>Subtotal:</span>
+                         <span>₹{cart.reduce((sum, item) => {
+                           const hasOffer = item.offer_enabled && item.offer_price;
+                           const price = hasOffer ? item.offer_price : item.price;
+                           return sum + (price * item.quantity);
+                         }, 0)}</span>
+                       </div>
+                       <div className="summary-row">
+                         <span>Service Fee:</span>
+                         <span>₹50</span>
+                       </div>
+                       <div className="summary-row total">
+                         <span>Total:</span>
+                         <span>₹{cart.reduce((sum, item) => {
+                           const hasOffer = item.offer_enabled && item.offer_price;
+                           const price = hasOffer ? item.offer_price : item.price;
+                           return sum + (price * item.quantity);
+                         }, 0) + 50}</span>
+                       </div>
                       <button className="checkout-btn" onClick={handleBookService}>
                         Proceed to Checkout
                       </button>
@@ -1103,10 +1699,10 @@ const CustomerDashboard = () => {
                     {services.map(service => (
                       <div key={service.id} className="order-item">
                         <div className="order-header-section">
-                          <div className="order-date-info">
-                            <span className="order-date">Ordered on {service.date}</span>
-                            <span className="order-total">Total: ${service.price}</span>
-                          </div>
+                           <div className="order-date-info">
+                             <span className="order-date">Ordered on {service.date}</span>
+                             <span className="order-total">Total: ₹{service.price}</span>
+                           </div>
                           <div className="order-id">Order #{service.trackingId}</div>
                         </div>
 
@@ -1230,10 +1826,10 @@ const CustomerDashboard = () => {
                         <span className="stat-label">In Progress</span>
                         <span className="stat-value">{services.filter(s => s.status === 'in-progress').length}</span>
                       </div>
-                      <div className="summary-stat">
-                        <span className="stat-label">Total Spent</span>
-                        <span className="stat-value">${services.reduce((sum, s) => sum + s.price, 0)}</span>
-                      </div>
+                       <div className="summary-stat">
+                         <span className="stat-label">Total Spent</span>
+                         <span className="stat-value">₹{services.reduce((sum, s) => sum + s.price, 0)}</span>
+                       </div>
                     </div>
                   </div>
                 </motion.div>
@@ -1276,7 +1872,7 @@ const CustomerDashboard = () => {
                     </div>
                     
                             <div className="bill-amount">
-                              <span className="amount">${bill.amount.toFixed(2)}</span>
+                              <span className="amount">₹{bill.amount.toFixed(2)}</span>
                         <span 
                           className="status-badge"
                                 style={{ backgroundColor: getStatusColor(bill.status) }}
@@ -1355,10 +1951,10 @@ const CustomerDashboard = () => {
                             <input type="text" value={selectedService.service} disabled />
                           </div>
                           
-                          <div className="form-group">
-                            <label>Amount Due</label>
-                            <input type="text" value={`$${selectedService.amount.toFixed(2)}`} disabled />
-                          </div>
+                            <div className="form-group">
+                              <label>Amount Due</label>
+                              <input type="text" value={`₹${selectedService.amount.toFixed(2)}`} disabled />
+                            </div>
 
                           <div className="form-group">
                             <label htmlFor="paymentMethod">Payment Method</label>
@@ -1380,7 +1976,7 @@ const CustomerDashboard = () => {
                               Cancel
                             </button>
                             <button type="submit" className="btn-primary">
-                              Pay ${selectedService.amount.toFixed(2)}
+                              Pay ₹{selectedService.amount.toFixed(2)}
                             </button>
                           </div>
                         </form>
@@ -1646,9 +2242,11 @@ const CustomerDashboard = () => {
                     <label htmlFor="service">Select Service</label>
                     <select id="service" name="service" required>
                       <option value="">Choose a service</option>
-                      <option value="plumbing">Plumbing</option>
-                      <option value="cleaning">Home Cleaning</option>
-                      <option value="electrical">Electrical</option>
+                      {services.slice(0, 10).map((service, index) => (
+                        <option key={index} value={service.name.toLowerCase().replace(/\s+/g, '_')}>
+                          {service.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
               </div>

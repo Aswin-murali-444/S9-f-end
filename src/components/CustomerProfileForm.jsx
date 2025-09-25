@@ -255,18 +255,23 @@ const CustomerProfileForm = () => {
       case 'date_of_birth': {
         if (!value) return undefined; // optional
         const now = new Date();
-        const minAge = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate());
-        const result = validationUtils.validateDate(value, {
-          maxDate: now.toISOString().split('T')[0],
-          minDate: minAge.toISOString().split('T')[0],
-          fieldName: 'Date of birth',
-          required: false
-        });
-        if (!result.isValid) {
-          return result.error === 'Date of birth cannot be after today' 
-            ? 'Date of birth cannot be in the future'
-            : result.error;
+        const maxDob = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate());
+        const minDob = new Date(now.getFullYear() - 100, now.getMonth(), now.getDate());
+        
+        // Direct validation for age requirement
+        const dob = new Date(value);
+        if (isNaN(dob.getTime())) {
+          return 'Enter a valid date of birth';
         }
+        
+        if (dob > maxDob) {
+          return 'You must be at least 18 years old';
+        }
+        
+        if (dob < minDob) {
+          return 'Please enter a valid date of birth';
+        }
+        
         return undefined;
       }
       case 'gender': {
@@ -441,8 +446,9 @@ const CustomerProfileForm = () => {
     if (form.date_of_birth) {
       const dob = new Date(form.date_of_birth);
       const now = new Date();
-      if (isNaN(dob.getTime()) || dob > now) {
-        errors.date_of_birth = 'Enter a valid date of birth';
+      const maxDob = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate());
+      if (isNaN(dob.getTime()) || dob > maxDob) {
+        errors.date_of_birth = 'You must be at least 18 years old';
       }
     }
     if (profileImageFile) {
@@ -682,6 +688,9 @@ const CustomerProfileForm = () => {
             />
             {touched.date_of_birth && validationErrors.date_of_birth && (
               <small className="error-text">{validationErrors.date_of_birth}</small>
+            )}
+            {!touched.date_of_birth && !validationErrors.date_of_birth && (
+              <small className="form-hint">You must be at least 18 years old to use this service</small>
             )}
           </div>
         </div>
