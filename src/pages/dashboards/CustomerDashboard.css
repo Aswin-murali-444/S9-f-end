@@ -5069,6 +5069,49 @@ mark.search-match {
   gap: 20px;
 }
 
+/* Horizontal scroll container for categories - hide scrollbar */
+.categories-scroll {
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  padding-bottom: 8px;
+  scroll-snap-type: x proximity;
+}
+.categories-scroll::-webkit-scrollbar { height: 0; width: 0; }
+.categories-scroll { scrollbar-width: none; }
+
+/* Aesthetic carousel arrows */
+.carousel-arrow {
+  position: absolute;
+  top: 40%;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.78));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 6px 18px rgba(2, 8, 23, 0.15);
+  color: #334155;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.carousel-arrow:hover {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 10px 24px rgba(2, 8, 23, 0.2);
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+.carousel-arrow.left { left: -28px; }
+.carousel-arrow.right { right: -28px; }
+.arrow-icon-stack { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.arrow-badge { position: absolute; width: 22px; height: 22px; opacity: 0.18; stroke: #64748b; }
+.arrow-chevron { position: relative; width: 20px; height: 20px; stroke: #334155; }
+
 .category-tile {
   background: white;
   border-radius: 12px;

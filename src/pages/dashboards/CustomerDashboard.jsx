@@ -53,7 +53,11 @@ import {
   TrendingUp,
   BarChart3,
   ArrowRight,
-  ShoppingCart
+  ArrowLeft,
+  ShoppingCart,
+  ChevronLeft,
+  ChevronRight,
+  LayoutGrid
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
 import AllServicesIcon from '../../components/AllServicesIcon';
@@ -66,7 +70,30 @@ import { apiService } from '../../services/api';
 const CustomerDashboard = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  
+  // Add CSS for search input placeholder
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      .categories-search-input::placeholder {
+        color: #94a3b8 !important;
+        opacity: 1 !important;
+        font-weight: 400 !important;
+      }
+      .category-services-search input::placeholder {
+        color: #94a3b8 !important;
+        opacity: 1 !important;
+        font-weight: 400 !important;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
   const [activeTab, setActiveTab] = useState('home');
+  const categoriesScrollRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -115,6 +142,8 @@ const CustomerDashboard = () => {
   });
 
   const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [viewingCategory, setViewingCategory] = useState(null);
   const [cart, setCart] = useState([]);
   const [wishlist, setWishlist] = useState([]);
 
@@ -298,6 +327,11 @@ const CustomerDashboard = () => {
         console.log('Number of categories:', categoriesData?.length || 0);
         console.log('Number of services:', servicesData?.length || 0);
         
+        // Debug: Log sample service structure
+        if (servicesData && servicesData.length > 0) {
+          console.log('Sample service structure:', servicesData[0]);
+        }
+        
         // Process categories with all services
         const mappedCategories = Array.isArray(categoriesData)
           ? [
@@ -313,7 +347,7 @@ const CustomerDashboard = () => {
                 name: c.name,
                 icon: iconForCategoryName(c.name),
                 imageUrl: c.icon_url || null,
-                services: (servicesData || []).filter(s => s.category_id === c.id || s.category === c.id)
+                services: (servicesData || []).filter(s => s.category_id === c.id || s.category === c.id || s.category_name === c.name)
               }))
             ]
           : [];
@@ -387,6 +421,16 @@ const CustomerDashboard = () => {
     };
   }, []);
 
+  // After categories load, default to "All Services" so some services show by default
+  useEffect(() => {
+    if (!selectedCategory && categories && categories.length > 0) {
+      const allCategory = categories.find(c => c.id === '__all__') || categories[0];
+      if (allCategory) {
+        setSelectedCategory(allCategory);
+      }
+    }
+  }, [categories, selectedCategory]);
+
   useEffect(() => {
     const id = setTimeout(() => setDebouncedQuery(searchQuery), 300);
     return () => clearTimeout(id);
@@ -415,15 +459,33 @@ const CustomerDashboard = () => {
 
   // Category-based filtering for search
   const filteredCategories = (() => {
-    const q = (debouncedQuery || '').trim().toLowerCase();
-    const base = categories.filter(cat => cat.id !== '__all__');
+    // Use searchQuery for categories page, debouncedQuery for home page
+    const query = activeTab === 'categories' ? searchQuery : debouncedQuery;
+    const q = String(query || '').trim().toLowerCase();
+    const base = (categories || []).slice().sort((a, b) => {
+      const aAll = a.id === '__all__' ? -1 : 0;
+      const bAll = b.id === '__all__' ? -1 : 0;
+      return aAll - bAll;
+    });
     if (q.length < 2) return base;
+    
+    // For categories page, also search within services
+    if (activeTab === 'categories') {
+      return base.filter(cat => 
+        (cat.name || '').toLowerCase().includes(q) ||
+        cat.services.some(service => 
+          (service.name || '').toLowerCase().includes(q)
+        )
+      );
+    }
+    
     return base.filter(cat => (cat.name || '').toLowerCase().includes(q));
   })();
 
   // Highlight matched keyword helper for search results
   const highlightMatch = (text) => {
-    const q = (debouncedQuery || '').trim();
+    const query = activeTab === 'categories' ? searchQuery : debouncedQuery;
+    const q = String(query || '').trim();
     if (!q || q.length < 2 || !text) return String(text || '');
     try {
       const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -435,7 +497,7 @@ const CustomerDashboard = () => {
   };
 
   const suggestionItems = (() => {
-    const q = (debouncedQuery || '').trim().toLowerCase();
+    const q = String(debouncedQuery || '').trim().toLowerCase();
     if (q.length < 2) return [];
     const names = Array.from(new Set(
       categories
@@ -483,6 +545,16 @@ const CustomerDashboard = () => {
 
   const handleBookService = () => {
     setIsBookingModalOpen(true);
+  };
+
+  const handleCategoryClick = (category) => {
+    setViewingCategory(category);
+    setSearchQuery(''); // Clear any existing search when entering category view
+  };
+
+  const handleBackToCategories = () => {
+    setViewingCategory(null);
+    setSearchQuery(''); // Clear search when going back
   };
 
   const handlePayBill = (bill) => {
@@ -842,12 +914,26 @@ const CustomerDashboard = () => {
                   <div ref={categoriesSectionRef} className="marketplace-categories full-bleed">
                     <div className="section-header">
                       <h3>Categories</h3>
-                      <button className="view-all-btn" onClick={() => { setActiveTab('categories'); handleSearch(); }}>
+                      <button className="view-all-btn" onClick={() => { setActiveTab('categories'); handleSearch(); setSelectedCategory(null); }}>
                         View All
                         <ArrowRight size={16} />
                       </button>
                     </div>
-                    <div className="categories-grid">
+                    <div className="categories-carousel" style={{ position: 'relative' }}>
+                      <button
+                        aria-label="Scroll left"
+                        className="carousel-arrow left"
+                        onClick={() => { const el = categoriesScrollRef.current; if (el) el.scrollBy({ left: -280, behavior: 'smooth' }); }}
+                      >
+                        <span className="arrow-icon-stack">
+                          <LayoutGrid className="arrow-badge" />
+                          <ChevronLeft className="arrow-chevron" />
+                        </span>
+                      </button>
+                      <div
+                        ref={categoriesScrollRef}
+                        className="categories-grid categories-scroll"
+                      >
                       {filteredCategories.map((category, idx) => {
                         const IconComponent = category.id === '__all__'
                           ? AllServicesIcon
@@ -856,7 +942,13 @@ const CustomerDashboard = () => {
                           <motion.div 
                             key={category.id} 
                             className="category-card" 
-                            onClick={() => setActiveTab('categories')}
+                            style={{ flex: '0 0 auto', scrollSnapAlign: 'start' }}
+                            onClick={() => {
+                              setSelectedCategory(category);
+                              setTimeout(() => {
+                                document.getElementById('selected-category-services')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              }, 0);
+                            }}
                             whileHover={cardHoverEffects[idx % cardHoverEffects.length]}
                             variants={cardEntranceVariants[idx % cardEntranceVariants.length]}
                           >
@@ -880,6 +972,17 @@ const CustomerDashboard = () => {
                           </motion.div>
                         );
                       })}
+                      </div>
+                      <button
+                        aria-label="Scroll right"
+                        className="carousel-arrow right"
+                        onClick={() => { const el = categoriesScrollRef.current; if (el) el.scrollBy({ left: 280, behavior: 'smooth' }); }}
+                      >
+                        <span className="arrow-icon-stack">
+                          <LayoutGrid className="arrow-badge" />
+                          <ChevronRight className="arrow-chevron" />
+                        </span>
+                      </button>
                     </div>
                   </div>
 
@@ -946,133 +1049,60 @@ const CustomerDashboard = () => {
                     </div>
                   )}
 
-                  {/* All Services by Category */}
-                  <div className="services-by-category-section full-bleed">
-                    <div className="section-header">
-                      <h3>All Services by Category</h3>
-                      <div className="timer">
-                        <Clock size={16} />
-                        <span>Live Prices in ₹</span>
+                  {/* Selected Category Services: only render after a category click */}
+                  {selectedCategory && (
+                    <div id="selected-category-services" className="services-by-category-section full-bleed">
+                      <div className="section-header">
+                        <h3>{selectedCategory.name} Services</h3>
+                        <button className="view-all-btn" onClick={() => setSelectedCategory(null)}>Back to Categories</button>
+                      </div>
+                      <div className="deals-grid">
+                        {selectedCategory.services.map((service, idx) => {
+                          const hasOffer = service.offer_enabled && service.offer_price;
+                          const discount = hasOffer && service.price ? Math.round(((service.price - service.offer_price) / service.price) * 100) : 0;
+                          return (
+                            <motion.div key={service.id} className="deal-card" whileHover={cardHoverEffects[idx % cardHoverEffects.length]} variants={cardEntranceVariants[idx % cardEntranceVariants.length]}>
+                              {hasOffer && discount > 0 && (<div className="deal-badge">{discount}% OFF</div>)}
+                              <div className="deal-image">
+                                {service.icon_url ? (
+                                  <img src={service.icon_url} alt={service.name} style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8 }} onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'block'; }} />
+                                ) : null}
+                                <Settings size={60} style={{ display: service.icon_url ? 'none' : 'block' }} />
+                              </div>
+                              <div className="deal-content">
+                                <h4>{service.name}</h4>
+                                {service.description && (
+                                  <p className="service-description">{service.description.slice(0, 80)}...</p>
+                                )}
+                                {service.duration && (
+                                  <div className="duration-row">
+                                    <Clock size={12} />
+                                    <span>{service.duration}</span>
+                                  </div>
+                                )}
+                                <div className="price-row">
+                                  <span className="current-price">₹{hasOffer ? service.offer_price : service.price}</span>
+                                  {hasOffer && service.price > service.offer_price && (<span className="original-price">₹{service.price}</span>)}
+                                </div>
+                                {service.duration && (<div className="duration-hint">per {service.duration}</div>)}
+                              </div>
+                              <div className="deal-actions">
+                                <button className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`} onClick={() => isInCart(service.id) ? removeFromCart(service.id) : addToCart(service)}>
+                                  <ShoppingCart size={16} />{isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
+                                </button>
+                                <button className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`} onClick={() => toggleWishlist(service)}>
+                                  <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />{isInWishlist(service.id) ? 'Liked' : 'Like'}
+                                </button>
+                                <button className="deal-btn deal-btn-book" onClick={() => { toast.success(`Booking ${service.name}...`); }}>
+                                  <Calendar size={16} />Book Now
+                                </button>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
                       </div>
                     </div>
-                    
-                    {servicesLoading ? (
-                      <div className="loading-placeholder">Loading services...</div>
-                    ) : (
-                      categories.filter(cat => cat.id !== '__all__' && cat.services.length > 0).map(category => {
-                        const IconComponent = category.id === '__all__'
-                          ? AllServicesIcon
-                          : category.icon;
-                        return (
-                        <div key={category.id} className="category-services-block">
-                          <div className="category-header">
-                            <div className="category-title">
-                              {category.imageUrl ? (
-                                <img
-                                  src={category.imageUrl}
-                                  alt={`${category.name} icon`}
-                                  style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 8, marginRight: 12 }}
-                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                />
-                              ) : (
-                                <IconComponent size={32} style={{ marginRight: 12 }} />
-                              )}
-                              <div>
-                                <h4>{category.name}</h4>
-                                <p>{category.services.length} services available</p>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="deals-grid">
-                            {category.services.map((service, idx) => {
-                              const hasOffer = service.offer_enabled && service.offer_price;
-                              const discount = hasOffer && service.price ? 
-                                Math.round(((service.price - service.offer_price) / service.price) * 100) : 0;
-                              
-                              return (
-                                <motion.div 
-                                  key={service.id} 
-                                  className="deal-card"
-                                  whileHover={cardHoverEffects[idx % cardHoverEffects.length]}
-                                  variants={cardEntranceVariants[idx % cardEntranceVariants.length]}
-                                >
-                                  {hasOffer && discount > 0 && (
-                                    <div className="deal-badge">{discount}% OFF</div>
-                                  )}
-                                  <div className="deal-image">
-                                    {service.icon_url ? (
-                                      <img 
-                                        src={service.icon_url} 
-                                        alt={service.name}
-                                        style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8 }}
-                                        onError={(e) => {
-                                          e.currentTarget.style.display = 'none';
-                                          e.currentTarget.nextSibling.style.display = 'block';
-                                        }}
-                                      />
-                                    ) : null}
-                                    <Settings size={60} style={{ display: service.icon_url ? 'none' : 'block' }} />
-                                  </div>
-                                  <div className="deal-content">
-                                    <h4>{service.name}</h4>
-                                    <p className="provider-name">{service.category_name || service.category || 'Services'}</p>
-                                    {service.description && (
-                                      <p className="service-description">{service.description.slice(0, 50)}...</p>
-                                    )}
-                                    {service.duration && (
-                                      <div className="duration-row">
-                                        <Clock size={12} />
-                                        <span>{service.duration}</span>
-                                      </div>
-                                    )}
-                                    <div className="price-row">
-                                      <span className="current-price">
-                                        ₹{hasOffer ? service.offer_price : service.price}
-                                      </span>
-                                      {hasOffer && service.price > service.offer_price && (
-                                        <span className="original-price">₹{service.price}</span>
-                                      )}
-                                    </div>
-                                    {service.duration && (
-                                      <div className="duration-hint">per {service.duration}</div>
-                                    )}
-                                  </div>
-                                  <div className="deal-actions">
-                                    <button 
-                                      className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`}
-                                      onClick={() => isInCart(service.id) ? removeFromCart(service.id) : addToCart(service)}
-                                    >
-                                      <ShoppingCart size={16} />
-                                      {isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
-                                    </button>
-                                    <button 
-                                      className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`}
-                                      onClick={() => toggleWishlist(service)}
-                                    >
-                                      <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />
-                                      {isInWishlist(service.id) ? 'Liked' : 'Like'}
-                                    </button>
-                                    <button 
-                                      className="deal-btn deal-btn-book"
-                                      onClick={() => {
-                                        toast.success(`Booking ${service.name}...`);
-                                        // Add booking logic here
-                                      }}
-                                    >
-                                      <Calendar size={16} />
-                                    Book Now
-                                  </button>
-                                  </div>
-                                </motion.div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        );
-                      })
-                    )}
-                  </div>
+                  )}
 
                   {/* Top Offers Section */}
                   <div className="top-offers-section full-bleed">
@@ -1145,34 +1175,535 @@ const CustomerDashboard = () => {
                   animate="visible"
                   variants={containerVariants}
                 >
-                  {/* Flipkart-style Categories Header */}
-                  <div className="flipkart-categories-header">
-                    <div className="categories-hero">
-                      <h1>All Categories</h1>
-                      <p>Explore our wide range of professional services</p>
+                  {/* Professional Categories Header */}
+                  <div className="categories-header" style={{
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                    borderRadius: '20px',
+                    padding: '3rem 2rem',
+                    marginBottom: '2rem',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      top: '-50%',
+                      right: '-20%',
+                      width: '200px',
+                      height: '200px',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      borderRadius: '50%',
+                      zIndex: 1
+                    }} />
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '-30%',
+                      left: '-10%',
+                      width: '150px',
+                      height: '150px',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      borderRadius: '50%',
+                      zIndex: 1
+                    }} />
+                    
+                    <div style={{ position: 'relative', zIndex: 2 }}>
+                      <div className="categories-hero" style={{
+                        textAlign: 'center',
+                        marginBottom: '2rem'
+                      }}>
+                        <h1 style={{
+                          fontSize: '2.5rem',
+                          fontWeight: '800',
+                          color: 'white',
+                          margin: '0 0 1rem 0',
+                          textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}>
+                          Service Categories
+                        </h1>
+                        <p style={{
+                          fontSize: '1.125rem',
+                          color: 'rgba(255, 255, 255, 0.9)',
+                          margin: '0',
+                          fontWeight: '400'
+                        }}>
+                          Discover professional services tailored to your needs
+                        </p>
                     </div>
-                    <div className="categories-search-bar">
-                      <div className="search-container">
+                      
+                      <div className="categories-search-bar" style={{
+                        display: 'flex',
+                        justifyContent: 'center'
+                      }}>
+                        <div className="search-container" style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          background: 'white',
+                          borderRadius: '50px',
+                          padding: '0.5rem',
+                          boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+                          maxWidth: '500px',
+                          width: '100%'
+                        }}>
+                          <div style={{
+                            padding: '0.75rem',
+                            color: '#64748b'
+                          }}>
                         <Search size={20} />
-                        <input
-                          type="text"
-                          placeholder="Search categories..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="categories-search-input"
-                        />
-                        <button className="categories-search-btn">
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Search categories and services..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="categories-search-input"
+                            style={{
+                              flex: 1,
+                              border: 'none',
+                              outline: 'none',
+                              fontSize: '1rem',
+                              padding: '0.5rem 0',
+                              background: 'transparent',
+                              color: '#1e293b',
+                              fontWeight: '500'
+                            }}
+                          />
+                          <button style={{
+                            background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                            border: 'none',
+                            borderRadius: '25px',
+                            padding: '0.75rem 1.5rem',
+                            color: 'white',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}>
                           Search
                         </button>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* All Categories Grid */}
+                  {/* Category Services View */}
+                  {viewingCategory ? (
+                    <div className="category-services-view">
+                      <div className="category-services-header">
+                        <button 
+                          className="back-to-categories-btn"
+                          onClick={handleBackToCategories}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '12px 20px',
+                            border: 'none',
+                            borderRadius: '12px',
+                            background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                            color: '#475569',
+                            cursor: 'pointer',
+                            marginBottom: '2rem',
+                            fontWeight: '600',
+                            fontSize: '0.875rem',
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                          }}
+                        >
+                          <ArrowLeft size={16} />
+                          Back to Categories
+                        </button>
+                        
+                        <div className="category-header-info" style={{
+                          background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                          borderRadius: '20px',
+                          padding: '2.5rem',
+                          marginBottom: '2rem',
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}>
+                          <div style={{
+                            position: 'absolute',
+                            top: '-50%',
+                            right: '-20%',
+                            width: '150px',
+                            height: '150px',
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            borderRadius: '50%',
+                            zIndex: 1
+                          }} />
+                          
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '1.5rem',
+                            position: 'relative',
+                            zIndex: 2
+                          }}>
+                            <div style={{
+                              width: '80px',
+                              height: '80px',
+                              borderRadius: '20px',
+                              background: 'rgba(255, 255, 255, 0.2)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              border: '2px solid rgba(255, 255, 255, 0.3)',
+                              backdropFilter: 'blur(10px)'
+                            }}>
+                              {viewingCategory.imageUrl ? (
+                                <img
+                                  src={viewingCategory.imageUrl}
+                                  alt={`${viewingCategory.name} icon`}
+                                  style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 16 }}
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                              ) : (
+                                (viewingCategory.id === '__all__' ? AllServicesIcon : viewingCategory.icon)({ size: 60, color: 'white' })
+                              )}
+                            </div>
+                            <div>
+                              <h1 style={{ 
+                                margin: '0 0 0.5rem 0', 
+                                fontSize: '2rem', 
+                                fontWeight: '800', 
+                                color: 'white',
+                                textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                              }}>
+                                {viewingCategory.name}
+                              </h1>
+                              <p style={{ 
+                                margin: '0', 
+                                color: 'rgba(255, 255, 255, 0.9)', 
+                                fontSize: '1.125rem',
+                                fontWeight: '500'
+                              }}>
+                                {viewingCategory.services.length} professional services available
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Category Services Search */}
+                      <div className="category-services-search" style={{
+                        marginTop: '1.5rem',
+                        marginBottom: '1rem'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          padding: '0.75rem 1rem',
+                          backgroundColor: '#fff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          maxWidth: '400px'
+                        }}>
+                          <Search size={18} color="#64748b" />
+                          <input
+                            type="text"
+                            placeholder="Search services in this category..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={{
+                              border: 'none',
+                              outline: 'none',
+                              flex: 1,
+                              fontSize: '0.875rem',
+                              color: '#1e293b',
+                              fontWeight: '500'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="category-services-grid" style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                        gap: '1.5rem',
+                        marginTop: '2rem'
+                      }}>
+                        {(() => {
+                          const filteredServices = searchQuery.trim() 
+                            ? viewingCategory.services.filter(service => 
+                                service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                (service.description && service.description.toLowerCase().includes(searchQuery.toLowerCase()))
+                              )
+                            : viewingCategory.services;
+
+                          return filteredServices.length === 0 ? (
+                            <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                              {searchQuery 
+                                ? `No services found for "${searchQuery}" in this category.`
+                                : 'No services available in this category yet.'
+                              }
+                            </div>
+                          ) : (
+                            <>
+                              {searchQuery && (
+                                <div style={{ 
+                                  marginBottom: '1rem', 
+                                  color: '#64748b', 
+                                  fontSize: '0.875rem' 
+                                }}>
+                                  Showing {filteredServices.length} of {viewingCategory.services.length} services
+                                </div>
+                              )}
+                              {filteredServices.map((service, idx) => {
+                            const hasOffer = service.offer_enabled && service.offer_price;
+                            const discount = hasOffer && service.price ? 
+                              Math.round(((service.price - service.offer_price) / service.price) * 100) : 0;
+                            
+                            return (
+                              <motion.div 
+                                key={service.id} 
+                                className="service-card"
+                                whileHover={{ 
+                                  y: -8,
+                                  boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
+                                  transition: { duration: 0.3 }
+                                }}
+                                variants={itemVariants}
+                                style={{
+                                  background: '#fff',
+                                  borderRadius: '16px',
+                                  padding: '2rem',
+                                  border: '1px solid #f1f5f9',
+                                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+                                  transition: 'all 0.3s ease',
+                                  position: 'relative',
+                                  overflow: 'hidden'
+                                }}
+                              >
+                                {/* Gradient accent */}
+                                <div style={{
+                                  position: 'absolute',
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  height: '4px',
+                                  background: hasOffer 
+                                    ? 'linear-gradient(90deg, #dc2626 0%, #ef4444 100%)'
+                                    : 'linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%)'
+                                }} />
+                                
+                                <div style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  height: '100%',
+                                  gap: '1.5rem'
+                                }}>
+                                  {/* Header */}
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    justifyContent: 'space-between',
+                                    gap: '1rem'
+                                  }}>
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '1rem',
+                                      flex: 1
+                                    }}>
+                                      <div style={{
+                                        width: '60px',
+                                        height: '60px',
+                                        borderRadius: '12px',
+                                        background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        border: '2px solid #e2e8f0'
+                                      }}>
+                                        {service.icon_url ? (
+                                          <img 
+                                            src={service.icon_url} 
+                                            alt={service.name}
+                                            style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 8 }}
+                                            onError={(e) => {
+                                              e.currentTarget.style.display = 'none';
+                                              e.currentTarget.nextSibling.style.display = 'block';
+                                            }}
+                                          />
+                                        ) : null}
+                                        <Settings size={40} style={{ display: service.icon_url ? 'none' : 'block', color: '#3b82f6' }} />
+                                      </div>
+                                      <div>
+                                        <h3 style={{ 
+                                          margin: '0 0 0.25rem 0', 
+                                          fontSize: '1.25rem', 
+                                          fontWeight: '700',
+                                          color: '#1e293b',
+                                          lineHeight: '1.3'
+                                        }}>
+                                          {service.name}
+                                        </h3>
+                                        {service.duration && (
+                                          <p style={{ 
+                                            margin: '0', 
+                                            color: '#64748b', 
+                                            fontSize: '0.875rem',
+                                            fontWeight: '500'
+                                          }}>
+                                            Duration: {service.duration}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {hasOffer && (
+                                      <div style={{
+                                        background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)',
+                                        color: 'white',
+                                        padding: '0.5rem 0.75rem',
+                                        borderRadius: '8px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: '700',
+                                        textAlign: 'center',
+                                        boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)'
+                                      }}>
+                                        {discount}%<br/>OFF
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Description */}
+                                  {service.description && (
+                                    <div style={{
+                                      background: '#f8fafc',
+                                      padding: '1rem',
+                                      borderRadius: '12px',
+                                      border: '1px solid #e2e8f0'
+                                    }}>
+                                      <p style={{ 
+                                        margin: '0', 
+                                        color: '#475569', 
+                                        fontSize: '0.875rem',
+                                        lineHeight: '1.6'
+                                      }}>
+                                        {service.description}
+                                      </p>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Pricing and Actions */}
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    paddingTop: '1rem',
+                                    borderTop: '1px solid #f1f5f9',
+                                    marginTop: 'auto'
+                                  }}>
+                                    <div>
+                                      <div style={{
+                                        display: 'flex',
+                                        alignItems: 'baseline',
+                                        gap: '0.75rem',
+                                        marginBottom: '0.5rem'
+                                      }}>
+                                        <span style={{ 
+                                          fontSize: '1.75rem', 
+                                          fontWeight: '800', 
+                                          color: '#059669'
+                                        }}>
+                                          ₹{hasOffer ? service.offer_price : service.price}
+                                        </span>
+                                        {hasOffer && service.price > service.offer_price && (
+                                          <span style={{ 
+                                            fontSize: '1.125rem', 
+                                            color: '#94a3b8', 
+                                            textDecoration: 'line-through',
+                                            fontWeight: '500'
+                                          }}>
+                                            ₹{service.price}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {hasOffer && (
+                                        <div style={{
+                                          background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)',
+                                          color: 'white',
+                                          padding: '0.25rem 0.5rem',
+                                          borderRadius: '6px',
+                                          fontSize: '0.75rem',
+                                          fontWeight: '600',
+                                          display: 'inline-block'
+                                        }}>
+                                          Save ₹{service.price - service.offer_price}
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    <div style={{
+                                      display: 'flex',
+                                      gap: '0.75rem'
+                                    }}>
+                                      <button 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          isInCart(service.id) ? removeFromCart(service.id) : addToCart(service);
+                                        }}
+                                        style={{
+                                          background: isInCart(service.id) 
+                                            ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+                                            : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                                          border: 'none',
+                                          borderRadius: '12px',
+                                          padding: '0.875rem 1.5rem',
+                                          color: 'white',
+                                          fontWeight: '600',
+                                          cursor: 'pointer',
+                                          fontSize: '0.875rem',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.5rem',
+                                          transition: 'all 0.2s ease',
+                                          boxShadow: isInCart(service.id) 
+                                            ? '0 4px 12px rgba(5, 150, 105, 0.4)'
+                                            : '0 4px 12px rgba(59, 130, 246, 0.4)'
+                                        }}
+                                      >
+                                        <ShoppingCart size={16} />
+                                        {isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            );
+                              })
+                              }
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  ) : (
+                    /* All Categories Grid */
                   <div className="all-categories">
-                    <h2>Browse All Categories</h2>
-                    <div className="all-categories-grid">
-                      {categories.map((category, idx) => {
+                      <h2>
+                        Browse All Categories
+                        {searchQuery && (
+                          <span style={{ fontSize: '0.9em', fontWeight: 'normal', color: '#64748b', marginLeft: '0.5rem' }}>
+                            ({filteredCategories.length} {filteredCategories.length === 1 ? 'category' : 'categories'} found)
+                          </span>
+                        )}
+                      </h2>
+                      {servicesLoading ? (
+                        <div className="loading-placeholder" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                          Loading categories and services...
+                        </div>
+                      ) : filteredCategories.length === 0 ? (
+                        <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                          {searchQuery ? `No categories found for "${searchQuery}"` : 'No categories available at the moment.'}
+                        </div>
+                      ) : (
+                        <div className="all-categories-grid" style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+                          gap: '2rem',
+                          marginTop: '1rem'
+                        }}>
+                          {filteredCategories.map((category, idx) => {
                         const IconComponent = category.id === '__all__'
                           ? AllServicesIcon
                           : category.icon;
@@ -1180,61 +1711,247 @@ const CustomerDashboard = () => {
                           <motion.div 
                             key={category.id} 
                             className="category-item-card"
-                            whileHover={cardHoverEffects[idx % cardHoverEffects.length]}
+                              whileHover={{ 
+                                y: -8,
+                                boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
+                                transition: { duration: 0.3 }
+                              }}
                             variants={cardEntranceVariants[idx % cardEntranceVariants.length]}
-                          >
-                            <div className="category-image-large">
+                              onClick={() => handleCategoryClick(category)}
+                              style={{ 
+                                cursor: 'pointer',
+                                background: 'white',
+                                borderRadius: '20px',
+                                padding: '2rem',
+                                border: '1px solid #f1f5f9',
+                                boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                                transition: 'all 0.3s ease',
+                                position: 'relative',
+                                overflow: 'hidden'
+                              }}
+                            >
+                              {/* Gradient overlay */}
+                              <div style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                height: '4px',
+                                background: 'linear-gradient(90deg, #3b82f6 0%, #1d4ed8 50%, #0ea5e9 100%)'
+                              }} />
+                              
+                              <div style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                height: '100%',
+                                gap: '1.5rem'
+                              }}>
+                                {/* Header with icon and title */}
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '1rem'
+                                }}>
+                                  <div style={{
+                                    width: '70px',
+                                    height: '70px',
+                                    borderRadius: '16px',
+                                    background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: '2px solid #e2e8f0'
+                                  }}>
                               {category.imageUrl ? (
                                 <img
                                   src={category.imageUrl}
                                   alt={`${category.name} icon`}
-                                  style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 16, border: '1px solid #e2e8f0' }}
+                                        style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 12 }}
                                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                 />
                               ) : (
-                                <IconComponent size={56} />
+                                      <IconComponent size={40} color="#3b82f6" />
                               )}
                             </div>
-                            <div className="category-content">
-                              <h3>{category.name}</h3>
-                              <p>{category.services.length} services available</p>
-                              <div className="category-services-list">
-                                {category.services.map((service, idx) => (
-                                  <span key={idx} className="service-tag">{service.name}</span>
-                                ))}
+                                  <div>
+                                    <h3 style={{
+                                      margin: '0 0 0.25rem 0',
+                                      fontSize: '1.5rem',
+                                      fontWeight: '700',
+                                      color: '#1e293b',
+                                      lineHeight: '1.2'
+                                    }}>
+                                      {category.name}
+                                    </h3>
+                                    <p style={{
+                                      margin: '0',
+                                      color: '#64748b',
+                                      fontSize: '0.875rem',
+                                      fontWeight: '500'
+                                    }}>
+                                      {category.services.length} services available
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Services preview */}
+                                <div style={{
+                                  flex: 1
+                                }}>
+                                  <div style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: '0.5rem',
+                                    marginBottom: '1rem'
+                                  }}>
+                                    {category.services.slice(0, 3).map((service, idx) => (
+                                      <span key={idx} style={{
+                                        background: '#f1f5f9',
+                                        color: '#475569',
+                                        padding: '0.375rem 0.75rem',
+                                        borderRadius: '20px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: '500',
+                                        border: '1px solid #e2e8f0'
+                                      }}>
+                                        {service.name}
+                                      </span>
+                                    ))}
+                                    {category.services.length > 3 && (
+                                      <span style={{
+                                        background: '#dbeafe',
+                                        color: '#1d4ed8',
+                                        padding: '0.375rem 0.75rem',
+                                        borderRadius: '20px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: '500',
+                                        border: '1px solid #93c5fd'
+                                      }}>
+                                        +{category.services.length - 3} more
+                                      </span>
+                                    )}
                               </div>
-                              <div className="category-pricing">
-                                <span className="price-from">Starting from</span>
-                                 <span className="price-amount">
+                                </div>
+
+                                {/* Pricing and actions */}
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  paddingTop: '1rem',
+                                  borderTop: '1px solid #f1f5f9'
+                                }}>
+                                  <div>
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'baseline',
+                                      gap: '0.5rem'
+                                    }}>
+                                      <span style={{
+                                        color: '#64748b',
+                                        fontSize: '0.875rem',
+                                        fontWeight: '500'
+                                      }}>
+                                        From
+                                      </span>
+                                      <span style={{
+                                        fontSize: '1.5rem',
+                                        fontWeight: '800',
+                                        color: '#059669'
+                                      }}>
                                    ₹{category.services.length > 0 ? 
                                      Math.min(...category.services.map(s => s.offer_enabled && s.offer_price ? s.offer_price : s.price).filter(p => p > 0)) : 
                                      500
                                    }
                                  </span>
+                                    </div>
                                 {category.services.some(s => s.offer_enabled) && (
-                                  <span className="discount-badge">Special Offers</span>
+                                      <div style={{
+                                        marginTop: '0.25rem'
+                                      }}>
+                                        <span style={{
+                                          background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)',
+                                          color: 'white',
+                                          padding: '0.25rem 0.5rem',
+                                          borderRadius: '6px',
+                                          fontSize: '0.75rem',
+                                          fontWeight: '600'
+                                        }}>
+                                          Special Offers
+                                        </span>
+                                      </div>
                                 )}
                               </div>
-                            </div>
-                            <div className="category-actions">
-                              <button className="explore-btn-large" onClick={handleBookService}>
-                                Book Now
-                              </button>
-                              <button className="wishlist-btn">
-                                <Heart size={24} fill="currentColor" color="currentColor" />
-                              </button>
+                                  
+                                  <div style={{
+                                    display: 'flex',
+                                    gap: '0.5rem'
+                                  }}>
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleBookService();
+                                      }}
+                                      style={{
+                                        background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                                        border: 'none',
+                                        borderRadius: '12px',
+                                        padding: '0.75rem 1.5rem',
+                                        color: 'white',
+                                        fontWeight: '600',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        transition: 'all 0.2s ease',
+                                        boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)'
+                                      }}
+                                    >
+                                      Explore
+                                    </button>
+                                  </div>
+                                </div>
                             </div>
                           </motion.div>
                         );
                         })
                       }
                     </div>
+                      )}
                   </div>
+                  )}
 
                   {/* Popular Services */}
-                  <div className="popular-services">
-                    <h2>Popular Services</h2>
-                    <div className="popular-services-grid">
+                  {!viewingCategory && (
+                    <div className="popular-services" style={{
+                      marginTop: '3rem',
+                      padding: '2rem 0'
+                    }}>
+                      <div style={{
+                        textAlign: 'center',
+                        marginBottom: '2rem'
+                      }}>
+                        <h2 style={{
+                          fontSize: '2rem',
+                          fontWeight: '800',
+                          color: '#1e293b',
+                          margin: '0 0 0.5rem 0'
+                        }}>
+                          Popular Services
+                        </h2>
+                        <p style={{
+                          fontSize: '1rem',
+                          color: '#64748b',
+                          margin: '0'
+                        }}>
+                          Most booked services by our customers
+                        </p>
+                      </div>
+                    <div className="popular-services-grid" style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                      gap: '2rem',
+                      marginTop: '2rem',
+                      padding: '0 1rem'
+                    }}>
                       {servicesLoading ? (
                         <div className="loading-placeholder">Loading popular services...</div>
                       ) : services.length > 0 ? (
@@ -1250,66 +1967,248 @@ const CustomerDashboard = () => {
                             <motion.div 
                               key={service.id} 
                               className="deal-card"
-                              whileHover={{ y: -4 }}
+                              whileHover={{ 
+                                y: -8,
+                                boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
+                                transition: { duration: 0.3 }
+                              }}
                               variants={itemVariants}
+                              style={{
+                                background: '#fff',
+                                borderRadius: '16px',
+                                padding: '2rem',
+                                border: '1px solid #f1f5f9',
+                                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+                                transition: 'all 0.3s ease',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                minHeight: '300px',
+                                display: 'flex',
+                                flexDirection: 'column'
+                              }}
                             >
-                              <div className="deal-badge">{badge}</div>
-                              <div className="deal-image">
-                                {service.icon_url ? (
-                                  <img 
-                                    src={service.icon_url} 
-                                    alt={service.name}
-                                    style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8 }}
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none';
-                                      e.currentTarget.nextSibling.style.display = 'block';
-                                    }}
-                                  />
-                                ) : null}
-                                <Settings size={60} style={{ display: service.icon_url ? 'none' : 'block' }} />
+                              {/* Gradient accent */}
+                              <div style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                height: '4px',
+                                background: 'linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%)'
+                              }} />
+                              
+                              {/* Badge */}
+                              <div style={{
+                                position: 'absolute',
+                                top: '1rem',
+                                right: '1rem',
+                                background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)',
+                                color: 'white',
+                                padding: '0.5rem 0.75rem',
+                                borderRadius: '8px',
+                                fontSize: '0.75rem',
+                                fontWeight: '700',
+                                zIndex: 2
+                              }}>
+                                {badge}
                               </div>
-                              <div className="deal-content">
-                                <h4>{service.name}</h4>
-                                <p className="provider-name">{service.category_name || service.category || 'Services'}</p>
-                                {service.description && (
-                                  <p className="service-description">{service.description.slice(0, 50)}...</p>
-                                )}
-                                <div className="price-row">
-                                  <span className="current-price">₹{hasOffer ? service.offer_price : service.price}</span>
-                                  {hasOffer && service.price > service.offer_price && (
-                                    <span className="original-price">₹{service.price}</span>
-                                  )}
+                              
+                              <div style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                height: '100%',
+                                gap: '1.5rem'
+                              }}>
+                                {/* Header with icon and title */}
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '1rem',
+                                  marginTop: '2rem'
+                                }}>
+                                  <div style={{
+                                    width: '60px',
+                                    height: '60px',
+                                    borderRadius: '12px',
+                                    background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: '2px solid #e2e8f0'
+                                  }}>
+                                    {service.icon_url ? (
+                                      <img 
+                                        src={service.icon_url} 
+                                        alt={service.name}
+                                        style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 8 }}
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = 'none';
+                                          e.currentTarget.nextSibling.style.display = 'block';
+                                        }}
+                                      />
+                                    ) : null}
+                                    <Settings size={40} style={{ display: service.icon_url ? 'none' : 'block', color: '#3b82f6' }} />
+                                  </div>
+                                  <div>
+                                    <h4 style={{
+                                      margin: '0 0 0.25rem 0',
+                                      fontSize: '1.25rem',
+                                      fontWeight: '700',
+                                      color: '#1e293b',
+                                      lineHeight: '1.3'
+                                    }}>
+                                      {service.name}
+                                    </h4>
+                                    <p style={{
+                                      margin: '0',
+                                      color: '#64748b',
+                                      fontSize: '0.875rem',
+                                      fontWeight: '500'
+                                    }}>
+                                      {service.category_name || service.category || 'Services'}
+                                    </p>
+                                  </div>
                                 </div>
-                                {service.duration && (
-                                  <div className="duration-hint">per {service.duration}</div>
+
+                                {/* Description */}
+                                {service.description && (
+                                  <div style={{
+                                    background: '#f8fafc',
+                                    padding: '1rem',
+                                    borderRadius: '12px',
+                                    border: '1px solid #e2e8f0',
+                                    flex: 1
+                                  }}>
+                                    <p style={{ 
+                                      margin: '0', 
+                                      color: '#475569', 
+                                      fontSize: '0.875rem',
+                                      lineHeight: '1.6'
+                                    }}>
+                                      {service.description}
+                                    </p>
+                                  </div>
                                 )}
+
+                                {/* Pricing and Actions */}
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  paddingTop: '1rem',
+                                  borderTop: '1px solid #f1f5f9',
+                                  marginTop: 'auto'
+                                }}>
+                                  <div>
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'baseline',
+                                      gap: '0.75rem',
+                                      marginBottom: '0.5rem'
+                                    }}>
+                                      <span style={{ 
+                                        fontSize: '1.5rem', 
+                                        fontWeight: '800', 
+                                        color: '#059669'
+                                      }}>
+                                        ₹{hasOffer ? service.offer_price : service.price}
+                                      </span>
+                                      {hasOffer && service.price > service.offer_price && (
+                                        <span style={{ 
+                                          fontSize: '1rem', 
+                                          color: '#94a3b8', 
+                                          textDecoration: 'line-through',
+                                          fontWeight: '500'
+                                        }}>
+                                          ₹{service.price}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {service.duration && (
+                                      <p style={{
+                                        margin: '0',
+                                        color: '#64748b',
+                                        fontSize: '0.875rem'
+                                      }}>
+                                        per {service.duration}
+                                      </p>
+                                    )}
+                                    {hasOffer && (
+                                      <div style={{
+                                        marginTop: '0.25rem'
+                                      }}>
+                                        <span style={{
+                                          background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)',
+                                          color: 'white',
+                                          padding: '0.25rem 0.5rem',
+                                          borderRadius: '6px',
+                                          fontSize: '0.75rem',
+                                          fontWeight: '600',
+                                          display: 'inline-block'
+                                        }}>
+                                          Save ₹{service.price - service.offer_price}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                              <div className="deal-actions">
+                              <div style={{
+                                display: 'flex',
+                                gap: '0.75rem',
+                                marginTop: '1rem'
+                              }}>
                                 <button 
-                                  className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`}
                                   onClick={() => isInCart(service.id) ? removeFromCart(service.id) : addToCart(service)}
+                                  style={{
+                                    background: isInCart(service.id) 
+                                      ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+                                      : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                                    border: 'none',
+                                    borderRadius: '12px',
+                                    padding: '0.875rem 1.5rem',
+                                    color: 'white',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    fontSize: '0.875rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    transition: 'all 0.2s ease',
+                                    boxShadow: isInCart(service.id) 
+                                      ? '0 4px 12px rgba(5, 150, 105, 0.4)'
+                                      : '0 4px 12px rgba(59, 130, 246, 0.4)',
+                                    flex: 1
+                                  }}
                                 >
                                   <ShoppingCart size={16} />
                                   {isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
                                 </button>
                                 <button 
-                                  className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`}
-                                  onClick={() => toggleWishlist(service)}
-                                >
-                                  <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />
-                                  {isInWishlist(service.id) ? 'Liked' : 'Like'}
-                                </button>
-                                <button 
-                                  className="deal-btn deal-btn-book"
                                   onClick={() => {
                                     toast.success(`Booking ${service.name}...`);
                                     // Add booking logic here
                                   }}
+                                  style={{
+                                    background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                                    border: 'none',
+                                    borderRadius: '12px',
+                                    padding: '0.875rem 1.5rem',
+                                    color: 'white',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    fontSize: '0.875rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    transition: 'all 0.2s ease',
+                                    boxShadow: '0 4px 12px rgba(5, 150, 105, 0.4)'
+                                  }}
                                 >
                                   <Calendar size={16} />
-                                Book Now
-                              </button>
-                            </div>
+                                  Book Now
+                                </button>
+                              </div>
                             </motion.div>
                           );
                         })
@@ -1320,6 +2219,7 @@ const CustomerDashboard = () => {
                       )}
                     </div>
                   </div>
+                  )}
                 </motion.div>
               )}
 
@@ -1726,7 +2626,7 @@ const CustomerDashboard = () => {
                                 style={{ backgroundColor: getStatusColor(service.status) }}
                               ></span>
                               <div className="status-text">
-                                <span className="status-main">{service.status.replace('-', ' ')}</span>
+                                <span className="status-main">{(service.status || '').replace('-', ' ')}</span>
                                 <span className="status-sub">
                                   {service.status === 'in-progress' && 'Provider is on the way'}
                                   {service.status === 'scheduled' && 'Service confirmed'}
