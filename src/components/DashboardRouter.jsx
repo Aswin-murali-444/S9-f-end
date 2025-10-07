@@ -29,8 +29,8 @@ const DashboardRouter = ({ user, onDashboardLoad }) => {
               navigate(route);
               return; // Exit early since we're redirecting
             } else {
-              // If no valid route found, redirect to home
-              navigate('/');
+              // If no valid route found, redirect to customer dashboard as default
+              navigate('/dashboard/customer');
               return;
             }
           }
@@ -64,8 +64,8 @@ const DashboardRouter = ({ user, onDashboardLoad }) => {
     if (dashboardRoute) {
       navigate(dashboardRoute);
     } else {
-      // If no dashboard route found, redirect to home
-      navigate('/');
+      // If no dashboard route found, redirect to customer dashboard
+      navigate('/dashboard/customer');
     }
   };
 

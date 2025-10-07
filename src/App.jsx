@@ -2,7 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import QueryProvider from './providers/QueryProvider';
-import { AuthProvider } from './hooks/useAuth';
+import { AuthProvider, useAuth } from './hooks/useAuth';
 import { SearchProvider } from './contexts/SearchContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -10,6 +10,7 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
 import PublicOnlyRoute from './components/PublicOnlyRoute';
+import DashboardRouter from './components/DashboardRouter';
 
 import './App.css';
 import './components/ErrorBoundary.css';
@@ -53,6 +54,7 @@ const Placeholder = ({ title }) => (
 
 function AppShell() {
   const location = useLocation();
+  const { user } = useAuth();
   const isAnyDashboard = location.pathname.startsWith('/dashboard');
   const isCustomerDashboard = location.pathname.startsWith('/dashboard/customer');
   const isAdminPage = location.pathname.startsWith('/admin');
@@ -75,7 +77,11 @@ function AppShell() {
                   </div>
                 }>
                   <Routes>
-                    <Route path="/" element={<HomePage />} />
+                    <Route path="/" element={
+                      <PublicOnlyRoute>
+                        <HomePage />
+                      </PublicOnlyRoute>
+                    } />
                     <Route path="/services" element={<ServicesPage />} />
                     <Route path="/about" element={<AboutPage />} />
                     <Route path="/contact" element={<ContactPage />} />
@@ -226,8 +232,15 @@ function AppShell() {
                       }
                     />
                     
-                    {/* Catch-all route for /dashboard - redirect to home */}
-                    <Route path="/dashboard" element={<HomePage />} />
+                    {/* Catch-all route for /dashboard - redirect to appropriate dashboard */}
+                    <Route 
+                      path="/dashboard" 
+                      element={
+                        <ProtectedRoute>
+                          <DashboardRouter user={user} />
+                        </ProtectedRoute>
+                      } 
+                    />
                   </Routes>
                 </Suspense>
       </main>

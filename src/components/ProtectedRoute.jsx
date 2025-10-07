@@ -65,8 +65,24 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
         </div>
       );
     }
-    // If the role couldn't be determined or not allowed, go to login
-    if (!resolvedRole || !allowedRoles.includes(resolvedRole)) {
+    // Try to use stored role if resolvedRole is not yet available (avoids bounce)
+    if (!resolvedRole) {
+      try {
+        const storedRoleKey = user?.id ? `user_role_${user.id}` : null;
+        const storedRole = (storedRoleKey && localStorage.getItem(storedRoleKey)) || localStorage.getItem('user_role');
+        if (storedRole && allowedRoles.includes(storedRole)) {
+          return children || null;
+        }
+      } catch (_) {}
+      // Show loader instead of redirecting to login when role is undetermined
+      return (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+          <LoadingSpinner size="large" />
+        </div>
+      );
+    }
+    // If role is resolved but not allowed, redirect to login
+    if (!allowedRoles.includes(resolvedRole)) {
       return <Navigate to="/login" replace state={{ from: location }} />;
     }
   }

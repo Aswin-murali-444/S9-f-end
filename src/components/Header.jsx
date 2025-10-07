@@ -11,6 +11,10 @@ const Header = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   
+  // Don't show user info on public pages - this header should only show for unauthenticated users
+  const isPublicPage = !location.pathname.startsWith('/dashboard') && !location.pathname.startsWith('/admin');
+  const shouldShowUserInfo = user && !isPublicPage;
+  
   const { useAnimatedInView, useHoverAnimation } = useAnimations();
   const { ref: navRef, triggerAnimation } = useAnimatedInView(0.1);
   const { elementRef: logoRef, handleMouseEnter: logoHover, handleMouseLeave: logoLeave } = useHoverAnimation('animate-pulse-glow');
@@ -92,7 +96,7 @@ const Header = () => {
 
           {/* User Actions */}
           <div className="user-actions">
-            {user ? (
+            {shouldShowUserInfo ? (
               <>
                 <div className="user-menu">
                 <div className="user-info hover-scale">
@@ -173,7 +177,7 @@ const Header = () => {
               </li>
             ))}
             {/* When authenticated, show quick logout in mobile list */}
-            {user ? (
+            {shouldShowUserInfo ? (
               <li className="nav-mobile-item">
                 <button 
                   onClick={logout} 

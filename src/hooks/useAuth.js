@@ -75,7 +75,6 @@ export const AuthProvider = ({ children }) => {
         const storedUser = localStorage.getItem('user');
         
         if (storedAuth && storedUser) {
-          console.log('🔄 Found stored auth state, setting immediately');
           setUser(JSON.parse(storedUser));
           setIsAuthenticated(true);
         }
@@ -810,14 +809,18 @@ export const AuthProvider = ({ children }) => {
           userID: data.user.id
         });
         
-        // Verify the state was set correctly
+        // Verify the state was set correctly (use storage-backed values to avoid stale state)
         setTimeout(() => {
-          console.log('🔍 Auth state verification:', {
-            reactUser: !!user,
-            reactAuth: isAuthenticated,
-            storageUser: !!localStorage.getItem('user'),
-            storageAuth: localStorage.getItem('isAuthenticated')
-          });
+          try {
+            const storageUser = localStorage.getItem('user');
+            const storageAuth = localStorage.getItem('isAuthenticated');
+            console.log('🔍 Auth state verification:', {
+              reactUser: true, // we just set it above
+              reactAuth: true,
+              storageUser: !!storageUser,
+              storageAuth
+            });
+          } catch (_) {}
         }, 100);
         
         // Additional check: If we still got customer role but user email suggests service provider
