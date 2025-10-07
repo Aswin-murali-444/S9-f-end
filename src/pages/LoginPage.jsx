@@ -24,7 +24,7 @@ const loginSchema = yup.object({
 });
 
 const LoginPage = () => {
-  const { login, signInWithGoogle, loading, isAuthenticated } = useAuth();
+  const { login, signInWithGoogle, loading, isAuthenticated, user, isInitialized, debugUserRole, testSupabaseConnection, testLoginFlow } = useAuth();
   const navigate = useNavigate();
 
   const {
@@ -46,12 +46,7 @@ const LoginPage = () => {
 
   // Clear form on component mount and prevent autofill
   useEffect(() => {
-    // If already authenticated, redirect away from login
-    if (isAuthenticated) {
-      navigate('/', { replace: true });
-      return;
-    }
-
+    // Clear form when component mounts
     reset();
     
     // Force clear any autofilled values
@@ -65,17 +60,36 @@ const LoginPage = () => {
   }, [reset]);
 
   const onSubmit = async (data) => {
-    const result = await login({ 
-      email: data.email, 
-      password: data.password
-    });
+    console.log('🔐 Attempting login for:', data.email);
     
-    if (result.success) {
-      if (result.dashboardPath) {
-        navigate(result.dashboardPath, { replace: true });
+    try {
+      const result = await login({ 
+        email: data.email, 
+        password: data.password
+      });
+      
+      console.log('🔐 Login result:', result);
+      
+      if (result.success) {
+        console.log('🚀 Login successful, forcing immediate redirect');
+        
+        // Get the dashboard path from result or localStorage
+        let targetPath = result.dashboardPath;
+        if (!targetPath) {
+          targetPath = localStorage.getItem('dashboard_path') || '/dashboard/provider';
+        }
+        
+        // Force immediate redirect without any delay
+        console.log('🚀 Immediate redirect to:', targetPath);
+        window.location.replace(targetPath);
+        
       } else {
-        navigate('/', { replace: true });
+        console.error('❌ Login failed:', result.error);
+        toast.error(result.error || 'Login failed');
       }
+    } catch (error) {
+      console.error('💥 Login error:', error);
+      toast.error('Login failed. Please try again.');
     }
   };
 
@@ -86,6 +100,36 @@ const LoginPage = () => {
     }
   };
 
+  const debugServiceProvider = async () => {
+    const email = watchedFields.email;
+    if (!email) {
+      toast.error('Please enter an email address first');
+      return;
+    }
+    
+    console.log('🔍 Debugging service provider status for:', email);
+    const debugResult = await debugUserRole(email);
+    console.log('🔍 Debug result:', debugResult);
+    
+    if (debugResult.user) {
+      const actualRole = debugResult.actualRole || 'unknown';
+      const databaseRole = debugResult.databaseRole || 'unknown';
+      const hasSPDetails = debugResult.isServiceProvider ? 'Yes' : 'No';
+      
+      let message;
+      if (debugResult.shouldRedirectToProvider) {
+        message = `✅ Service Provider - DB Role: ${databaseRole} → Corrected: ${actualRole}, SP Details: ${hasSPDetails}, Dashboard: ${debugResult.expectedDashboard}`;
+      } else {
+        message = `ℹ️ Role: ${actualRole}, SP Details: ${hasSPDetails}, Dashboard: ${debugResult.expectedDashboard}`;
+      }
+      
+      toast.success(message);
+    } else {
+      toast.error('User not found in database');
+    }
+  };
+
+
   const getFieldClass = (fieldName) => {
     const hasError = errors[fieldName];
     const isTouched = touchedFields[fieldName];
@@ -95,6 +139,25 @@ const LoginPage = () => {
     if (!hasError && isTouched && hasValue) return 'success';
     return '';
   };
+
+  // Show loading screen only when app is initializing
+  if (!isInitialized) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        color: 'white'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '1.2rem', marginBottom: '10px' }}>Loading...</div>
+          <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>Please wait while we check your authentication</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="login-container">
@@ -112,7 +175,10 @@ const LoginPage = () => {
               <p>Enter your credentials to continue</p>
             </div>
             
-            <form onSubmit={handleSubmit(onSubmit)}>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit(onSubmit)(e);
+            }}>
               <div className={`input-group ${getFieldClass('email')}`}>
                 <label htmlFor="email">Email Address</label>
                 <input
@@ -181,6 +247,155 @@ const LoginPage = () => {
                   <LogIn size={18} />
                   {(loading || isSubmitting) ? 'Signing In...' : 'Sign In'}
                 </button>
+                
+                {/* Debug buttons - only show in development */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div style={{ marginTop: '10px', display: 'flex', gap: '10px', flexDirection: 'column' }}>
+                    <button 
+                      type="button" 
+                      onClick={debugServiceProvider}
+                      disabled={loading || isSubmitting || !watchedFields.email}
+                      className="debug-btn"
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: '12px',
+                        background: '#6b7280',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔍 Debug Service Provider Status
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        console.log('🔍 Current auth state:', { isAuthenticated, user: !!user, isInitialized });
+                        console.log('🔍 LocalStorage dashboard_path:', localStorage.getItem('dashboard_path'));
+                        console.log('🔍 LocalStorage user_role:', localStorage.getItem('user_role'));
+                        toast.success(`Auth: ${isAuthenticated}, User: ${!!user}, Dashboard: ${localStorage.getItem('dashboard_path') || 'none'}`);
+                      }}
+                      disabled={loading || isSubmitting}
+                      className="debug-btn"
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: '12px',
+                        background: '#059669',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔍 Check Auth State
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        const userRole = localStorage.getItem('user_role');
+                        const dashboardPath = localStorage.getItem('dashboard_path');
+                        console.log('🚀 Manual redirect test:', { userRole, dashboardPath });
+                        
+                        if (userRole === 'service_provider') {
+                          navigate('/dashboard/provider', { replace: true });
+                          toast.success('Redirecting to service provider dashboard...');
+                        } else if (dashboardPath) {
+                          navigate(dashboardPath, { replace: true });
+                          toast.success(`Redirecting to: ${dashboardPath}`);
+                        } else {
+                          toast.error('No dashboard path found!');
+                        }
+                      }}
+                      disabled={loading || isSubmitting}
+                      className="debug-btn"
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: '12px',
+                        background: '#dc2626',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🚀 Force Redirect to Dashboard
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={async () => {
+                        const email = watchedFields.email;
+                        if (!email) {
+                          toast.error('Please enter an email address first');
+                          return;
+                        }
+                        
+                        try {
+                          // This would normally be done server-side, but for testing:
+                          toast.success('Note: Database role will be fixed automatically on next login');
+                          console.log('🔧 Manual fix: User will be corrected to service_provider role on next login');
+                        } catch (error) {
+                          toast.error('Fix failed: ' + error.message);
+                        }
+                      }}
+                      disabled={loading || isSubmitting || !watchedFields.email}
+                      className="debug-btn"
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: '12px',
+                        background: '#7c3aed',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔧 Fix Database Role
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={async () => {
+                        console.log('🔍 Testing Supabase connection...');
+                        const result = await testSupabaseConnection();
+                        console.log('🔍 Connection test result:', result);
+                      }}
+                      disabled={loading || isSubmitting}
+                      className="debug-btn"
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: '12px',
+                        background: '#0891b2',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔌 Test Database Connection
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={async () => {
+                        console.log('🔍 Testing login flow...');
+                        const result = await testLoginFlow();
+                        console.log('🔍 Login flow test result:', result);
+                      }}
+                      disabled={loading || isSubmitting}
+                      className="debug-btn"
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: '12px',
+                        background: '#ea580c',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔐 Test Login Flow
+                    </button>
+                  </div>
+                )}
               </div>
             </form>
             

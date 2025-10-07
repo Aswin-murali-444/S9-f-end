@@ -308,6 +308,49 @@ class ApiService {
   async unblockUser(userId) {
     return this.updateUserStatus(userId, 'active');
   }
+
+  async adminCreateProvider(payload) {
+    const options = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    };
+    try {
+      // Primary: direct to API_BASE_URL (e.g., http://localhost:3001)
+      return await this.request('/admin/providers', options);
+    } catch (err) {
+      // Fallback: try through dev proxy at /api
+      try {
+        const resp = await fetch(`/api/admin/providers`, options);
+        const contentType = resp.headers.get('content-type') || '';
+        const isJson = contentType.includes('application/json');
+        if (!isJson) {
+          const t = await resp.text();
+          throw new Error(t || `HTTP error! status: ${resp.status}`);
+        }
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data?.error || `HTTP error! status: ${resp.status}`);
+        }
+        return data;
+      } catch (fallbackErr) {
+        console.error('adminCreateProvider fallback failed:', fallbackErr);
+        throw err; // surface original
+      }
+    }
+  }
+
+  async adminUpdateProvider(userId, payload) {
+    return this.request(`/admin/providers/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async listProviders() {
+    return this.request('/admin/providers');
+  }
 }
 
 export const apiService = new ApiService(); 

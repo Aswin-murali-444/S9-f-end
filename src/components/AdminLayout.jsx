@@ -87,7 +87,7 @@ const AdminLayout = ({ children }) => {
     }
     
     // For admin pages, determine based on path
-    if (location.pathname.includes('/admin/add-user')) return 'Add User';
+    if (location.pathname.includes('/admin/add-service-provider')) return 'Add Service Provider';
     if (location.pathname.includes('/admin/add-category')) return 'Add Category';
     if (location.pathname.includes('/admin/add-service')) return 'Add Service';
     if (location.pathname.includes('/admin/assign-provider')) return 'Assign Provider';
@@ -370,12 +370,12 @@ const AdminLayout = ({ children }) => {
                 <div className="stat-label">Users</div>
               </div>
               <div className="stat-item">
-                <div className="stat-value">456</div>
-                <div className="stat-label">Sessions</div>
+                <div className="stat-value">4</div>
+                <div className="stat-label">Pending Approvals</div>
               </div>
               <div className="stat-item">
-                <div className="stat-value">94%</div>
-                <div className="stat-label">Uptime</div>
+                <div className="stat-value">{alerts?.length || 0}</div>
+                <div className="stat-label">Open Alerts</div>
               </div>
             </div>
             
@@ -439,12 +439,12 @@ const AdminLayout = ({ children }) => {
               
               <button 
                 className="btn-primary"
-                onClick={() => navigate('/admin/add-user')}
-                aria-label="Add User"
-                title="Add User"
+                onClick={() => navigate('/admin/add-service-provider')}
+                aria-label="Add Service Provider"
+                title="Add Service Provider"
               >
                 <Plus size={20} />
-                Add User
+                Add Service Provider
               </button>
             </div>
           </div>
@@ -570,9 +570,9 @@ const AdminLayout = ({ children }) => {
                     <div className="action-count">6 Actions</div>
                   </div>
                   <div className="actions-grid">
-                    <button className="action-btn" onClick={() => navigate('/admin/add-user')}>
+                    <button className="action-btn" onClick={() => navigate('/admin/add-service-provider')}>
                       <div className="action-icon user-add">👤</div>
-                      <span>Add User</span>
+                      <span>Add Service Provider</span>
                     </button>
                     <button className="action-btn" onClick={() => navigate('/admin/add-service')}>
                       <div className="action-icon service-add">⚙️</div>

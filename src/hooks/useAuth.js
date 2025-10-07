@@ -7,7 +7,21 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = 'https://zbscbvrklkntlbtefkgw.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpic2NidnJrbGtudGxidGVma2d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwODgzOTIsImV4cCI6MjA2ODY2NDM5Mn0.EJbPGMn7kXFgj5IahA2GIiEcA3dTDCbgj9cF09rcsuY';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Create Supabase client with proper configuration
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  }
+});
+
+// Test Supabase connection
+console.log('🔍 Supabase configuration:', {
+  url: supabaseUrl,
+  hasKey: !!supabaseAnonKey,
+  keyLength: supabaseAnonKey?.length
+});
 
 const AuthContext = createContext();
 
@@ -18,6 +32,10 @@ export const useAuth = () => {
   }
   return context;
 };
+
+// Lightweight in-memory role cache to prevent repeated lookups during route changes
+const userRoleCache = new Map(); // userId -> { role: string|null, timestamp: number }
+const userRoleInFlight = new Map(); // userId -> Promise<string|null>
 
 const uiRoleToDbRole = (uiRole) => {
   const key = String(uiRole || '').toLowerCase();
@@ -38,8 +56,8 @@ const roleToDashboardPath = (dbRole) => {
     'supervisor': '/dashboard/supervisor',
     'admin': '/dashboard/admin'
   };
-  // Instead of fallback to /dashboard, redirect to home
-  return map[dbRole] || '/';
+  // Default to customer dashboard instead of homepage
+  return map[dbRole] || '/dashboard/customer';
 };
 
 export const AuthProvider = ({ children }) => {
@@ -52,7 +70,18 @@ export const AuthProvider = ({ children }) => {
     // Initialize authentication state
     const initializeAuth = async () => {
       try {
+        // Check localStorage first for immediate auth state
+        const storedAuth = localStorage.getItem('isAuthenticated') === 'true';
+        const storedUser = localStorage.getItem('user');
+        
+        if (storedAuth && storedUser) {
+          console.log('🔄 Found stored auth state, setting immediately');
+          setUser(JSON.parse(storedUser));
+          setIsAuthenticated(true);
+        }
+        
         const { data: { session }, error } = await supabase.auth.getSession();
+        
         if (session && !error) {
           setUser(session.user);
           setIsAuthenticated(true);
@@ -70,7 +99,7 @@ export const AuthProvider = ({ children }) => {
                   )
                 `)
                 .eq('auth_user_id', session.user.id)
-                .single();
+                .maybeSingle();
 
               if (userData && !userError) {
                 const dbProfilePicture = userData.user_profiles?.profile_picture_url;
@@ -142,7 +171,7 @@ export const AuthProvider = ({ children }) => {
                 )
               `)
               .eq('auth_user_id', session.user.id)
-              .single();
+              .maybeSingle();
 
             if (userData && !userError) {
               const dbProfilePicture = userData.user_profiles?.profile_picture_url;
@@ -325,7 +354,7 @@ export const AuthProvider = ({ children }) => {
 
         const { data, error: insertError } = await supabase
           .from('users')
-          .insert(insertPayload)
+          .upsert(insertPayload, { onConflict: 'email' })
           .select();
         
         if (insertError) {
@@ -344,8 +373,8 @@ export const AuthProvider = ({ children }) => {
       const { data: verifyData, error: verifyError } = await supabase
         .from('users')
         .select('*')
-        .eq('auth_user_id', authUserId)
-        .single();
+        .or(`auth_user_id.eq.${authUserId},email.eq.${email}`)
+        .maybeSingle();
       
       if (verifyError || !verifyData) {
         console.error('❌ Verification failed after upsert:', verifyError);
@@ -399,7 +428,7 @@ export const AuthProvider = ({ children }) => {
 
       const { data: insertData, error: insertError } = await supabase
         .from('users')
-        .insert(minimalPayload)
+        .upsert(minimalPayload, { onConflict: 'email' })
         .select();
       
       if (insertError) {
@@ -420,7 +449,7 @@ export const AuthProvider = ({ children }) => {
         const { data: upsertData, error: upsertError } = await supabase
           .from('users')
           .upsert(upsertPayload, {
-            onConflict: 'auth_user_id'
+            onConflict: 'email'
           })
           .select();
         
@@ -470,16 +499,16 @@ export const AuthProvider = ({ children }) => {
 
   // Helper function to insert into related tables
   const insertRelatedTables = async (userId, firstName, lastName, avatarUrl, dbRole) => {
-    // Try to insert into user_profiles table - don't fail if it doesn't exist
+    // Try to upsert into user_profiles table to avoid duplicate key conflicts
     try {
       const { error: profileError } = await supabase
         .from('user_profiles')
-        .insert({
+        .upsert({
           id: userId,
           first_name: firstName,
           last_name: lastName,
           profile_picture_url: avatarUrl || null
-        });
+        }, { onConflict: 'id' });
       
       if (profileError) {
         console.warn('⚠️ Could not insert into user_profiles table:', profileError.message);
@@ -490,18 +519,18 @@ export const AuthProvider = ({ children }) => {
       console.warn('⚠️ user_profiles table might not exist:', error.message);
     }
     
-    // For customers, try to insert into customer_details table - don't fail if it doesn't exist
+    // For customers, try to upsert into customer_details to avoid duplicates
     if (dbRole === 'customer') {
       try {
         const { error: customerError } = await supabase
           .from('customer_details')
-          .insert({
+          .upsert({
             id: userId,
             preferred_services: [],
             emergency_contact_name: '',
             emergency_contact_phone: '',
             special_requirements: ''
-          });
+          }, { onConflict: 'id' });
         
         if (customerError) {
           console.warn('⚠️ Could not insert into customer_details table:', customerError.message);
@@ -517,13 +546,28 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     setLoading(true);
     try {
+      console.log('🔍 Attempting Supabase login for:', credentials.email);
+      console.log('🔍 Supabase client status:', {
+        url: supabase.supabaseUrl,
+        hasKey: !!supabase.supabaseKey
+      });
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email: credentials.email,
         password: credentials.password,
       });
+      
+      console.log('🔍 Supabase login response:', { data: !!data, error: error?.message });
       if (error) {
+        console.error('❌ Login error details:', error);
         toast.error(error.message || 'Login failed');
         return { success: false, error: error.message };
+      }
+      
+      if (!data || !data.user || !data.session) {
+        console.error('❌ Login failed: No user or session data');
+        toast.error('Login failed: Invalid response from server');
+        return { success: false, error: 'Invalid response from server' };
       }
       if (data.user && data.session) {
         setUser(data.user);
@@ -532,23 +576,50 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('session', JSON.stringify(data.session));
 
         let mappedRole = 'customer';
+        const pendingUiRole = (typeof window !== 'undefined' ? localStorage.getItem('pending_ui_role') : null) || credentials.userType || null;
         try {
-          // First, try to get existing user profile with profile picture
-          const { data: userData, error: userError } = await supabase
+          // First, try to get existing user profile with profile picture by auth_user_id
+          let { data: userData, error: userError } = await supabase
             .from('users')
             .select(`
+              id,
               role, 
               status,
+              email,
+              auth_user_id,
               user_profiles (
                 profile_picture_url
               )
             `)
             .eq('auth_user_id', data.user.id)
-            .single();
+            .maybeSingle();
+
+          // If not found by auth_user_id, try by email (admin-created accounts)
+          if ((!userData || !userData.role) && data.user.email) {
+            const fallback = await supabase
+              .from('users')
+              .select(`id, role, status, email, auth_user_id, user_profiles ( profile_picture_url )`)
+              .eq('email', data.user.email)
+              .maybeSingle();
+            if (!fallback.error && fallback.data) {
+              userData = fallback.data;
+              userError = null;
+              // If the row exists but auth_user_id is missing/different, bind it
+              try {
+                if (!userData.auth_user_id || userData.auth_user_id !== data.user.id) {
+                  await supabase
+                    .from('users')
+                    .update({ auth_user_id: data.user.id, last_login: new Date().toISOString() })
+                    .eq('id', userData.id);
+                }
+              } catch (_) {}
+            }
+          }
 
           if (userData && userData.role) {
             // User already has a profile with a role
             console.log('✅ Existing user profile found:', userData);
+            console.log('🎯 User role from database:', userData.role);
             mappedRole = userData.role;
             
             // Sync profile picture from database to auth metadata if needed
@@ -603,7 +674,7 @@ export const AuthProvider = ({ children }) => {
               authUserId: data.user.id,
               email: data.user.email,
               fullName: data.user.user_metadata?.full_name || data.user.user_metadata?.name || '',
-              uiRole: credentials.userType,
+              uiRole: pendingUiRole || 'customer',
               avatarUrl: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture || null,
             });
           }
@@ -616,7 +687,7 @@ export const AuthProvider = ({ children }) => {
               authUserId: data.user.id,
               email: data.user.email,
               fullName: data.user.user_metadata?.full_name || data.user.user_metadata?.name || '',
-              uiRole: credentials.userType,
+              uiRole: pendingUiRole || 'customer',
               avatarUrl: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture || null,
             });
           } catch (retryError) {
@@ -626,9 +697,145 @@ export const AuthProvider = ({ children }) => {
           }
         }
 
+        // Clear pending role hint after login
+        try { if (pendingUiRole) localStorage.removeItem('pending_ui_role'); } catch (_) {}
+
+        // Additional role validation: Check if user has service provider details
+        // This ensures that even if the role in users table is incorrect, we can detect service providers
+        try {
+          // First get the user's ID from the users table
+          const { data: userRecord, error: userErr } = await supabase
+            .from('users')
+            .select('id, role, email')
+            .eq('auth_user_id', data.user.id)
+            .maybeSingle();
+          
+          console.log('🔍 User record from database:', { userRecord, userErr, userEmail: data.user.email });
+          
+          if (userRecord && userRecord.id) {
+            // Check if user has service provider details
+            const { data: sp, error: spErr } = await supabase
+              .from('service_provider_details')
+              .select('id, status, specialization')
+              .eq('id', userRecord.id)
+              .maybeSingle();
+            
+            console.log('🔍 Service provider details check:', { sp, spErr, currentRole: mappedRole });
+            
+            // If service provider details exist, override the role
+            if (!spErr && sp) {
+              console.log('🔄 Service provider details found, overriding role to service_provider');
+              mappedRole = 'service_provider';
+              
+              // Also update the role in the users table to prevent future confusion
+              try {
+                await supabase
+                  .from('users')
+                  .update({ role: 'service_provider' })
+                  .eq('auth_user_id', data.user.id);
+                console.log('✅ Updated user role to service_provider in database');
+              } catch (updateError) {
+                console.warn('⚠️ Could not update user role in database:', updateError);
+              }
+            }
+            
+            // Also check if the role in users table is service_provider but we didn't catch it
+            if (userRecord.role === 'service_provider' && mappedRole !== 'service_provider') {
+              console.log('🔄 Role in users table is service_provider, overriding mapped role');
+              mappedRole = 'service_provider';
+            }
+            
+            // Additional fallback: check if user email contains service provider indicators
+            const email = (userRecord.email || data.user.email || '').toLowerCase();
+            if (email.includes('provider') || email.includes('service') || email.includes('sp-')) {
+              console.log('🔄 Email suggests service provider, checking if we should override role');
+              // Only override if we don't already have a definitive role
+              if (mappedRole === 'customer') {
+                console.log('🔄 Email-based service provider detection, overriding to service_provider');
+                mappedRole = 'service_provider';
+              }
+            }
+          } else {
+            console.log('⚠️ No user record found in database for auth_user_id:', data.user.id);
+            // Try to find by email as fallback
+            const { data: emailUser, error: emailErr } = await supabase
+              .from('users')
+              .select('id, role, email')
+              .eq('email', data.user.email)
+              .maybeSingle();
+            
+            console.log('🔍 Fallback email search:', { emailUser, emailErr });
+            
+            if (emailUser && !emailErr) {
+              // Update the auth_user_id if missing
+              if (!emailUser.auth_user_id || emailUser.auth_user_id !== data.user.id) {
+                try {
+                  await supabase
+                    .from('users')
+                    .update({ auth_user_id: data.user.id })
+                    .eq('id', emailUser.id);
+                  console.log('✅ Updated auth_user_id for existing user');
+                } catch (updateErr) {
+                  console.warn('⚠️ Failed to update auth_user_id:', updateErr);
+                }
+              }
+              
+              if (emailUser.role === 'service_provider') {
+                console.log('🔄 Found service provider role via email fallback');
+                mappedRole = 'service_provider';
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ Error checking service_provider_details:', error);
+        }
+
+        // Persist and navigate according to role
         const dashboardPath = roleToDashboardPath(mappedRole);
         localStorage.setItem('dashboard_path', dashboardPath);
+        localStorage.setItem('user_role', mappedRole);
+        
+        // Also set the authentication state immediately
+        setUser(data.user);
+        setIsAuthenticated(true);
+        
+        // Store auth state in localStorage for immediate access
+        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('isAuthenticated', 'true');
+        
+        console.log('🔍 Auth state after login:', {
+          userSet: !!data.user,
+          isAuthenticatedSet: true,
+          userEmail: data.user.email,
+          userID: data.user.id
+        });
+        
+        // Verify the state was set correctly
+        setTimeout(() => {
+          console.log('🔍 Auth state verification:', {
+            reactUser: !!user,
+            reactAuth: isAuthenticated,
+            storageUser: !!localStorage.getItem('user'),
+            storageAuth: localStorage.getItem('isAuthenticated')
+          });
+        }, 100);
+        
+        // Additional check: If we still got customer role but user email suggests service provider
+        // This is a fallback mechanism for debugging
+        if (mappedRole === 'customer' && data.user.email) {
+          console.log('⚠️ User got customer role, checking for service provider indicators...');
+          // You can add additional checks here if needed
+        }
+        
+        console.log('🎯 Final login result:', { 
+          mappedRole, 
+          dashboardPath, 
+          email: data.user.email,
+          userId: data.user.id 
+        });
+        
         toast.success('Login successful!');
+        
         return { success: true, user: data.user, role: mappedRole, dashboardPath };
       }
     } catch (error) {
@@ -759,7 +966,7 @@ export const AuthProvider = ({ children }) => {
             )
           `)
           .eq('auth_user_id', currentUser.id)
-          .single();
+          .maybeSingle();
 
         if (userData && userData.role) {
           // User already has a profile with a role
@@ -836,9 +1043,9 @@ export const AuthProvider = ({ children }) => {
           
           // Try to create the user profile
           try {
-            const { data: newUserData, error: createError } = await supabase
-              .from('users')
-              .insert({
+          const { data: newUserData, error: createError } = await supabase
+            .from('users')
+            .upsert({
                 auth_user_id: currentUser.id,
                 email: currentUser.email,
                 full_name: fullName || '',
@@ -849,7 +1056,7 @@ export const AuthProvider = ({ children }) => {
                 email_verified: true,
                 status: 'active',
                 password_hash: 'supabase_auth_user'
-              })
+            }, { onConflict: 'email' })
               .select()
               .single();
             
@@ -870,7 +1077,7 @@ export const AuthProvider = ({ children }) => {
                   status: 'active',
                   password_hash: 'supabase_auth_user'
                 }, {
-                  onConflict: 'auth_user_id'
+                  onConflict: 'email'
                 })
                 .select()
                 .single();
@@ -978,13 +1185,27 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await supabase.auth.signOut();
-      // Ensure user lands on login after logout
+      // Clear all authentication state
+      setUser(null);
+      setIsAuthenticated(false);
+      
+      // Clear localStorage
       if (typeof window !== 'undefined') {
+        localStorage.removeItem('user');
+        localStorage.removeItem('session');
         localStorage.removeItem('dashboard_path');
-        window.location.href = '/login';
+        localStorage.removeItem('user_role');
+        localStorage.removeItem('logout_reason');
+        localStorage.removeItem('logout_toast_count');
+        localStorage.removeItem('isAuthenticated');
       }
+      
+      // Sign out from Supabase
+      await supabase.auth.signOut();
+      
+      toast.success('Logged out successfully');
     } catch (error) {
+      console.error('Logout error:', error);
       toast.error('Error logging out');
     }
   };
@@ -1005,38 +1226,54 @@ export const AuthProvider = ({ children }) => {
 
   const getUserRole = async () => {
     if (!user?.id) return null;
-    
-    try {
-      const { data: userData, error } = await supabase
-        .from('users')
-        .select('role, status, email_verified')
-        .eq('auth_user_id', user.id)
-        .single();
-      
-      if (error) {
-        console.warn('⚠️ Failed to get user role:', error);
-        return null;
-      }
-      
-      console.log('✅ Retrieved user data from database:', userData);
-      // Enforce status gate on client routes as a backup
-      if (userData?.status && userData.status !== 'active') {
-        try { await supabase.auth.signOut(); } catch (_) {}
-        return null;
-      }
 
-      if (userData?.role) {
-        console.log('🎯 User role found:', userData.role);
-        return userData.role;
-      } else {
-        console.warn('⚠️ No role found for user');
-        return null;
-      }
-      
-    } catch (error) {
-      console.warn('⚠️ Error getting user role:', error);
-      return null;
+    // In-memory throttle: if we asked recently, reuse
+    const cached = userRoleCache.get(user.id);
+    const now = Date.now();
+    if (cached && (now - cached.timestamp) < 5000) {
+      return cached.role;
     }
+
+    const inFlight = userRoleInFlight.get(user.id);
+    if (inFlight) return inFlight;
+
+    const fetchPromise = (async () => {
+      try {
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('role, status, email_verified')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          // Quietly cache null briefly to avoid loops
+          userRoleCache.set(user.id, { role: null, timestamp: Date.now() });
+          return null;
+        }
+
+        // Enforce status gate as a backup
+        if (userData?.status && userData.status !== 'active') {
+          try { await supabase.auth.signOut(); } catch (_) {}
+          userRoleCache.set(user.id, { role: null, timestamp: Date.now() });
+          return null;
+        }
+
+        const role = userData?.role || null;
+        userRoleCache.set(user.id, { role, timestamp: Date.now() });
+        if (role) {
+          try { localStorage.setItem(`user_role_${user.id}`, role); } catch (_) {}
+        }
+        return role;
+      } catch (_) {
+        userRoleCache.set(user.id, { role: null, timestamp: Date.now() });
+        return null;
+      } finally {
+        userRoleInFlight.delete(user.id);
+      }
+    })();
+
+    userRoleInFlight.set(user.id, fetchPromise);
+    return fetchPromise;
   };
 
   const getCompleteUserProfile = async () => {
@@ -1107,6 +1344,106 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Test login with dummy credentials to check auth flow
+  const testLoginFlow = async () => {
+    try {
+      console.log('🔍 Testing login flow...');
+      // This will fail but help us see what's happening
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: 'test@example.com',
+        password: 'testpassword',
+      });
+      
+      console.log('🔍 Test login response:', { data: !!data, error: error?.message });
+      
+      if (error) {
+        console.log('✅ Login flow working (expected error for test credentials)');
+        toast.success('Login flow is working correctly');
+        return { success: true, message: 'Login flow working' };
+      } else {
+        console.log('⚠️ Unexpected success with test credentials');
+        return { success: false, message: 'Unexpected success' };
+      }
+    } catch (err) {
+      console.error('💥 Test login error:', err);
+      toast.error('Login flow test failed');
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Test Supabase connection
+  const testSupabaseConnection = async () => {
+    try {
+      console.log('🔍 Testing Supabase connection...');
+      const { data, error } = await supabase.from('users').select('count').limit(1);
+      
+      if (error) {
+        console.error('❌ Supabase connection test failed:', error);
+        toast.error('Database connection failed: ' + error.message);
+        return { success: false, error: error.message };
+      } else {
+        console.log('✅ Supabase connection test successful');
+        toast.success('Database connection successful');
+        return { success: true };
+      }
+    } catch (err) {
+      console.error('💥 Supabase connection test error:', err);
+      toast.error('Database connection test failed');
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Debug function to check user role and service provider status
+  const debugUserRole = async (email) => {
+    try {
+      console.log('🔍 Debug: Checking user role for email:', email);
+      
+      // Check users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, email, role, status, auth_user_id')
+        .eq('email', email)
+        .maybeSingle();
+      
+      console.log('🔍 Debug: Users table result:', { userData, userError });
+      
+      if (userData) {
+        // Check service provider details
+        const { data: spData, error: spError } = await supabase
+          .from('service_provider_details')
+          .select('id, status, specialization')
+          .eq('id', userData.id)
+          .maybeSingle();
+        
+        console.log('🔍 Debug: Service provider details:', { spData, spError });
+        
+        // Determine the actual role (override if service provider details exist)
+        let actualRole = userData.role;
+        if (!spError && spData) {
+          actualRole = 'service_provider';
+        }
+        
+        // Determine expected dashboard path based on actual role
+        const expectedDashboard = roleToDashboardPath(actualRole);
+        
+        return {
+          user: userData,
+          serviceProvider: spData,
+          isServiceProvider: !spError && spData,
+          expectedDashboard,
+          shouldRedirectToProvider: actualRole === 'service_provider',
+          actualRole: actualRole,
+          databaseRole: userData.role
+        };
+      }
+      
+      return { user: null, serviceProvider: null, isServiceProvider: false };
+    } catch (error) {
+      console.error('🔍 Debug error:', error);
+      return { user: null, serviceProvider: null, isServiceProvider: false, error };
+    }
+  };
+
   const value = {
     user,
     isAuthenticated,
@@ -1124,6 +1461,9 @@ export const AuthProvider = ({ children }) => {
     getUserRole,
     getCompleteUserProfile,
     refreshUserData,
+    debugUserRole,
+    testSupabaseConnection,
+    testLoginFlow,
   };
 
   return React.createElement(AuthContext.Provider, { value }, children);

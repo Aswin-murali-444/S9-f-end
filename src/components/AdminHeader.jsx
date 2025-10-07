@@ -110,9 +110,9 @@ const AdminHeader = () => {
               )}
             </div>
             
-            <button className="btn-primary" onClick={() => navigate('/admin/add-user')}>
+            <button className="btn-primary" onClick={() => navigate('/admin/add-service-provider')}>
               <Plus size={20} />
-              Add User
+              Add Service Provider
             </button>
             <button 
               className="btn-secondary"

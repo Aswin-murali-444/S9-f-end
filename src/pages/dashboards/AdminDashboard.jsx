@@ -766,9 +766,9 @@ const AdminDashboard = () => {
               )}
             </div>
             
-            <button className="btn-primary" onClick={() => navigate('/admin/add-user')}>
+            <button className="btn-primary" onClick={() => navigate('/admin/add-service-provider')}>
               <Plus size={20} />
-              Add User
+              Add Service Provider
             </button>
           </div>
         </header>
@@ -1002,9 +1002,9 @@ const AdminDashboard = () => {
                 <div className="quick-actions">
                   <h3>Quick Actions</h3>
                   <div className="actions-grid">
-                    <button className="action-card" onClick={() => navigate('/admin/add-user')}>
+                    <button className="action-card" onClick={() => navigate('/admin/add-service-provider')}>
                       <UserPlus size={24} />
-                      <span>Add User</span>
+                      <span>Add Service Provider</span>
                     </button>
                     <button className="action-card" onClick={() => navigate('/admin/categories')}>
                       <Settings size={24} />
@@ -1074,9 +1074,9 @@ const AdminDashboard = () => {
                       <option value="customer">Customer</option>
                       <option value="driver">Driver</option>
                     </select>
-                    <button className="btn-primary" onClick={() => navigate('/admin/add-user')}>
+                    <button className="btn-primary" onClick={() => navigate('/admin/add-service-provider')}>
                       <Plus size={20} />
-                      Add User
+                      Add Service Provider
                     </button>
                   </div>
                 </div>
@@ -1247,28 +1247,31 @@ const AdminDashboard = () => {
                     </div>
                   </motion.div>
 
-                  {/* Add User */}
+                  {/* Add Service Provider */}
                   <motion.div 
                     className="admin-form-card"
                     whileHover={{ scale: 1.02, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => navigate('/admin/add-user')}
+                    onClick={() => navigate('/admin/add-service-provider')}
                     variants={itemVariants}
                   >
                     <div className="form-card-icon">
                       <UserPlus size={32} />
                     </div>
                     <div className="form-card-content">
-                      <h3>Add User</h3>
-                      <p>Create accounts for customers, providers, drivers, and supervisors</p>
+                      <h3>Add Service Provider</h3>
+                      <p>Create service provider accounts with specialized permissions</p>
                       <ul className="form-card-features">
-                        <li>Role-Based Access Control</li>
-                        <li>Auto/Manual Password Generation</li>
-                        <li>Service Assignment (Providers)</li>
+                        <li>Service Category Assignment</li>
+                        <li>Auto-Generated Credentials</li>
+                        <li>Status Management</li>
                       </ul>
                     </div>
                     <div className="form-card-action">
-                      <span>Create User →</span>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <button className="btn-primary" onClick={(e) => { e.stopPropagation(); navigate('/admin/add-service-provider'); }}>Create Provider →</button>
+                        <button className="btn-secondary" onClick={(e) => { e.stopPropagation(); navigate('/admin/providers'); }}>Manage Providers →</button>
+                      </div>
                     </div>
                   </motion.div>
 
@@ -1833,12 +1836,12 @@ const AdminDashboard = () => {
         </main>
       </div>
 
-      {/* Add User Modal */}
+      {/* Add Service Provider Modal */}
       {isAddUserOpen && (
         <div className="modal-backdrop" onClick={() => setIsAddUserOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h4>Add User</h4>
+              <h4>Add Service Provider</h4>
             </div>
             <form className="modal-body" onSubmit={handleAddUser}>
               <div className="form-row">

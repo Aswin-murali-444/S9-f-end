@@ -18,6 +18,12 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
         setCheckingRole(false);
         return;
       }
+      // Skip role fetch until authenticated to avoid flicker
+      if (!isAuthenticated) {
+        setCheckingRole(false);
+        setResolvedRole(null);
+        return;
+      }
       try {
         const timeoutPromise = new Promise((resolve) => {
           setTimeout(() => resolve('__timeout__'), ROLE_FETCH_TIMEOUT_MS);
@@ -37,7 +43,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     };
     fetchRole();
     return () => { isActive = false; };
-  }, [allowedRoles, getUserRole, user?.id]);
+  }, [allowedRoles, getUserRole, user?.id, isAuthenticated]);
 
   if (!isInitialized) {
     return (
@@ -59,12 +65,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
         </div>
       );
     }
-    // If the role couldn't be determined, treat as unauthorized instead of spinning forever
-    if (!resolvedRole) {
-      return <Navigate to="/" replace />;
-    }
-    if (!allowedRoles.includes(resolvedRole)) {
-      return <Navigate to="/" replace />;
+    // If the role couldn't be determined or not allowed, go to login
+    if (!resolvedRole || !allowedRoles.includes(resolvedRole)) {
+      return <Navigate to="/login" replace state={{ from: location }} />;
     }
   }
 

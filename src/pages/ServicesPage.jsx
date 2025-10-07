@@ -1,12 +1,64 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Home, Shield, Heart, Car, Truck, User, ShieldCheck, Camera, Brain, UserCheck } from 'lucide-react';
+import { apiService } from '../services/api';
+import { formatServicePricing } from '../utils/pricingUtils';
+import { useAuth } from '../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
+import { useAnimations } from '../hooks/useAnimations';
 import './ServicesPage.css';
 
 const ServicesPage = () => {
-  
+  const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const containerRef = useRef(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { useAnimatedInView } = useAnimations();
+  const { ref: gridRef, inView: gridInView, triggerAnimation } = useAnimatedInView(0.1, true);
 
   // Handle hash navigation and smooth scrolling
   useEffect(() => {
+    // Intercept clicks on any "Book Service" button and require login
+    const handleClick = (e) => {
+      const target = e.target;
+      if (target && target.classList && target.classList.contains('book-service-btn')) {
+        if (!user) {
+          e.preventDefault();
+          navigate('/login');
+          // Ensure login page opens at top
+          setTimeout(() => {
+            try { window.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch {}
+          }, 0);
+        }
+      }
+    };
+
+    const node = containerRef.current;
+    if (node) node.addEventListener('click', handleClick);
+
+    return () => {
+      if (node) node.removeEventListener('click', handleClick);
+    };
+  }, [user, navigate]);
+
+  useEffect(() => {
+    // Load services from backend
+    const loadServices = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await apiService.getServices();
+        setServices(Array.isArray(data) ? data : []);
+      } catch (e) {
+        setError(e?.message || 'Failed to load services');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadServices();
+
     const handleHashChange = () => {
       const hash = window.location.hash;
       if (hash) {
@@ -34,7 +86,132 @@ const ServicesPage = () => {
   }, []);
 
   return (
-    <div className="services-page">
+    <div className="services-page" ref={containerRef}>
+      {/* Dynamic Services from Database */}
+      <section id="services" className="service-section">
+        <div className="container">
+          <div className="service-header">
+            <Home className="service-main-icon" />
+            <div>
+              <h2>Available Services</h2>
+              <p>These services are fetched live from the database</p>
+            </div>
+          </div>
+
+          {loading && (
+            <div className="services-grid">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="skeleton-card" />
+              ))}
+            </div>
+          )}
+
+          {error && !loading && (
+            <div className="services-grid">
+              <div className="service-card">
+                <div className="service-icon">⚠️</div>
+                <h3>Could not load services</h3>
+                <p>{error}</p>
+              </div>
+            </div>
+          )}
+
+          {!loading && !error && services.length === 0 && (
+            <div className="services-grid">
+              <div className="service-card">
+                <div className="service-icon">ℹ️</div>
+                <h3>No services found</h3>
+                <p>Add services in the admin panel to see them here.</p>
+              </div>
+            </div>
+          )}
+
+          {!loading && !error && services.length > 0 && (
+            <div className="services-grid" ref={gridRef}>
+              {services.map((svc, idx) => {
+                const pricing = formatServicePricing(svc);
+                return (
+                  <div
+                    key={svc.id}
+                    className={`service-card service-card--animated ${gridInView ? 'animate-in' : ''}`}
+                    style={{ animationDelay: `${idx * 0.06}s` }}
+                    onMouseMove={(e) => {
+                      const el = e.currentTarget;
+                      const rect = el.getBoundingClientRect();
+                      const x = e.clientX - rect.left;
+                      const y = e.clientY - rect.top;
+                      const rotateY = (x / rect.width - 0.5) * 4;
+                      const rotateX = (0.5 - y / rect.height) * 4;
+                      el.style.transform = `translateY(-6px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+                    }}
+                    onMouseLeave={(e) => {
+                      const el = e.currentTarget;
+                      el.style.transform = '';
+                    }}
+                  >
+                    <div className="card-badges">
+                      {svc.category_name && <span className="badge">{svc.category_name}</span>}
+                      {svc.offer_enabled && svc.offer_percentage > 0 && <span className="badge best">Best offer</span>}
+                    </div>
+                    <div className="service-icon">
+                      {svc.icon_url ? (
+                        <img
+                          src={svc.icon_url}
+                          alt={svc.name}
+                          style={{ width: 32, height: 32, objectFit: 'contain' }}
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      ) : (
+                        '🛠️'
+                      )}
+                    </div>
+                    <h3>{svc.name}</h3>
+                    <div className="rating">
+                      <span className="stars">★★★★★</span>
+                      <span className="rating-count">(100+)</span>
+                    </div>
+                    {svc.description && <p>{svc.description}</p>}
+                    <div style={{ marginTop: 8 }}>
+                      {pricing.originalPrice ? (
+                        pricing.hasOffer ? (
+                          <div>
+                            <span className="offer-price">₹{pricing.offerPrice}</span>{' '}
+                            <span className="original-price">₹{pricing.originalPrice}</span>
+                            <span className="discount-badge" style={{ marginLeft: 8 }}>
+                              {pricing.discountPercentage}% OFF
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="regular-price">₹{pricing.originalPrice}</span>
+                        )
+                      ) : (
+                        <span className="regular-price">Price on request</span>
+                      )}
+                    </div>
+                    <button
+                      className="book-service-btn"
+                      aria-label={`Book ${svc.name}`}
+                      onMouseDown={(e) => {
+                        const btn = e.currentTarget;
+                        const rect = btn.getBoundingClientRect();
+                        const x = e.clientX - rect.left;
+                        const y = e.clientY - rect.top;
+                        btn.style.setProperty('--ripple-x', `${x}px`);
+                        btn.style.setProperty('--ripple-y', `${y}px`);
+                        btn.classList.remove('rippling');
+                        void btn.offsetWidth;
+                        btn.classList.add('rippling');
+                      }}
+                    >
+                      Book Service
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
       {/* Hero Section */}
       <section className="services-hero">
         <div className="container">

@@ -34,7 +34,7 @@ const AdminDashboard = lazy(() => import('./pages/dashboards/AdminDashboard'));
 // Admin Pages
 const AddCategoryPage = lazy(() => import('./pages/admin/AddCategoryPage'));
 const AddServicePage = lazy(() => import('./pages/admin/AddServicePage'));
-const AddUserPage = lazy(() => import('./pages/admin/AddUserPage'));
+const AddServiceProviderPage = lazy(() => import('./pages/admin/AddServiceProviderPage'));
 const AssignProviderPage = lazy(() => import('./pages/admin/AssignProviderPage'));
 const CreateBillPage = lazy(() => import('./pages/admin/CreateBillPage'));
 const AdminUserProfilePage = lazy(() => import('./pages/admin/AdminUserProfile'));
@@ -42,7 +42,7 @@ const CategoriesPage = lazy(() => import('./pages/admin/CategoriesPage'));
 const EditCategoryPage = lazy(() => import('./pages/admin/EditCategoryPage'));
 const AdminServicesPage = lazy(() => import('./pages/admin/ServicesPage'));
 const EditServicePage = lazy(() => import('./pages/admin/EditServicePage'));
-const DataDisplayPage = lazy(() => import('./pages/DataDisplayPage'));
+const ManageProvidersPage = lazy(() => import('./pages/admin/ManageProvidersPage'));
 
 const Placeholder = ({ title }) => (
   <div style={{ minHeight: '50vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
@@ -53,13 +53,17 @@ const Placeholder = ({ title }) => (
 
 function AppShell() {
   const location = useLocation();
-  const isDashboard = location.pathname.startsWith('/dashboard');
+  const isAnyDashboard = location.pathname.startsWith('/dashboard');
+  const isCustomerDashboard = location.pathname.startsWith('/dashboard/customer');
   const isAdminPage = location.pathname.startsWith('/admin');
+  const isHome = location.pathname === '/';
+  const isLogin = location.pathname === '/login';
+  const showPublicHeader = !(isAnyDashboard || isAdminPage);
 
   return (
     <div className="App">
-      {!isDashboard && !isAdminPage && <Header />}
-      <main className={`main-content ${isDashboard || isAdminPage ? 'main-content--dashboard' : ''}`}>
+      {showPublicHeader && <Header />}
+      <main className={`main-content ${((isAnyDashboard && !isCustomerDashboard) || isAdminPage) ? 'main-content--dashboard' : ''} ${showPublicHeader ? 'main-content--with-header' : ''}`}>
                 <Suspense fallback={
                   <div style={{ 
                     display: 'flex', 
@@ -71,20 +75,20 @@ function AppShell() {
                   </div>
                 }>
                   <Routes>
-                    <Route
-                      path="/"
-                      element={
-                        <PublicOnlyRoute>
-                          <HomePage />
-                        </PublicOnlyRoute>
-                      }
-                    />
-                    <Route path="/services" element={<PublicOnlyRoute><ServicesPage /></PublicOnlyRoute>} />
-                    <Route path="/about" element={<PublicOnlyRoute><AboutPage /></PublicOnlyRoute>} />
-                    <Route path="/contact" element={<PublicOnlyRoute><ContactPage /></PublicOnlyRoute>} />
-                    <Route path="/data-display" element={<DataDisplayPage />} />
-                    <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
-                    <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/services" element={<ServicesPage />} />
+                    <Route path="/about" element={<AboutPage />} />
+                    <Route path="/contact" element={<ContactPage />} />
+                    <Route path="/login" element={
+                      <PublicOnlyRoute>
+                        <LoginPage />
+                      </PublicOnlyRoute>
+                    } />
+                    <Route path="/register" element={
+                      <PublicOnlyRoute>
+                        <RegisterPage />
+                      </PublicOnlyRoute>
+                    } />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/auth/callback" element={<AuthCallback />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -101,7 +105,9 @@ function AppShell() {
                       path="/dashboard/provider"
                       element={
                         <ProtectedRoute allowedRoles={["service_provider"]}>
-                          <ServiceProviderDashboard />
+                          <ErrorBoundary>
+                            <ServiceProviderDashboard />
+                          </ErrorBoundary>
                         </ProtectedRoute>
                       }
                     />
@@ -180,10 +186,18 @@ function AppShell() {
           }
         />
                     <Route
-                      path="/admin/add-user"
+                      path="/admin/add-service-provider"
                       element={
                         <ProtectedRoute allowedRoles={["admin"]}>
-                          <AddUserPage />
+                          <AddServiceProviderPage />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/admin/providers"
+                      element={
+                        <ProtectedRoute allowedRoles={["admin"]}>
+                          <ManageProvidersPage />
                         </ProtectedRoute>
                       }
                     />
@@ -217,7 +231,7 @@ function AppShell() {
                   </Routes>
                 </Suspense>
       </main>
-      {!isDashboard && !isAdminPage && <Footer />}
+      {isHome && <Footer />}
 
       {/* Modern Toast Notifications */}
       <Toaster
