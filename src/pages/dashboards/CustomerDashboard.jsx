@@ -4,6 +4,7 @@ import { useInView } from 'react-intersection-observer';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
+import BookingModal from '../../components/BookingModal';
 import { 
   Home, 
   Calendar, 
@@ -102,6 +103,7 @@ const CustomerDashboard = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
+  const [bookingService, setBookingService] = useState(null);
   const notificationsRef = useRef(null);
   
   const [headerRef, headerInView] = useInView({ threshold: 0.3, triggerOnce: true });
@@ -545,6 +547,16 @@ const CustomerDashboard = () => {
 
   const handleBookService = () => {
     setIsBookingModalOpen(true);
+  };
+
+  const handleOpenBookingModal = (service) => {
+    setBookingService(service);
+    setIsBookingModalOpen(true);
+  };
+
+  const handleCloseBookingModal = () => {
+    setIsBookingModalOpen(false);
+    setBookingService(null);
   };
 
   const handleCategoryClick = (category) => {
@@ -1033,7 +1045,7 @@ const CustomerDashboard = () => {
                                   <button className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`} onClick={() => toggleWishlist(service)}>
                                     <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />{isInWishlist(service.id) ? 'Liked' : 'Like'}
                                   </button>
-                                  <button className="deal-btn deal-btn-book" onClick={() => { toast.success(`Booking ${service.name}...`); }}>
+                                  <button className="deal-btn deal-btn-book" onClick={() => handleOpenBookingModal(service)}>
                                     <Calendar size={16} />Book Now
                                   </button>
                                 </div>
@@ -1093,7 +1105,7 @@ const CustomerDashboard = () => {
                                 <button className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`} onClick={() => toggleWishlist(service)}>
                                   <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />{isInWishlist(service.id) ? 'Liked' : 'Like'}
                                 </button>
-                                <button className="deal-btn deal-btn-book" onClick={() => { toast.success(`Booking ${service.name}...`); }}>
+                                <button className="deal-btn deal-btn-book" onClick={() => handleOpenBookingModal(service)}>
                                   <Calendar size={16} />Book Now
                                 </button>
                               </div>
@@ -2185,10 +2197,7 @@ const CustomerDashboard = () => {
                                   {isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
                                 </button>
                                 <button 
-                                  onClick={() => {
-                                    toast.success(`Booking ${service.name}...`);
-                                    // Add booking logic here
-                                  }}
+                                  onClick={() => handleOpenBookingModal(service)}
                                   style={{
                                     background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
                                     border: 'none',
@@ -2298,10 +2307,7 @@ const CustomerDashboard = () => {
                               </button>
                               <button 
                                 className="deal-btn deal-btn-book"
-                                onClick={() => {
-                                  toast.success(`Booking ${item.name}...`);
-                                  // Add booking logic here
-                                }}
+                                onClick={() => handleOpenBookingModal(item)}
                               >
                                 <Calendar size={16} />
                                 Book Now
@@ -2401,10 +2407,7 @@ const CustomerDashboard = () => {
                                 </button>
                                 <button 
                                   className="deal-btn deal-btn-book"
-                                  onClick={() => {
-                                    toast.success(`Booking ${item.name}...`);
-                                    // Add booking logic here
-                                  }}
+                                  onClick={() => handleOpenBookingModal(item)}
                                 >
                                   <Calendar size={16} />
                                   Book Now
@@ -3253,6 +3256,14 @@ const CustomerDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Booking Modal */}
+      <BookingModal
+        isOpen={isBookingModalOpen}
+        onClose={handleCloseBookingModal}
+        service={bookingService}
+        user={user}
+      />
     </div>
   );
 };

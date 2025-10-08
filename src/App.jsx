@@ -65,7 +65,7 @@ function AppShell() {
   return (
     <div className="App">
       {showPublicHeader && <Header />}
-      <main className={`main-content ${((isAnyDashboard && !isCustomerDashboard) || isAdminPage) ? 'main-content--dashboard' : ''} ${showPublicHeader ? 'main-content--with-header' : ''}`}>
+      <main className={showPublicHeader ? 'main-content main-content--with-header' : ''}>
                 <Suspense fallback={
                   <div style={{ 
                     display: 'flex', 
