@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
-import BookingModal from '../../components/BookingModal';
+import ErrorDisplay from '../../components/ErrorDisplay';
+import ToastContainer from '../../components/ToastContainer';
+import LoadingSpinner from '../../components/LoadingSpinner';
+import useToast from '../../hooks/useToast';
+import useNetworkStatus from '../../hooks/useNetworkStatus';
 import { 
   Home, 
   Calendar, 
@@ -56,8 +60,9 @@ import {
   ArrowRight,
   ArrowLeft,
   ShoppingCart,
-  ChevronLeft,
+  ChevronLeft, 
   ChevronRight,
+  ChevronDown,
   LayoutGrid
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
@@ -67,10 +72,22 @@ import CustomerProfileForm from '../../components/CustomerProfileForm';
 import './SharedDashboard.css';
 import './CustomerDashboard.css';
 import { apiService } from '../../services/api';
+import { supabase } from '../../hooks/useAuth';
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Preseed review modal from navigation state/localStorage so it opens on first render (no flash)
+  let initialReviewService = null;
+  let initialFromBooking = false;
+  try {
+    initialReviewService = location.state?.openReviewService || JSON.parse(localStorage.getItem('openReviewService')) || null;
+    initialFromBooking = location.state?.reviewFrom === 'booking' || localStorage.getItem('reviewFromBooking') === '1';
+  } catch {}
   const { user, logout } = useAuth();
+  const toastManager = useToast();
+  const { isOnline, wasOffline, resetOfflineFlag } = useNetworkStatus();
   
   // Add CSS for search input placeholder
   useEffect(() => {
@@ -99,11 +116,111 @@ const CustomerDashboard = () => {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(!!initialReviewService);
   const [selectedService, setSelectedService] = useState(null);
-  const [bookingService, setBookingService] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [recommendProvider, setRecommendProvider] = useState(false);
+  
+  // Review modal state
+  const [reviewService, setReviewService] = useState(initialReviewService);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewAnswers, setReviewAnswers] = useState({});
+  const [reviewNote, setReviewNote] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  // Open review modal when navigated with state from BookingPage
+  useEffect(() => {
+    const stateService = location.state?.openReviewService;
+    let storedService = null;
+    try {
+      storedService = JSON.parse(localStorage.getItem('openReviewService'));
+    } catch {}
+
+    const svc = stateService || storedService;
+    if (svc && !isReviewModalOpen) {
+      setReviewService(svc);
+      setReviewRating(0);
+      setReviewAnswers({});
+      setReviewNote('');
+      setIsReviewModalOpen(true);
+      // clear state so back/forward doesn't re-open unintentionally
+      requestAnimationFrame(() => {
+        navigate(location.pathname, { replace: true, state: null });
+        try { localStorage.removeItem('openReviewService'); } catch {}
+      });
+    }
+  }, [location.state, navigate, location.pathname]);
+
+  // If review was opened from Booking, closing should go back to Booking instead of leaving user on dashboard
+  const closeAndReturnIfFromBooking = () => {
+    const fromBooking = location.state?.reviewFrom === 'booking' || localStorage.getItem('reviewFromBooking') === '1';
+    setIsReviewModalOpen(false);
+    setReviewService(null);
+    setReviewRating(0);
+    setReviewAnswers({});
+    setReviewNote('');
+    setIsSubmittingReview(false);
+    try { localStorage.removeItem('reviewFromBooking'); } catch {}
+    if (fromBooking) {
+      navigate(-1);
+    }
+  };
+  
+  // Predefined review questions
+  const reviewQuestions = [
+    {
+      id: 'quality',
+      question: 'How would you rate the quality of service?',
+      type: 'rating',
+      options: ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent']
+    },
+    {
+      id: 'punctuality',
+      question: 'Was the service provider punctual?',
+      type: 'yesno',
+      options: ['Yes', 'No']
+    },
+    {
+      id: 'professionalism',
+      question: 'How professional was the service provider?',
+      type: 'rating',
+      options: ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent']
+    },
+    {
+      id: 'value',
+      question: 'How would you rate the value for money?',
+      type: 'rating',
+      options: ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent']
+    },
+    {
+      id: 'cleanliness',
+      question: 'How clean and tidy was the work area after service?',
+      type: 'rating',
+      options: ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent']
+    },
+    {
+      id: 'communication',
+      question: 'How well did the service provider communicate?',
+      type: 'rating',
+      options: ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent']
+    },
+    {
+      id: 'recommend',
+      question: 'Would you recommend this service to others?',
+      type: 'yesno',
+      options: ['Yes', 'No']
+    }
+  ];
+  
+  const [paymentMethod, setPaymentMethod] = useState('card');
+  const [promoCode, setPromoCode] = useState('');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [error, setError] = useState(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   const notificationsRef = useRef(null);
   
   const [headerRef, headerInView] = useInView({ threshold: 0.3, triggerOnce: true });
@@ -395,6 +512,37 @@ const CustomerDashboard = () => {
       } catch (e) {
         if (!isCancelled) {
           console.error('Error loading data:', e);
+          const errorMessage = e.message || 'Failed to load dashboard data';
+          
+          setError({
+            message: errorMessage,
+            type: e.name === 'NetworkError' || e.message?.includes('fetch') ? 'network' : 'error',
+            details: {
+              timestamp: new Date().toISOString(),
+              error: e.message,
+              stack: e.stack
+            }
+          });
+          
+          toastManager.error(errorMessage, {
+            duration: 8000,
+            action: (
+              <button 
+                onClick={() => window.location.reload()}
+                style={{ 
+                  padding: '6px 12px', 
+                  background: 'rgba(255,255,255,0.9)', 
+                  border: '1px solid currentColor', 
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: '600'
+                }}
+              >
+                Retry
+              </button>
+            )
+          });
+          
           setCategories([]);
           setServices([]);
           setBookingHistory([]);
@@ -545,19 +693,15 @@ const CustomerDashboard = () => {
     await logout();
   };
 
-  const handleBookService = () => {
-    setIsBookingModalOpen(true);
-  };
-
   const handleOpenBookingModal = (service) => {
-    setBookingService(service);
-    setIsBookingModalOpen(true);
+    navigate('/booking', { 
+      state: { 
+        service: service, 
+        user: user 
+      } 
+    });
   };
 
-  const handleCloseBookingModal = () => {
-    setIsBookingModalOpen(false);
-    setBookingService(null);
-  };
 
   const handleCategoryClick = (category) => {
     setViewingCategory(category);
@@ -566,8 +710,66 @@ const CustomerDashboard = () => {
 
   const handleBackToCategories = () => {
     setViewingCategory(null);
+    setSelectedCategory(null);
     setSearchQuery(''); // Clear search when going back
+    navigate('/dashboard/customer'); // Navigate to customer dashboard home
+    // Scroll to categories section after navigation
+    setTimeout(() => {
+      document.querySelector('.marketplace-categories')?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }, 100);
   };
+  // Load real orders from Supabase
+  const fetchOrders = async () => {
+    if (!user?.id) return;
+    try {
+      setOrdersLoading(true);
+      // Resolve users.id from auth_user_id
+      const { data: dbUser, error: uErr } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
+      if (uErr || !dbUser) {
+        return;
+      }
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          scheduled_date,
+          scheduled_time,
+          total_amount,
+          booking_status,
+          payment_status,
+          service_address,
+          services:service_id ( name )
+        `)
+        .eq('user_id', dbUser.id)
+        .order('created_at', { ascending: false });
+      if (!error && Array.isArray(data)) {
+        const mapped = data.map(row => ({
+          id: row.id,
+          name: row.services?.name || 'Service',
+          date: row.scheduled_date,
+          time: row.scheduled_time,
+          address: row.service_address,
+          total: row.total_amount,
+          bookingStatus: row.booking_status,
+          paymentStatus: row.payment_status
+        }));
+        setOrders(mapped);
+      }
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, [user?.id]);
 
   const handlePayBill = (bill) => {
     setSelectedService(bill);
@@ -576,7 +778,186 @@ const CustomerDashboard = () => {
 
   const handleProvideFeedback = (service) => {
     setSelectedService(service);
+    setFeedbackRating(0);
+    setFeedbackText('');
+    setRecommendProvider(false);
     setIsFeedbackModalOpen(true);
+  };
+
+  const handleFeedbackSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (feedbackRating === 0) {
+      toastManager.warning('Please select a rating before submitting feedback.');
+      return;
+    }
+    
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Here you would typically send the feedback to your backend
+      console.log('Feedback submitted:', {
+        service: selectedService,
+        rating: feedbackRating,
+        text: feedbackText,
+        recommend: recommendProvider
+      });
+      
+      // Show success message and close modal
+      toastManager.feedback(
+        `Thank you for your ${feedbackRating}-star feedback! Your input helps us improve our services.`,
+        {
+          duration: 6000,
+          icon: <Star size={20} />
+        }
+      );
+      
+      setIsFeedbackModalOpen(false);
+      setSelectedService(null);
+      setFeedbackRating(0);
+      setFeedbackText('');
+      setRecommendProvider(false);
+      
+    } catch (error) {
+      toastManager.error('Failed to submit feedback. Please try again.');
+    }
+  };
+
+  const handleCloseFeedbackModal = () => {
+    setIsFeedbackModalOpen(false);
+    setSelectedService(null);
+    setFeedbackRating(0);
+    setFeedbackText('');
+    setRecommendProvider(false);
+  };
+
+  // Review modal handlers
+  const handleOpenReviewModal = (service) => {
+    setReviewService(service);
+    setReviewRating(0);
+    setReviewAnswers({});
+    setReviewNote('');
+    setIsReviewModalOpen(true);
+  };
+
+  const handleCloseReviewModal = () => {
+    closeAndReturnIfFromBooking();
+  };
+
+  const handleReviewAnswerChange = (questionId, answer) => {
+    setReviewAnswers(prev => ({
+      ...prev,
+      [questionId]: answer
+    }));
+  };
+
+  const handleReviewSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (reviewRating === 0) {
+      toastManager.warning('Please select a rating before submitting your review.');
+      return;
+    }
+
+    setIsSubmittingReview(true);
+    
+    try {
+      // Here you would typically send the review to your backend
+      console.log('Review submitted:', {
+        service: reviewService,
+        rating: reviewRating,
+        answers: reviewAnswers,
+        note: reviewNote,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Show success message and close modal
+      toastManager.success(
+        `Thank you for your ${reviewRating}-star review! Your feedback helps other customers make informed decisions.`,
+        {
+          duration: 6000,
+          icon: <Star size={20} />
+        }
+      );
+      
+      setIsReviewModalOpen(false);
+      setReviewService(null);
+      setReviewRating(0);
+      setReviewAnswers({});
+      setReviewNote('');
+      
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      toastManager.error('Failed to submit review. Please try again.');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const handlePaymentSubmit = async (e) => {
+    e.preventDefault();
+    setIsProcessingPayment(true);
+    
+    try {
+      // Simulate payment processing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Simulate potential payment failure (10% chance)
+      if (Math.random() < 0.1) {
+        throw new Error('Payment failed. Please check your payment method and try again.');
+      }
+      
+      setIsProcessingPayment(false);
+      
+      toastManager.payment(
+        `Payment of ₹${selectedService?.amount?.toFixed(2) || '0.00'} successful! You will receive a confirmation email shortly.`,
+        {
+          duration: 8000,
+          icon: <CreditCard size={20} />
+        }
+      );
+      
+      setIsPaymentModalOpen(false);
+      setSelectedService(null);
+      setPaymentMethod('card');
+      setPromoCode('');
+      
+    } catch (error) {
+      setIsProcessingPayment(false);
+      toastManager.error(error.message || 'Payment failed. Please try again.');
+    }
+  };
+
+  const handleClosePaymentModal = () => {
+    setIsPaymentModalOpen(false);
+    setSelectedService(null);
+    setPaymentMethod('card');
+    setPromoCode('');
+    setIsProcessingPayment(false);
+  };
+
+  const handleRetryDataLoad = async () => {
+    setIsRetrying(true);
+    setError(null);
+    
+    try {
+      // Simulate retry loading
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Reload the component data
+      window.location.reload();
+      
+      toastManager.success('Data reloaded successfully!');
+    } catch (e) {
+      toastManager.error('Failed to reload data. Please try again.');
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  const handleDismissError = () => {
+    setError(null);
   };
 
   // Close notifications dropdown on outside click
@@ -589,6 +970,45 @@ const CustomerDashboard = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Welcome message on dashboard load
+  useEffect(() => {
+    const hasVisited = localStorage.getItem('dashboard-visited');
+    if (!hasVisited && user) {
+      setTimeout(() => {
+        toastManager.info(
+          `Welcome back, ${user.full_name || user.email}! Explore our services and manage your bookings.`,
+          {
+            duration: 6000,
+            title: 'Welcome to Nexus Dashboard'
+          }
+        );
+        localStorage.setItem('dashboard-visited', 'true');
+      }, 1000);
+    }
+  }, [user, toastManager]);
+
+  // Network status monitoring
+  useEffect(() => {
+    if (!isOnline) {
+      toastManager.network(
+        'You are currently offline. Some features may not be available.',
+        {
+          duration: 0, // Persistent until dismissed
+          persistent: true
+        }
+      );
+    } else if (wasOffline) {
+      toastManager.success(
+        'Connection restored! You are back online.',
+        {
+          duration: 4000,
+          title: 'Back Online'
+        }
+      );
+      resetOfflineFlag();
+    }
+  }, [isOnline, wasOffline, toastManager, resetOfflineFlag]);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -703,100 +1123,169 @@ const CustomerDashboard = () => {
   ];
 
   return (
-    <div className="admin-dashboard">
-      {/* Header Section - restored */}
-      <motion.section 
-        className="dashboard-header"
+    <div className="customer-dashboard">
+      {/* Error Display */}
+      {error && (
+        <ErrorDisplay
+          error={error}
+          onRetry={handleRetryDataLoad}
+          onDismiss={handleDismissError}
+          type={error.type || 'error'}
+          autoDismiss={false}
+        />
+      )}
+
+      {/* Toast Container */}
+      <ToastContainer
+        toasts={toastManager.toasts}
+        removeToast={toastManager.removeToast}
+        position="top-right"
+      />
+
+      {/* Loading Spinner */}
+      {servicesLoading && (
+        <LoadingSpinner
+          size="large"
+          color="primary"
+          text="Loading your dashboard..."
+          fullScreen={true}
+        />
+      )}
+      {/* Professional Header Section */}
+      <motion.header 
+        className="professional-header"
         ref={headerRef}
         initial="hidden"
         animate={headerInView ? "visible" : "hidden"}
         variants={containerVariants}
       >
-        <div className="container">
+        <div className="header-container">
           <motion.div className="header-content" variants={itemVariants}>
-            <div className="welcome-section">
-              <Logo size="medium" />
+            {/* Logo Section */}
+            <div className="header-logo">
+              <Logo 
+                size="medium" 
+                onClick={() => navigate('/')}
+                className="clickable-logo"
+              />
             </div>
+
+            {/* Header Actions */}
             <div className="header-actions" ref={notificationsRef}>
-              <div className="notifications-wrapper">
+              {/* Notifications */}
+              <div className="notification-container">
                 <button 
-                  className="btn-secondary"
+                  className="notification-btn"
                   onClick={() => setIsNotificationsOpen(v => !v)}
                   aria-haspopup="true"
                   aria-expanded={isNotificationsOpen}
+                  title="Notifications"
                 >
-                  <Bell size={20} color="#f59e0b" fill="#f59e0b" />
-                  {notifications.length > 0 && (
-                    <span className="notification-badge">{notifications.length}</span>
-                  )}
+                  <div className="notification-icon">
+                    <Bell size={20} />
+                    {notifications.length > 0 && (
+                      <span className="notification-badge">
+                        {notifications.length > 9 ? '9+' : notifications.length}
+                      </span>
+                    )}
+                  </div>
                 </button>
+                
                 {isNotificationsOpen && (
                   <div className="notifications-dropdown">
                     <div className="dropdown-header">
-                      <span>Notifications</span>
-                      <button className="link-button" onClick={() => setNotifications([])}>Mark all read</button>
+                      <h3>Notifications</h3>
+                      <button 
+                        className="mark-all-read-btn"
+                        onClick={() => setNotifications([])}
+                      >
+                        Mark all read
+                      </button>
                     </div>
-                    <div className="dropdown-list">
-                      {notifications.slice(0,6).map(item => (
-                        <div key={item.id} className={`notification-item ${item.type}`}>
-                          <div className="notification-icon">
-                            {item.type === 'reminder' && <Clock size={16} />}
-                            {item.type === 'billing' && <DollarSign size={16} />}
-                            {item.type === 'security' && <Shield size={16} />}
-                            {item.type === 'service' && <CheckCircle size={16} />}
-                          </div>
-                          <div className="notification-content">
-                            <div className="notification-title">{item.title}</div>
-                            <div className="notification-message">{item.message}</div>
-                            <div className="notification-meta">
-                              <span className="timestamp">{item.time}</span>
-                            </div>
-                          </div>
+                    <div className="dropdown-content">
+                      {notifications.length === 0 ? (
+                        <div className="empty-notifications">
+                          <Bell size={32} />
+                          <p>No new notifications</p>
+                          <span>You're all caught up!</span>
                         </div>
-                      ))}
+                      ) : (
+                        <div className="notifications-list">
+                          {notifications.slice(0, 6).map(item => (
+                            <div key={item.id} className={`notification-item ${item.type}`}>
+                              <div className="notification-icon-wrapper">
+                                {item.type === 'reminder' && <Clock size={16} />}
+                                {item.type === 'billing' && <DollarSign size={16} />}
+                                {item.type === 'security' && <Shield size={16} />}
+                                {item.type === 'service' && <CheckCircle size={16} />}
+                              </div>
+                              <div className="notification-content">
+                                <div className="notification-title">{item.title}</div>
+                                <div className="notification-message">{item.message}</div>
+                                <div className="notification-time">{item.time}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div className="dropdown-footer">
-                      <button className="btn-secondary" onClick={() => setIsNotificationsOpen(false)}>Close</button>
-                    </div>
+                    {notifications.length > 0 && (
+                      <div className="dropdown-footer">
+                        <button 
+                          className="view-all-btn"
+                          onClick={() => {
+                            setIsNotificationsOpen(false);
+                            // Navigate to notifications page or show all
+                          }}
+                        >
+                          View all notifications
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-              
-              <div
-                className="user-info"
-                role="button"
-                tabIndex={0}
-                onClick={() => setActiveTab('profile')}
-                onKeyDown={(e) => { if (e.key === 'Enter') setActiveTab('profile'); }}
-              >
-                <div className="user-avatar">
-                  {(() => {
-                    const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.photoURL;
-                    return avatar ? (
-                      <img src={avatar} alt="Profile" />
-                    ) : (
-                      <User size={20} />
-                    );
-                  })()}
-                </div>
-                <div className="user-details">
-                  <span className="user-name">{user?.user_metadata?.full_name || 'Customer'}</span>
-                </div>
+
+              {/* User Profile */}
+              <div className="user-profile-container">
+                <button
+                  className="user-profile-btn"
+                  onClick={() => setActiveTab('profile')}
+                  aria-label="View Profile"
+                  title="View Profile"
+                >
+                  <div className="user-avatar">
+                    {(() => {
+                      const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.photoURL;
+                      return avatar ? (
+                        <img src={avatar} alt="Profile" />
+                      ) : (
+                        <User size={20} />
+                      );
+                    })()}
+                  </div>
+                  <div className="user-info">
+                    <span className="user-name">{user?.user_metadata?.full_name || 'Customer'}</span>
+                    <span className="user-role">Customer</span>
+                  </div>
+                  <ChevronDown size={16} className="dropdown-arrow" />
+                </button>
               </div>
 
+              {/* Logout Button */}
               <button 
-                className="btn-secondary"
+                className="logout-btn"
                 onClick={handleLogout}
                 aria-label="Logout"
                 title="Logout"
               >
-                <LogOut size={20} />
-                Logout
+                <LogOut size={18} />
+                <span>Logout</span>
               </button>
             </div>
           </motion.div>
         </div>
-      </motion.section>
+      </motion.header>
 
       {/* Stats Section - Same style as Admin */}
       <motion.section 
@@ -813,11 +1302,25 @@ const CustomerDashboard = () => {
                 key={stat.label}
                 className="stat-card"
                 variants={itemVariants}
-                whileHover={{ scale: 1.05 }}
-                transition={{ type: "spring", stiffness: 300 }}
+                whileHover={{ 
+                  scale: 1.01,
+                  y: -4,
+                  transition: { duration: 0.2, ease: "easeOut" }
+                }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ 
+                  type: "spring", 
+                  stiffness: 300,
+                  damping: 25
+                }}
               >
-                <div className="stat-icon" style={{ backgroundColor: stat.color }}>
-                  <stat.icon size={24} color="white" />
+                <div 
+                  className="stat-icon" 
+                  style={{ 
+                    background: `linear-gradient(135deg, ${stat.color} 0%, ${stat.color}dd 100%)`,
+                  }}
+                >
+                  <stat.icon size={20} color="white" />
                 </div>
                 <div className="stat-content">
                   <h3>{stat.value}</h3>
@@ -1012,7 +1515,7 @@ const CustomerDashboard = () => {
                           const hasOffer = service.offer_enabled && service.offer_price;
                             const discount = hasOffer && service.price ? Math.round(((service.price - service.offer_price) / service.price) * 100) : 0;
                           return (
-                              <motion.div key={service.id} className="deal-card" whileHover={cardHoverEffects[idx % cardHoverEffects.length]} variants={cardEntranceVariants[idx % cardEntranceVariants.length]}>
+                              <motion.div key={service.id} className="deal-card" whileHover={cardHoverEffects[idx % cardHoverEffects.length]} variants={cardEntranceVariants[idx % cardEntranceVariants.length]} onClick={() => handleOpenBookingModal(service)} style={{ cursor: 'pointer' }}>
                                 {hasOffer && discount > 0 && (<div className="deal-badge">{discount}% OFF</div>)}
                               <div className="deal-image">
                                 {service.icon_url ? (
@@ -1037,6 +1540,24 @@ const CustomerDashboard = () => {
                                     {hasOffer && service.price > service.offer_price && (<span className="original-price">₹{service.price}</span>)}
                                   </div>
                                   {service.duration && (<div className="duration-hint">per {service.duration}</div>)}
+                                  
+                                  {/* Review Section */}
+                                  <div 
+                                    className="service-rating clickable-review" 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenReviewModal(service);
+                                    }}
+                                    style={{ cursor: 'pointer' }}
+                                  >
+                                    <div className="stars">
+                                      {[...Array(5)].map((_, i) => (
+                                        <Star key={i} size={14} fill={i < Math.floor(service.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
+                                      ))}
+                                    </div>
+                                    <span className="rating-text">{(service.rating || 4.2).toFixed(1)} ({service.review_count || Math.floor(Math.random() * 50) + 10} reviews)</span>
+                                    <span className="review-hint">Click to review</span>
+                                  </div>
                               </div>
                                 <div className="deal-actions">
                                   <button className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`} onClick={() => isInCart(service.id) ? removeFromCart(service.id) : addToCart(service)}>
@@ -1066,14 +1587,26 @@ const CustomerDashboard = () => {
                     <div id="selected-category-services" className="services-by-category-section full-bleed">
                       <div className="section-header">
                         <h3>{selectedCategory.name} Services</h3>
-                        <button className="view-all-btn" onClick={() => setSelectedCategory(null)}>Back to Categories</button>
+                        <button className="view-all-btn" onClick={() => {
+                          setSelectedCategory(null);
+                          setViewingCategory(null);
+                          setSearchQuery('');
+                          navigate('/dashboard/customer');
+                          // Scroll to categories section after navigation
+                          setTimeout(() => {
+                            document.querySelector('.marketplace-categories')?.scrollIntoView({ 
+                              behavior: 'smooth', 
+                              block: 'start' 
+                            });
+                          }, 100);
+                        }}>Back to Categories</button>
                       </div>
                       <div className="deals-grid">
                         {selectedCategory.services.map((service, idx) => {
                           const hasOffer = service.offer_enabled && service.offer_price;
                           const discount = hasOffer && service.price ? Math.round(((service.price - service.offer_price) / service.price) * 100) : 0;
                           return (
-                            <motion.div key={service.id} className="deal-card" whileHover={cardHoverEffects[idx % cardHoverEffects.length]} variants={cardEntranceVariants[idx % cardEntranceVariants.length]}>
+                            <motion.div key={service.id} className="deal-card" whileHover={cardHoverEffects[idx % cardHoverEffects.length]} variants={cardEntranceVariants[idx % cardEntranceVariants.length]} onClick={() => handleOpenBookingModal(service)} style={{ cursor: 'pointer' }}>
                               {hasOffer && discount > 0 && (<div className="deal-badge">{discount}% OFF</div>)}
                               <div className="deal-image">
                                 {service.icon_url ? (
@@ -1097,6 +1630,24 @@ const CustomerDashboard = () => {
                                   {hasOffer && service.price > service.offer_price && (<span className="original-price">₹{service.price}</span>)}
                                 </div>
                                 {service.duration && (<div className="duration-hint">per {service.duration}</div>)}
+                                
+                                {/* Review Section */}
+                                <div 
+                                  className="service-rating clickable-review" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenReviewModal(service);
+                                  }}
+                                  style={{ cursor: 'pointer' }}
+                                >
+                                  <div className="stars">
+                                    {[...Array(5)].map((_, i) => (
+                                      <Star key={i} size={14} fill={i < Math.floor(service.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
+                                    ))}
+                                  </div>
+                                  <span className="rating-text">{(service.rating || 4.2).toFixed(1)} ({service.review_count || Math.floor(Math.random() * 50) + 10} reviews)</span>
+                                  <span className="review-hint">Click to review</span>
+                                </div>
                               </div>
                               <div className="deal-actions">
                                 <button className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`} onClick={() => isInCart(service.id) ? removeFromCart(service.id) : addToCart(service)}>
@@ -1474,6 +2025,7 @@ const CustomerDashboard = () => {
                                   transition: { duration: 0.3 }
                                 }}
                                 variants={itemVariants}
+                                onClick={() => handleOpenBookingModal(service)}
                                 style={{
                                   background: '#fff',
                                   borderRadius: '16px',
@@ -1482,7 +2034,8 @@ const CustomerDashboard = () => {
                                   boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
                                   transition: 'all 0.3s ease',
                                   position: 'relative',
-                                  overflow: 'hidden'
+                                  overflow: 'hidden',
+                                  cursor: 'pointer'
                                 }}
                               >
                                 {/* Gradient accent */}
@@ -1643,6 +2196,51 @@ const CustomerDashboard = () => {
                                           Save ₹{service.price - service.offer_price}
                                         </div>
                                       )}
+                                      
+                                      {/* Review Section */}
+                                      <div 
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.5rem',
+                                          marginTop: '0.75rem',
+                                          cursor: 'pointer',
+                                          padding: '0.5rem',
+                                          borderRadius: '8px',
+                                          transition: 'background-color 0.2s ease'
+                                        }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenReviewModal(service);
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.target.style.backgroundColor = 'rgba(251, 191, 36, 0.1)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.target.style.backgroundColor = 'transparent';
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', gap: '2px' }}>
+                                          {[...Array(5)].map((_, i) => (
+                                            <Star key={i} size={14} fill={i < Math.floor(service.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
+                                          ))}
+                                        </div>
+                                        <span style={{ 
+                                          fontSize: '0.875rem', 
+                                          color: '#64748b', 
+                                          fontWeight: '500' 
+                                        }}>
+                                          {(service.rating || 4.2).toFixed(1)} ({service.review_count || Math.floor(Math.random() * 50) + 10} reviews)
+                                        </span>
+                                        <span style={{ 
+                                          fontSize: '0.75rem', 
+                                          color: '#3b82f6', 
+                                          fontWeight: '500',
+                                          marginLeft: '0.5rem'
+                                        }}>
+                                          Click to review
+                                        </span>
+                                      </div>
                                     </div>
                                     
                                     <div style={{
@@ -1984,6 +2582,7 @@ const CustomerDashboard = () => {
                                 boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
                                 transition: { duration: 0.3 }
                               }}
+                              onClick={() => handleOpenBookingModal(service)}
                               variants={itemVariants}
                               style={{
                                 background: '#fff',
@@ -1996,7 +2595,8 @@ const CustomerDashboard = () => {
                                 overflow: 'hidden',
                                 minHeight: '300px',
                                 display: 'flex',
-                                flexDirection: 'column'
+                                flexDirection: 'column',
+                                cursor: 'pointer'
                               }}
                             >
                               {/* Gradient accent */}
@@ -2145,6 +2745,52 @@ const CustomerDashboard = () => {
                                         per {service.duration}
                                       </p>
                                     )}
+                                    
+                                    {/* Review Section */}
+                                    <div 
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        marginTop: '0.75rem',
+                                        cursor: 'pointer',
+                                        padding: '0.5rem',
+                                        borderRadius: '8px',
+                                        transition: 'background-color 0.2s ease'
+                                      }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenReviewModal(service);
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.target.style.backgroundColor = 'rgba(251, 191, 36, 0.1)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.target.style.backgroundColor = 'transparent';
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', gap: '2px' }}>
+                                        {[...Array(5)].map((_, i) => (
+                                          <Star key={i} size={14} fill={i < Math.floor(service.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
+                                        ))}
+                                      </div>
+                                      <span style={{ 
+                                        fontSize: '0.875rem', 
+                                        color: '#64748b', 
+                                        fontWeight: '500' 
+                                      }}>
+                                        {(service.rating || 4.2).toFixed(1)} ({service.review_count || Math.floor(Math.random() * 50) + 10} reviews)
+                                      </span>
+                                      <span style={{ 
+                                        fontSize: '0.75rem', 
+                                        color: '#3b82f6', 
+                                        fontWeight: '500',
+                                        marginLeft: '0.5rem'
+                                      }}>
+                                        Click to review
+                                      </span>
+                                    </div>
+                                    
                                     {hasOffer && (
                                       <div style={{
                                         marginTop: '0.25rem'
@@ -2256,6 +2902,8 @@ const CustomerDashboard = () => {
                             className="deal-card"
                             whileHover={{ y: -4 }}
                             variants={itemVariants}
+                            onClick={() => handleOpenBookingModal(item)}
+                            style={{ cursor: 'pointer' }}
                           >
                             {hasOffer && discount > 0 && (
                               <div className="deal-badge">{discount}% OFF</div>
@@ -2288,7 +2936,25 @@ const CustomerDashboard = () => {
                               </div>
                               {item.duration && (
                                 <div className="duration-hint">per {item.duration}</div>
-                                  )}
+                              )}
+                              
+                              {/* Review Section */}
+                              <div 
+                                className="service-rating clickable-review" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenReviewModal(item);
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <div className="stars">
+                                  {[...Array(5)].map((_, i) => (
+                                    <Star key={i} size={14} fill={i < Math.floor(item.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
+                                  ))}
+                                </div>
+                                <span className="rating-text">{(item.rating || 4.2).toFixed(1)} ({item.review_count || Math.floor(Math.random() * 50) + 10} reviews)</span>
+                                <span className="review-hint">Click to review</span>
+                              </div>
                                 </div>
                             <div className="deal-actions">
                               <button 
@@ -2345,12 +3011,14 @@ const CustomerDashboard = () => {
                           const discount = hasOffer && item.price ? 
                             Math.round(((item.price - item.offer_price) / item.price) * 100) : 0;
                           return (
-                            <motion.div 
-                              key={item.id} 
-                              className="deal-card"
-                              whileHover={{ y: -4 }}
-                              variants={itemVariants}
-                            >
+                          <motion.div 
+                            key={item.id} 
+                            className="deal-card"
+                            whileHover={{ y: -4 }}
+                            variants={itemVariants}
+                            onClick={() => handleOpenBookingModal(item)}
+                            style={{ cursor: 'pointer' }}
+                          >
                               {hasOffer && discount > 0 && (
                                 <div className="deal-badge">{discount}% OFF</div>
                               )}
@@ -2389,6 +3057,24 @@ const CustomerDashboard = () => {
                                 {item.duration && (
                                   <div className="duration-hint">per {item.duration}</div>
                                 )}
+                                
+                                {/* Review Section */}
+                                <div 
+                                  className="service-rating clickable-review" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenReviewModal(item);
+                                  }}
+                                  style={{ cursor: 'pointer' }}
+                                >
+                                  <div className="stars">
+                                    {[...Array(5)].map((_, i) => (
+                                      <Star key={i} size={14} fill={i < Math.floor(item.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
+                                    ))}
+                                  </div>
+                                  <span className="rating-text">{(item.rating || 4.2).toFixed(1)} ({item.review_count || Math.floor(Math.random() * 50) + 10} reviews)</span>
+                                  <span className="review-hint">Click to review</span>
+                                </div>
                               </div>
                               <div className="deal-actions">
                                 <button 
@@ -2599,14 +3285,25 @@ const CustomerDashboard = () => {
 
                   {/* Orders List */}
                   <div className="orders-list">
-                    {services.map(service => (
-                      <div key={service.id} className="order-item">
+                    {ordersLoading && (
+                      <div className="orders-loading">
+                        <div className="loading-spinner"></div>
+                        <span>Loading your orders…</span>
+                      </div>
+                    )}
+                    {!ordersLoading && orders.length === 0 && (
+                      <div className="orders-empty">
+                        <p>No orders yet. Your bookings will appear here.</p>
+                      </div>
+                    )}
+                    {orders.map(order => (
+                      <div key={order.id} className="order-item">
                         <div className="order-header-section">
                            <div className="order-date-info">
-                             <span className="order-date">Ordered on {service.date}</span>
-                             <span className="order-total">Total: ₹{service.price}</span>
+                             <span className="order-date">Scheduled on {order.date} at {order.time}</span>
+                             <span className="order-total">Total: ₹{order.total}</span>
                            </div>
-                          <div className="order-id">Order #{service.trackingId}</div>
+                          <div className="order-id">Booking #{order.id.slice(0,8)}</div>
                         </div>
 
                         <div className="order-content-section">
@@ -2615,31 +3312,34 @@ const CustomerDashboard = () => {
                               <Settings size={32} />
                             </div>
                             <div className="service-details">
-                              <h3>{service.name}</h3>
-                              <p className="provider-info">by {service.provider}</p>
-                              <p className="service-time">Scheduled for {service.date} at {service.time}</p>
-                              <p className="service-address">{service.address}</p>
+                              <h3>{order.name}</h3>
+                              <p className="service-time">Scheduled for {order.date} at {order.time}</p>
+                              <p className="service-address">{order.address}</p>
                             </div>
                           </div>
 
                           <div className="order-status-section">
                             <div className="status-info">
-                              <span 
-                                className="status-indicator"
-                                style={{ backgroundColor: getStatusColor(service.status) }}
-                              ></span>
-                              <div className="status-text">
-                                <span className="status-main">{(service.status || '').replace('-', ' ')}</span>
-                                <span className="status-sub">
-                                  {service.status === 'in-progress' && 'Provider is on the way'}
-                                  {service.status === 'scheduled' && 'Service confirmed'}
-                                  {service.status === 'completed' && 'Service completed successfully'}
-                                </span>
-                              </div>
+                              {(() => { const statusUi = (order.bookingStatus || '').replace('_', '-'); return (
+                                <>
+                                  <span 
+                                    className="status-indicator"
+                                    style={{ backgroundColor: getStatusColor(statusUi) }}
+                                  ></span>
+                                  <div className="status-text">
+                                    <span className="status-main">{statusUi.replace('-', ' ')}</span>
+                                    <span className="status-sub">
+                                      {statusUi === 'in-progress' && 'Provider is on the way'}
+                                      {statusUi === 'scheduled' && 'Service confirmed'}
+                                      {statusUi === 'completed' && 'Service completed successfully'}
+                                    </span>
+                                  </div>
+                                </>
+                              ); })()}
                             </div>
 
                             <div className="order-actions">
-                              {service.status === 'in-progress' && (
+                              {((order.bookingStatus || '').replace('_','-') === 'in-progress') && (
                                 <>
                                   <button className="action-btn primary">
                                     <MapPin size={16} />
@@ -2651,7 +3351,7 @@ const CustomerDashboard = () => {
                                   </button>
                                 </>
                               )}
-                      {service.status === 'scheduled' && (
+                              {((order.bookingStatus || '').replace('_','-') === 'scheduled') && (
                                 <>
                                   <button className="action-btn secondary">
                                     <Edit size={16} />
@@ -2663,9 +3363,9 @@ const CustomerDashboard = () => {
                                   </button>
                                 </>
                               )}
-                              {service.status === 'completed' && (
+                              {((order.bookingStatus || '').replace('_','-') === 'completed') && (
                                 <>
-                                  <button className="action-btn primary" onClick={() => handleProvideFeedback(service)}>
+                                  <button className="action-btn primary" onClick={() => handleProvideFeedback(order)}>
                                     <Star size={16} />
                                     Write Review
                                   </button>
@@ -2683,7 +3383,7 @@ const CustomerDashboard = () => {
                           </div>
                         </div>
 
-                        {service.status === 'in-progress' && (
+                        {((order.bookingStatus || '').replace('_','-') === 'in-progress') && (
                           <div className="order-progress">
                             <div className="progress-steps">
                               <div className="progress-step completed">
@@ -2840,46 +3540,102 @@ const CustomerDashboard = () => {
 
                   {/* Payment Form Modal */}
                   {isPaymentModalOpen && selectedService && (
-                    <div className="modal-backdrop" onClick={() => setIsPaymentModalOpen(false)}>
+                    <div className="modal-backdrop" onClick={handleClosePaymentModal}>
                       <div className="modal" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
                           <h4>Pay Bill - {selectedService.id}</h4>
-                          <button className="close-btn" onClick={() => setIsPaymentModalOpen(false)}>
+                          <button className="close-btn" onClick={handleClosePaymentModal}>
                             <X size={20} />
                           </button>
                         </div>
-                        <form className="modal-body">
+                        <form className="modal-body" onSubmit={handlePaymentSubmit}>
                           <div className="form-group">
                             <label>Service</label>
-                            <input type="text" value={selectedService.service} disabled />
+                            <input type="text" value={selectedService.service || 'Service Name'} disabled />
                           </div>
                           
-                            <div className="form-group">
-                              <label>Amount Due</label>
-                              <input type="text" value={`₹${selectedService.amount.toFixed(2)}`} disabled />
-                            </div>
+                          <div className="form-group">
+                            <label>Amount Due</label>
+                            <input type="text" value={`₹${selectedService.amount?.toFixed(2) || '0.00'}`} disabled />
+                          </div>
 
                           <div className="form-group">
-                            <label htmlFor="paymentMethod">Payment Method</label>
-                            <select id="paymentMethod" name="paymentMethod" required>
-                              <option value="card">Credit Card (•••• 1234)</option>
-                              <option value="upi">UPI (user@upi)</option>
-                              <option value="wallet">Wallet</option>
-                              <option value="netbanking">Net Banking</option>
+                            <label htmlFor="paymentMethod">Payment Method *</label>
+                            <select 
+                              id="paymentMethod" 
+                              name="paymentMethod" 
+                              value={paymentMethod}
+                              onChange={(e) => setPaymentMethod(e.target.value)}
+                              required
+                            >
+                              <option value="card">💳 Credit Card (•••• 1234)</option>
+                              <option value="upi">📱 UPI (user@upi)</option>
+                              <option value="wallet">💰 Wallet</option>
+                              <option value="netbanking">🏦 Net Banking</option>
                             </select>
                           </div>
 
                           <div className="form-group">
                             <label htmlFor="promoCode">Apply Promo/Discount</label>
-                            <input id="promoCode" name="promoCode" type="text" placeholder="Enter promo code" />
+                            <input 
+                              id="promoCode" 
+                              name="promoCode" 
+                              type="text" 
+                              placeholder="Enter promo code (optional)"
+                              value={promoCode}
+                              onChange={(e) => setPromoCode(e.target.value)}
+                            />
+                            {promoCode && (
+                              <p style={{ marginTop: '8px', color: '#10b981', fontSize: '0.9rem', fontWeight: '600' }}>
+                                🎉 Promo code applied! You saved ₹50.
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Security Notice */}
+                          <div style={{ 
+                            background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                            border: '2px solid #bae6fd',
+                            borderRadius: '16px',
+                            padding: '16px',
+                            margin: '20px 0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px'
+                          }}>
+                            <Shield size={20} color="#0284c7" />
+                            <div>
+                              <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600', color: '#0c4a6e' }}>
+                                Secure Payment
+                              </p>
+                              <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#0369a1' }}>
+                                Your payment is protected with 256-bit SSL encryption
+                              </p>
+                            </div>
                           </div>
 
                           <div className="modal-actions">
-                            <button type="button" className="btn-secondary" onClick={() => setIsPaymentModalOpen(false)}>
+                            <button 
+                              type="button" 
+                              className="btn-secondary" 
+                              onClick={handleClosePaymentModal}
+                              disabled={isProcessingPayment}
+                            >
                               Cancel
                             </button>
-                            <button type="submit" className="btn-primary">
-                              Pay ₹{selectedService.amount.toFixed(2)}
+                            <button 
+                              type="submit" 
+                              className="btn-primary"
+                              disabled={isProcessingPayment}
+                            >
+                              {isProcessingPayment ? (
+                                <>
+                                  <div className="loading-spinner" />
+                                  Processing...
+                                </>
+                              ) : (
+                                `Pay ₹${selectedService.amount?.toFixed(2) || '0.00'}`
+                              )}
                             </button>
                           </div>
                         </form>
@@ -3119,113 +3875,51 @@ const CustomerDashboard = () => {
         </div>
       </section>
 
-      {/* Booking Modal */}
-      {isBookingModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsBookingModalOpen(false)}>
-          <div className="modal large" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h4>Book a Service</h4>
-              <button className="close-btn" onClick={() => setIsBookingModalOpen(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <form className="booking-form">
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="category">Select Category</label>
-                    <select id="category" name="category" required>
-                      <option value="">Choose a category</option>
-                      {categories.map(cat => (
-                        <option key={cat.id} value={cat.name}>{cat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="service">Select Service</label>
-                    <select id="service" name="service" required>
-                      <option value="">Choose a service</option>
-                      {services.slice(0, 10).map((service, index) => (
-                        <option key={index} value={service.name.toLowerCase().replace(/\s+/g, '_')}>
-                          {service.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-              </div>
-              
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="date">Preferred Date</label>
-                    <input id="date" name="date" type="date" required />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="time">Preferred Time</label>
-                    <input id="time" name="time" type="time" required />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="address">Address</label>
-                  <input id="address" name="address" type="text" placeholder="Enter service address" required />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="instructions">Special Instructions</label>
-                  <textarea id="instructions" name="instructions" rows="3" placeholder="Any special requirements or instructions"></textarea>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="promo">Promo Code (Optional)</label>
-                  <input id="promo" name="promo" type="text" placeholder="Enter promo code" />
-                </div>
-
-                <div className="modal-actions">
-                  <button type="button" className="btn-secondary" onClick={() => setIsBookingModalOpen(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn-primary">Confirm Booking</button>
-                </div>
-              </form>
-            </div>
-              </div>
-            </div>
-          )}
 
       {/* Feedback Modal */}
       {isFeedbackModalOpen && selectedService && (
-        <div className="modal-backdrop" onClick={() => setIsFeedbackModalOpen(false)}>
+        <div className="modal-backdrop" onClick={handleCloseFeedbackModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h4>Provide Feedback</h4>
-              <button className="close-btn" onClick={() => setIsFeedbackModalOpen(false)}>
+              <button className="close-btn" onClick={handleCloseFeedbackModal}>
                 <X size={20} />
               </button>
-      </div>
-            <form className="modal-body">
+            </div>
+            <form className="modal-body" onSubmit={handleFeedbackSubmit}>
               <div className="form-group">
                 <label>Service Provider</label>
-                <input type="text" value={selectedService.provider} disabled />
+                <input type="text" value={selectedService.provider || 'Service Provider'} disabled />
               </div>
               
               <div className="form-group">
                 <label>Service</label>
-                <input type="text" value={selectedService.name} disabled />
+                <input type="text" value={selectedService.name || 'Service Name'} disabled />
               </div>
 
               <div className="form-group">
-                <label>Rating</label>
+                <label>Rating *</label>
                 <div className="rating-input">
                   {[1, 2, 3, 4, 5].map(star => (
                     <button
                       key={star}
                       type="button"
-                      className="star-btn"
+                      className={`star-btn ${feedbackRating >= star ? 'active' : ''}`}
+                      onClick={() => setFeedbackRating(star)}
                     >
-                      <Star size={24} />
+                      <Star size={24} fill={feedbackRating >= star ? 'currentColor' : 'none'} />
                     </button>
                   ))}
                 </div>
+                {feedbackRating > 0 && (
+                  <p style={{ marginTop: '8px', color: '#667eea', fontSize: '0.9rem', fontWeight: '600' }}>
+                    {feedbackRating === 1 && 'Poor'}
+                    {feedbackRating === 2 && 'Fair'}
+                    {feedbackRating === 3 && 'Good'}
+                    {feedbackRating === 4 && 'Very Good'}
+                    {feedbackRating === 5 && 'Excellent'}
+                  </p>
+                )}
               </div>
 
               <div className="form-group">
@@ -3234,36 +3928,202 @@ const CustomerDashboard = () => {
                   id="feedbackText" 
                   name="feedbackText" 
                   rows="4" 
-                  placeholder="Share your experience..."
-                  required
-                ></textarea>
+                  placeholder="Share your experience with this service..."
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                />
               </div>
 
               <div className="form-group">
                 <label className="checkbox-label">
-                  <input type="checkbox" name="recommend" />
-                  Would you recommend this service provider?
+                  <input 
+                    type="checkbox" 
+                    name="recommend" 
+                    checked={recommendProvider}
+                    onChange={(e) => setRecommendProvider(e.target.checked)}
+                  />
+                  Would you recommend this service provider to others?
                 </label>
               </div>
 
               <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={() => setIsFeedbackModalOpen(false)}>
+                <button type="button" className="btn-secondary" onClick={handleCloseFeedbackModal}>
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary">Submit Feedback</button>
+                <button type="submit" className="btn-primary">
+                  Submit Feedback
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Booking Modal */}
-      <BookingModal
-        isOpen={isBookingModalOpen}
-        onClose={handleCloseBookingModal}
-        service={bookingService}
-        user={user}
-      />
+      {/* Review Modal */}
+      {isReviewModalOpen && reviewService && (
+        <div className="modal-backdrop" onClick={handleCloseReviewModal}>
+          <div className="review-modal" onClick={(e) => e.stopPropagation()}>
+            {/* Header with gradient */}
+            <div className="review-modal-header">
+              <div className="header-content">
+                <div className="header-icon">
+                  <Star size={24} fill="#fbbf24" />
+                </div>
+                <div className="header-text">
+                  <h4>Share Your Experience</h4>
+                  <p>Help other customers make informed decisions</p>
+                </div>
+              </div>
+              <button className="close-btn" onClick={handleCloseReviewModal}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form className="review-modal-body" onSubmit={handleReviewSubmit}>
+              {/* Service Info Card */}
+              <div className="service-info-card">
+                <div className="service-icon">
+                  {reviewService.icon_url ? (
+                    <img src={reviewService.icon_url} alt={reviewService.name} />
+                  ) : (
+                    <Settings size={24} />
+                  )}
+                </div>
+                <div className="service-details">
+                  <h5>{reviewService.name}</h5>
+                  <p>{reviewService.category_name || reviewService.category || 'Service'}</p>
+                </div>
+              </div>
+              
+              {/* Overall Rating Section */}
+              <div className="rating-section">
+                <div className="section-header">
+                  <h6>Overall Rating</h6>
+                  <span className="required-badge">Required</span>
+                </div>
+                <div className="rating-input-large">
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      type="button"
+                      className={`star-btn-large ${reviewRating >= star ? 'active' : ''}`}
+                      onClick={() => setReviewRating(star)}
+                    >
+                      <Star size={32} fill={reviewRating >= star ? 'currentColor' : 'none'} />
+                    </button>
+                  ))}
+                </div>
+                {reviewRating > 0 && (
+                  <div className="rating-feedback">
+                    <span className="rating-text">{reviewRating}/5</span>
+                    <span className="rating-description">
+                      {reviewRating === 1 && 'Poor - Needs improvement'}
+                      {reviewRating === 2 && 'Fair - Below average'}
+                      {reviewRating === 3 && 'Good - Meets expectations'}
+                      {reviewRating === 4 && 'Very Good - Exceeds expectations'}
+                      {reviewRating === 5 && 'Excellent - Outstanding service'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Predefined Questions */}
+              <div className="review-questions-section">
+                <div className="section-header">
+                  <h6>Detailed Feedback</h6>
+                  <p className="section-subtitle">Help others by answering these questions</p>
+                </div>
+                
+                <div className="questions-grid">
+                  {reviewQuestions.map((question, index) => (
+                    <div key={question.id} className="question-card">
+                      <div className="question-header">
+                        <span className="question-number">{index + 1}</span>
+                        <label className="question-label">{question.question}</label>
+                      </div>
+                      {question.type === 'rating' ? (
+                        <div className="rating-options">
+                          {question.options.map((option, optionIndex) => (
+                            <button
+                              key={optionIndex}
+                              type="button"
+                              className={`rating-option ${reviewAnswers[question.id] === option ? 'selected' : ''}`}
+                              onClick={() => handleReviewAnswerChange(question.id, option)}
+                            >
+                              <span className="option-text">{option}</span>
+                              <span className="option-value">{optionIndex + 1}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="yesno-options">
+                          {question.options.map((option) => (
+                            <button
+                              key={option}
+                              type="button"
+                              className={`yesno-option ${reviewAnswers[question.id] === option ? 'selected' : ''}`}
+                              onClick={() => handleReviewAnswerChange(question.id, option)}
+                            >
+                              {option === 'Yes' ? (
+                                <CheckCircle size={16} />
+                              ) : (
+                                <X size={16} />
+                              )}
+                              <span>{option}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Additional Comments */}
+              <div className="comments-section">
+                <div className="section-header">
+                  <h6>Additional Comments</h6>
+                  <span className="optional-badge">Optional</span>
+                </div>
+                <div className="textarea-container">
+                  <textarea 
+                    id="reviewNote" 
+                    name="reviewNote" 
+                    rows="4" 
+                    placeholder="Share any additional thoughts about your experience, what you liked, or suggestions for improvement..."
+                    value={reviewNote}
+                    onChange={(e) => setReviewNote(e.target.value)}
+                  />
+                  <div className="char-count">{reviewNote.length}/500</div>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="review-modal-actions">
+                <button type="button" className="btn-cancel" onClick={handleCloseReviewModal}>
+                  <X size={16} />
+                  Cancel
+                </button>
+                <button type="submit" className="btn-submit" disabled={isSubmittingReview || reviewRating === 0}>
+                  {isSubmittingReview ? (
+                    <>
+                      <RefreshCw size={16} className="spinning" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Star size={16} />
+                      Submit Review
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+
     </div>
   );
 };

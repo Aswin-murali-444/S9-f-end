@@ -351,6 +351,36 @@ class ApiService {
   async listProviders() {
     return this.request('/admin/providers');
   }
+
+  // Bookings
+  async createBooking(payload) {
+    return this.request('/bookings', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  // Payments (Razorpay)
+  async createRazorpayOrder({ amount, currency = 'INR', receipt, notes }) {
+    return this.request('/payments/create-order', {
+      method: 'POST',
+      body: JSON.stringify({ amount, currency, receipt, notes })
+    });
+  }
+
+  async verifyRazorpayPayment(payload) {
+    return this.request('/payments/verify', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async confirmBookingAfterPayment(payload) {
+    return this.request('/payments/confirm-booking', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
 }
 
 export const apiService = new ApiService(); 

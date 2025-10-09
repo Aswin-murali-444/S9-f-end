@@ -1,57 +1,54 @@
 import React from 'react';
 import './LoadingSpinner.css';
 
-const LoadingSpinner = ({ size = 'medium', text = 'Loading...', variant = 'primary' }) => {
-  const sizeClasses = {
-    small: 'spinner-sm',
-    medium: 'spinner-md',
-    large: 'spinner-lg'
+const LoadingSpinner = ({ 
+  size = 'medium', 
+  color = 'primary', 
+  text = '', 
+  fullScreen = false,
+  className = ''
+}) => {
+  const getSizeClass = () => {
+    switch (size) {
+      case 'small': return 'spinner-small';
+      case 'large': return 'spinner-large';
+      default: return 'spinner-medium';
+    }
   };
 
-  const variantClasses = {
-    primary: 'spinner-primary',
-    secondary: 'spinner-secondary',
-    success: 'spinner-success',
-    danger: 'spinner-danger',
-    warning: 'spinner-warning',
-    info: 'spinner-info'
+  const getColorClass = () => {
+    switch (color) {
+      case 'secondary': return 'spinner-secondary';
+      case 'success': return 'spinner-success';
+      case 'warning': return 'spinner-warning';
+      case 'error': return 'spinner-error';
+      default: return 'spinner-primary';
+    }
   };
 
-  return (
-    <div className={`loading-container animate-fade-in`}>
-      <div className={`spinner-wrapper ${sizeClasses[size] || 'spinner-md'}`}>
-        {/* Bootstrap Spinner */}
-        <div className={`spinner-border ${variantClasses[variant] || 'spinner-primary'} animate-pulse-glow`} role="status">
-          <span className="visually-hidden">Loading...</span>
-        </div>
-        
-        {/* Custom Animated Rings */}
-        <div className="custom-spinner">
-          <div className="ring ring-1 animate-rotate-in"></div>
-          <div className="ring ring-2 animate-rotate-in" style={{ animationDelay: '0.2s' }}></div>
-          <div className="ring ring-3 animate-rotate-in" style={{ animationDelay: '0.4s' }}></div>
-        </div>
-        
-        {/* Pulsing Dots */}
-        <div className="pulse-dots">
-          <div className="dot dot-1 animate-bounce-in"></div>
-          <div className="dot dot-2 animate-bounce-in" style={{ animationDelay: '0.2s' }}></div>
-          <div className="dot dot-3 animate-bounce-in" style={{ animationDelay: '0.4s' }}></div>
+  if (fullScreen) {
+    return (
+      <div className={`loading-overlay ${className}`}>
+        <div className="loading-content">
+          <div className={`loading-spinner ${getSizeClass()} ${getColorClass()}`}>
+            <div className="spinner-ring"></div>
+            <div className="spinner-ring"></div>
+            <div className="spinner-ring"></div>
+          </div>
+          {text && <p className="loading-text">{text}</p>}
         </div>
       </div>
-      
-      {text && (
-        <div className="loading-text animate-fade-in" style={{ animationDelay: '0.5s' }}>
-          <span className="text-reveal">{text}</span>
-          <div className="text-dots">
-            <span className="dot">.</span>
-            <span className="dot">.</span>
-            <span className="dot">.</span>
-          </div>
-        </div>
-      )}
+    );
+  }
+
+  return (
+    <div className={`loading-spinner ${getSizeClass()} ${getColorClass()} ${className}`}>
+      <div className="spinner-ring"></div>
+      <div className="spinner-ring"></div>
+      <div className="spinner-ring"></div>
+      {text && <p className="loading-text">{text}</p>}
     </div>
   );
 };
 
-export default LoadingSpinner; 
+export default LoadingSpinner;

@@ -45,6 +45,9 @@ const AdminServicesPage = lazy(() => import('./pages/admin/ServicesPage'));
 const EditServicePage = lazy(() => import('./pages/admin/EditServicePage'));
 const ManageProvidersPage = lazy(() => import('./pages/admin/ManageProvidersPage'));
 
+// Booking Page
+const BookingPage = lazy(() => import('./pages/BookingPage'));
+
 const Placeholder = ({ title }) => (
   <div style={{ minHeight: '50vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
     <h2>{title}</h2>
@@ -58,9 +61,10 @@ function AppShell() {
   const isAnyDashboard = location.pathname.startsWith('/dashboard');
   const isCustomerDashboard = location.pathname.startsWith('/dashboard/customer');
   const isAdminPage = location.pathname.startsWith('/admin');
+  const isBookingPage = location.pathname === '/booking';
   const isHome = location.pathname === '/';
   const isLogin = location.pathname === '/login';
-  const showPublicHeader = !(isAnyDashboard || isAdminPage);
+  const showPublicHeader = !(isAnyDashboard || isAdminPage || isBookingPage);
 
   return (
     <div className="App">
@@ -99,6 +103,11 @@ function AppShell() {
                     <Route path="/auth/callback" element={<AuthCallback />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
+                    <Route path="/booking" element={
+                      <ProtectedRoute allowedRoles={["customer"]}>
+                        <BookingPage />
+                      </ProtectedRoute>
+                    } />
                     <Route
                       path="/dashboard/customer"
                       element={

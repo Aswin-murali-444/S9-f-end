@@ -3,12 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Calendar, Clock, MapPin, User, Phone, MessageSquare, 
   CreditCard, Shield, CheckCircle, AlertCircle, Star, 
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, ArrowRight, ArrowLeft
 } from 'lucide-react';
+import { supabase } from '../hooks/useAuth';
 import './BookingModal.css';
 
 const BookingModal = ({ isOpen, onClose, service, user }) => {
-  const [step, setStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [address, setAddress] = useState('');
@@ -17,8 +18,10 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [isLoading, setIsLoading] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
-  const [expandedSections, setExpandedSections] = useState({
-    serviceDetails: true,
+  const [userProfile, setUserProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [completedSteps, setCompletedSteps] = useState({
+    serviceDetails: false,
     scheduling: false,
     location: false,
     payment: false
@@ -56,11 +59,113 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
     });
   };
 
-  const toggleSection = (section) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
+  const steps = [
+    { id: 1, name: 'Service Details', icon: Star },
+    { id: 2, name: 'Schedule', icon: Calendar },
+    { id: 3, name: 'Location', icon: MapPin },
+    { id: 4, name: 'Payment', icon: CreditCard }
+  ];
+
+  const nextStep = () => {
+    if (currentStep < steps.length) {
+      // Mark current step as completed
+      const stepKey = Object.keys(completedSteps)[currentStep - 1];
+      setCompletedSteps(prev => ({
+        ...prev,
+        [stepKey]: true
+      }));
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const goToStep = (stepNumber) => {
+    // Allow going to previous steps or current step
+    if (stepNumber <= currentStep) {
+      setCurrentStep(stepNumber);
+    }
+  };
+
+  const isStepCompleted = (stepNumber) => {
+    const stepKey = Object.keys(completedSteps)[stepNumber - 1];
+    return completedSteps[stepKey];
+  };
+
+  const canProceedToNext = () => {
+    switch (currentStep) {
+      case 1: return true; // Service details are always complete
+      case 2: return selectedDate && selectedTime;
+      case 3: return address && phone;
+      case 4: return paymentMethod;
+      default: return false;
+    }
+  };
+
+  // Fetch user profile data when modal opens
+  const fetchUserProfile = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setProfileLoading(true);
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select(`
+          *,
+          user_profiles (
+            first_name,
+            last_name,
+            phone,
+            address,
+            city,
+            state,
+            country,
+            postal_code,
+            location_latitude,
+            location_longitude,
+            location_accuracy_m
+          )
+        `)
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (error) {
+        console.warn('Failed to fetch user profile:', error);
+        return;
+      }
+
+      setUserProfile(userData);
+      
+      // Auto-populate form fields if profile data exists
+      if (userData?.user_profiles) {
+        const profile = userData.user_profiles;
+        
+        // Build full address from profile data
+        const addressParts = [
+          profile.address,
+          profile.city,
+          profile.state,
+          profile.country,
+          profile.postal_code
+        ].filter(Boolean);
+        
+        if (addressParts.length > 0) {
+          setAddress(addressParts.join(', '));
+        }
+        
+        if (profile.phone) {
+          setPhone(profile.phone);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    } finally {
+      setProfileLoading(false);
+    }
   };
 
   const handleBooking = async () => {
@@ -77,15 +182,15 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
       setBookingSuccess(false);
       onClose();
       // Reset form
-      setStep(1);
+      setCurrentStep(1);
       setSelectedDate('');
       setSelectedTime('');
       setAddress('');
       setPhone('');
       setNotes('');
       setPaymentMethod('card');
-      setExpandedSections({
-        serviceDetails: true,
+      setCompletedSteps({
+        serviceDetails: false,
         scheduling: false,
         location: false,
         payment: false
@@ -104,6 +209,10 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      // Fetch user profile when modal opens (only if not already loaded)
+      if (!userProfile) {
+        fetchUserProfile();
+      }
     } else {
       document.body.style.overflow = 'unset';
     }
@@ -111,7 +220,7 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen]);
+  }, [isOpen, user?.id, userProfile]);
 
   if (!isOpen || !service) return null;
 
@@ -143,81 +252,81 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
                 <div className="booking-header">
                   <div className="booking-title">
                     <h2>Book {service.name}</h2>
-                    <p>Complete your booking in just a few steps</p>
+                    <p>Complete your booking in {steps.length} steps</p>
                   </div>
-          <button className="close-btn" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
+                  <button className="close-btn" onClick={onClose}>
+                    <X size={24} />
+                  </button>
+                </div>
 
-                {/* Progress Indicator */}
+                {/* Step Progress Indicator */}
                 <div className="booking-progress">
-                  <div className="progress-step">
-                    <div className={`progress-dot ${selectedDate && selectedTime ? 'completed' : 'active'}`}>
-                      {selectedDate && selectedTime ? <CheckCircle size={16} /> : '1'}
-                    </div>
-                    <span>Schedule</span>
-                  </div>
-                  <div className="progress-line"></div>
-                  <div className="progress-step">
-                    <div className={`progress-dot ${address && phone ? 'completed' : selectedDate && selectedTime ? 'active' : ''}`}>
-                      {address && phone ? <CheckCircle size={16} /> : '2'}
-                    </div>
-                    <span>Location</span>
-                  </div>
-                  <div className="progress-line"></div>
-                  <div className="progress-step">
-                    <div className={`progress-dot ${address && phone ? 'active' : 'pending'}`}>
-                      3
-                    </div>
-                    <span>Payment</span>
-          </div>
-        </div>
-
-                <div className="booking-content">
-                  {/* Service Details Section */}
-                  <div className="booking-section">
-                    <button 
-                      className="section-header"
-                      onClick={() => toggleSection('serviceDetails')}
-                    >
-                      <div className="section-title">
-                        <div className="service-icon">
-                          {service.icon_url ? (
-                            <img src={service.icon_url} alt={service.name} />
-                          ) : (
-                            <div className="default-icon">🔧</div>
-                          )}
-                        </div>
-                        <div>
-                          <h3>{service.name}</h3>
-                          <p className="service-description">{service.description}</p>
-                          <div className="section-status">
-                            <CheckCircle size={16} />
-                            <span>Service Details</span>
-                          </div>
-                        </div>
-                      </div>
-                      {expandedSections.serviceDetails ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                    </button>
+                  {steps.map((step, index) => {
+                    const StepIcon = step.icon;
+                    const isActive = currentStep === step.id;
+                    const isCompleted = isStepCompleted(step.id);
+                    const isClickable = step.id <= currentStep;
                     
-                    {expandedSections.serviceDetails && (
-                      <motion.div 
-                        className="section-content"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                      >
-                        <div className="service-details">
-                          <div className="detail-row">
-                            <Clock size={16} />
-                            <span>Duration: {service.duration || '1 hour'}</span>
+                    return (
+                      <React.Fragment key={step.id}>
+                        <div 
+                          className={`progress-step ${isClickable ? 'clickable' : ''} ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
+                          onClick={() => isClickable && goToStep(step.id)}
+                        >
+                          <div className="progress-dot">
+                            {isCompleted ? <CheckCircle size={16} /> : <StepIcon size={16} />}
                           </div>
-                          <div className="detail-row">
-                            <Star size={16} />
-                            <span>Rating: 4.8 (127 reviews)</span>
+                          <span>{step.name}</span>
+                        </div>
+                        {index < steps.length - 1 && <div className="progress-line"></div>}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+
+                {/* Step Content */}
+                <div className="booking-content">
+                  <motion.div 
+                    key={currentStep}
+                    className="step-content"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {/* Step 1: Service Details */}
+                    {currentStep === 1 && (
+                      <div className="step-details">
+                        <div className="step-header">
+                          <Star size={24} className="step-icon" />
+                          <h3>Service Details</h3>
+                        </div>
+                        <div className="service-overview">
+                          <div className="service-card">
+                            <div className="service-icon">
+                              {service.icon_url ? (
+                                <img src={service.icon_url} alt={service.name} />
+                              ) : (
+                                <div className="default-icon">🔧</div>
+                              )}
+                            </div>
+                            <div className="service-info">
+                              <h4>{service.name}</h4>
+                              <p className="service-description">{service.description}</p>
+                              <div className="service-meta">
+                                <div className="meta-item">
+                                  <Clock size={16} />
+                                  <span>Duration: {service.duration || '1 hour'}</span>
+                                </div>
+                                <div className="meta-item">
+                                  <Star size={16} />
+                                  <span>Rating: 4.8 (127 reviews)</span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                           <div className="price-breakdown">
+                            <h4>Price Breakdown</h4>
                             <div className="price-row">
                               <span>Service Price</span>
                               <span>₹{basePrice}</span>
@@ -242,49 +351,18 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
                             </div>
                           </div>
                         </div>
-                      </motion.div>
-                    )}
-                  </div>
-
-                  {/* Scheduling Section */}
-                  <div className="booking-section">
-                    <button 
-                      className="section-header"
-                      onClick={() => toggleSection('scheduling')}
-                    >
-                      <div className="section-title">
-                        <div className="section-icon">
-                          <Calendar size={24} />
-                        </div>
-                        <div className="section-text">
-                          <h3>Select Date & Time</h3>
-                          <div className="section-status">
-                            {selectedDate && selectedTime ? (
-                              <>
-                                <CheckCircle size={18} />
-                                <span>Selected: {formatDisplayDate(selectedDate)} at {selectedTime}</span>
-                              </>
-                            ) : (
-                              <>
-                                <AlertCircle size={18} />
-                                <span>Choose your preferred slot</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
                       </div>
-                      {expandedSections.scheduling ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                    </button>
-                    
-                    {expandedSections.scheduling && (
-                      <motion.div 
-                        className="section-content"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                      >
+                    )}
+
+                    {/* Step 2: Scheduling */}
+                    {currentStep === 2 && (
+                      <div className="step-scheduling">
+                        <div className="step-header">
+                          <Calendar size={24} className="step-icon" />
+                          <h3>Select Date & Time</h3>
+                        </div>
                         <div className="scheduling-form">
-          <div className="form-group">
+                          <div className="form-group">
                             <label>Select Date</label>
                             <div className="date-picker">
                               {getAvailableDates().slice(0, 7).map(date => (
@@ -303,9 +381,8 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
                                 Selected: {formatDisplayDate(selectedDate)}
                               </p>
                             )}
-          </div>
-
-          <div className="form-group">
+                          </div>
+                          <div className="form-group">
                             <label>Select Time Slot</label>
                             <div className="time-slots">
                               {timeSlots.map(time => (
@@ -320,108 +397,80 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
                             </div>
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     )}
-          </div>
 
-                  {/* Location Section */}
-                  <div className="booking-section">
-                    <button 
-                      className="section-header"
-                      onClick={() => toggleSection('location')}
-                    >
-                      <div className="section-title">
-                        <div className="section-icon">
-                          <MapPin size={24} />
-                        </div>
-                        <div className="section-text">
+                    {/* Step 3: Location */}
+                    {currentStep === 3 && (
+                      <div className="step-location">
+                        <div className="step-header">
+                          <MapPin size={24} className="step-icon" />
                           <h3>Service Location</h3>
-                          <div className="section-status">
-                            {address && phone ? (
-                              <>
-                                <CheckCircle size={18} />
-                                <span>Location & contact details provided</span>
-                              </>
-                            ) : (
-                              <>
-                                <AlertCircle size={18} />
-                                <span>Enter service address and contact</span>
-                              </>
-                            )}
-                          </div>
                         </div>
-                      </div>
-                      {expandedSections.location ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                    </button>
-                    
-                    {expandedSections.location && (
-                      <motion.div 
-                        className="section-content"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                      >
                         <div className="location-form">
-          <div className="form-group">
-                            <label>Service Address *</label>
-            <textarea
-                              value={address}
-                              onChange={(e) => setAddress(e.target.value)}
-                              placeholder="Enter complete address where service is needed"
-                              rows={3}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Contact Number *</label>
-                            <input
-                              type="tel"
-                              value={phone}
-                              onChange={(e) => setPhone(e.target.value)}
-                              placeholder="Your contact number"
-            />
-          </div>
-          <div className="form-group">
-                            <label>Additional Notes (Optional)</label>
-            <textarea
-                              value={notes}
-                              onChange={(e) => setNotes(e.target.value)}
-                              placeholder="Any special instructions or requirements"
-                              rows={2}
-                            />
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-          </div>
-
-                  {/* Payment Section */}
-                  <div className="booking-section">
-                    <button 
-                      className="section-header"
-                      onClick={() => toggleSection('payment')}
-                    >
-                      <div className="section-title">
-                        <div className="section-icon">
-                          <CreditCard size={24} />
-                        </div>
-                        <div className="section-text">
-                          <h3>Payment Method</h3>
-                          <div className="section-status">
-                            <CheckCircle size={18} />
-                            <span>{paymentMethod === 'card' ? 'Credit/Debit Card' : paymentMethod === 'upi' ? 'UPI Payment' : 'Cash on Service'} selected</span>
-                          </div>
+                          {profileLoading ? (
+                            <div className="profile-loading">
+                              <div className="loading-spinner"></div>
+                              <span>Loading your profile details...</span>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="form-group">
+                                <label>
+                                  Service Address *
+                                  {userProfile?.user_profiles?.address && (
+                                    <span className="profile-source">(from your profile)</span>
+                                  )}
+                                </label>
+                                <textarea
+                                  value={address}
+                                  onChange={(e) => setAddress(e.target.value)}
+                                  placeholder="Enter complete address where service is needed"
+                                  rows={3}
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label>
+                                  Contact Number *
+                                  {userProfile?.user_profiles?.phone && (
+                                    <span className="profile-source">(from your profile)</span>
+                                  )}
+                                </label>
+                                <input
+                                  type="tel"
+                                  value={phone}
+                                  onChange={(e) => setPhone(e.target.value)}
+                                  placeholder="Your contact number"
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label>Additional Notes (Optional)</label>
+                                <textarea
+                                  value={notes}
+                                  onChange={(e) => setNotes(e.target.value)}
+                                  placeholder="Any special instructions or requirements"
+                                  rows={2}
+                                />
+                              </div>
+                              {userProfile?.user_profiles?.address && userProfile?.user_profiles?.phone && (
+                                <div className="profile-loaded-notice">
+                                  <CheckCircle size={16} />
+                                  <span>Your profile details have been loaded. You can edit them above if needed.</span>
+                                </div>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
-                      {expandedSections.payment ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                    </button>
-                    
-                    {expandedSections.payment && (
-                      <motion.div 
-                        className="section-content"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                      >
+                    )}
+
+                    {/* Step 4: Payment */}
+                    {currentStep === 4 && (
+                      <div className="step-payment">
+                        <div className="step-header">
+                          <CreditCard size={24} className="step-icon" />
+                          <h3>Payment Method</h3>
+                        </div>
                         <div className="payment-form">
                           <div className="payment-methods">
                             <label className="payment-option">
@@ -436,9 +485,9 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
                                 <CreditCard size={20} />
                                 <span>Credit/Debit Card</span>
                               </div>
-              </label>
+                            </label>
                             <label className="payment-option">
-              <input
+                              <input
                                 type="radio"
                                 name="payment"
                                 value="upi"
@@ -448,10 +497,10 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
                               <div className="payment-info">
                                 <div className="upi-icon">💳</div>
                                 <span>UPI Payment</span>
-            </div>
-              </label>
+                              </div>
+                            </label>
                             <label className="payment-option">
-              <input
+                              <input
                                 type="radio"
                                 name="payment"
                                 value="cod"
@@ -464,15 +513,14 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
                               </div>
                             </label>
                           </div>
-                          
                           <div className="security-info">
                             <Shield size={16} />
                             <span>Your payment information is secure and encrypted</span>
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     )}
-                  </div>
+                  </motion.div>
                 </div>
 
                 {/* Footer */}
@@ -481,28 +529,54 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
                     <div className="total-row">
                       <span>Total Amount</span>
                       <span className="total-amount">₹{total}</span>
-            </div>
-          </div>
+                    </div>
+                  </div>
 
                   <div className="booking-actions">
-                    <button className="btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
-                    <button 
-                      className="btn-primary"
-                      onClick={handleBooking}
-                      disabled={!selectedDate || !selectedTime || !address || !phone || isLoading}
-                    >
-                      {isLoading ? (
-                        <>
-                          <div className="loading-spinner"></div>
-                          Processing Booking...
-                        </>
-                      ) : (
-                        `Book Now - ₹${total}`
+                    <div className="action-left">
+                      {currentStep > 1 && (
+                        <button className="btn-secondary" onClick={prevStep}>
+                          <ArrowLeft size={16} />
+                          Previous
+                        </button>
                       )}
-            </button>
-          </div>
+                      <button className="btn-cancel" onClick={onClose}>
+                        <X size={16} />
+                        Cancel
+                      </button>
+                    </div>
+                    
+                    <div className="action-right">
+                      {currentStep < steps.length ? (
+                        <button 
+                          className="btn-primary"
+                          onClick={nextStep}
+                          disabled={!canProceedToNext()}
+                        >
+                          Next Step
+                          <ArrowRight size={16} />
+                        </button>
+                      ) : (
+                        <button 
+                          className="btn-primary btn-confirm"
+                          onClick={handleBooking}
+                          disabled={!canProceedToNext() || isLoading}
+                        >
+                          {isLoading ? (
+                            <>
+                              <div className="loading-spinner"></div>
+                              Processing Booking...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle size={16} />
+                              Confirm Booking - ₹{total}
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </>
             ) : (

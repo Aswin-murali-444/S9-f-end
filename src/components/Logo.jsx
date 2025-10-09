@@ -1,16 +1,23 @@
 import React from 'react';
 
-const Logo = ({ size = 'large', className = '', variant = 'default' }) => {
+const Logo = ({ size = 'large', className = '', variant = 'default', onClick }) => {
   const sizes = {
-    small: { width: 160, height: 48, fontSize: '20px' },
-    medium: { width: 240, height: 72, fontSize: '34px' },
-    large: { width: 320, height: 96, fontSize: '42px' }
+    small: { width: 120, height: 36, fontSize: '16px' },
+    medium: { width: 180, height: 54, fontSize: '24px' },
+    large: { width: 240, height: 72, fontSize: '32px' }
   };
 
   const currentSize = sizes[size];
 
   return (
-    <div className={`logo-container ${className}`} style={{ width: currentSize.width, height: currentSize.height }}>
+    <div 
+      className={`logo-container ${className}`} 
+      style={{ width: currentSize.width, height: currentSize.height }}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}
+    >
       <svg
         width={currentSize.width}
         height={currentSize.height}

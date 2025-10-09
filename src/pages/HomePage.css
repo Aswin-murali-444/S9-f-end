@@ -837,9 +837,6 @@
 /* Additional service enhancements */
 .service-category:nth-child(odd) .service-icon {
   background: linear-gradient(135deg, #4f9cf9, #6366f1);
-  .roles-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Testimonials */
