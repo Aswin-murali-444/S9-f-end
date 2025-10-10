@@ -1945,37 +1945,166 @@ const CustomerDashboard = () => {
                         </div>
                       </div>
 
-                      {/* Category Services Search */}
+                      {/* Professional Category Services Search */}
                       <div className="category-services-search" style={{
-                        marginTop: '1.5rem',
-                        marginBottom: '1rem'
+                        marginTop: '2rem',
+                        marginBottom: '2rem'
                       }}>
                         <div style={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '0.5rem',
-                          padding: '0.75rem 1rem',
+                          gap: '0',
+                          padding: '0',
                           backgroundColor: '#fff',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '8px',
-                          maxWidth: '400px'
+                          border: '2px solid #e2e8f0',
+                          borderRadius: '16px',
+                          maxWidth: '500px',
+                          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+                          transition: 'all 0.3s ease',
+                          overflow: 'hidden'
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = '#3b82f6';
+                          e.currentTarget.style.boxShadow = '0 4px 20px rgba(59, 130, 246, 0.15)';
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = '#e2e8f0';
+                          e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.08)';
                         }}>
-                          <Search size={18} color="#64748b" />
+                          <div style={{
+                            padding: '1rem 1.25rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            flex: 1
+                          }}>
+                            <Search size={20} color="#64748b" />
                           <input
                             type="text"
-                            placeholder="Search services in this category..."
+                              placeholder="Search professional services, providers, or specialties..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             style={{
                               border: 'none',
                               outline: 'none',
                               flex: 1,
-                              fontSize: '0.875rem',
+                                fontSize: '0.95rem',
                               color: '#1e293b',
-                              fontWeight: '500'
+                                fontWeight: '500',
+                                backgroundColor: 'transparent'
                             }}
                           />
                         </div>
+                          {searchQuery.trim() && (
+                            <button
+                              onClick={() => setSearchQuery('')}
+                              style={{
+                                padding: '1rem 1.25rem',
+                                border: 'none',
+                                backgroundColor: 'transparent',
+                                color: '#64748b',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                transition: 'color 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.target.style.color = '#ef4444';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.color = '#64748b';
+                              }}
+                            >
+                              <X size={18} />
+                            </button>
+                          )}
+                          <div style={{
+                            padding: '1rem 1.25rem',
+                            borderLeft: '1px solid #f1f5f9',
+                            backgroundColor: '#f8fafc'
+                          }}>
+                            <button
+                              style={{
+                                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                                border: 'none',
+                                borderRadius: '10px',
+                                padding: '0.75rem 1.5rem',
+                                color: 'white',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                                transition: 'all 0.2s ease',
+                                boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.target.style.transform = 'translateY(-1px)';
+                                e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.4)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.transform = 'translateY(0)';
+                                e.target.style.boxShadow = '0 2px 8px rgba(59, 130, 246, 0.3)';
+                              }}
+                            >
+                              Search
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* Search suggestions */}
+                        {searchQuery.trim().length >= 2 && (
+                          <div style={{
+                            marginTop: '1rem',
+                            padding: '1rem',
+                            backgroundColor: '#fff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '12px',
+                            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+                            maxWidth: '500px'
+                          }}>
+                            <div style={{
+                              fontSize: '0.875rem',
+                              color: '#64748b',
+                              marginBottom: '0.5rem',
+                              fontWeight: '600'
+                            }}>
+                              Search Suggestions
+                            </div>
+                            <div style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: '0.5rem'
+                            }}>
+                              {['Professional', 'Certified', 'Expert', 'Premium', 'Quality'].map((suggestion) => (
+                                <button
+                                  key={suggestion}
+                                  onClick={() => setSearchQuery(suggestion)}
+                                  style={{
+                                    background: '#f1f5f9',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '20px',
+                                    padding: '0.5rem 1rem',
+                                    fontSize: '0.75rem',
+                                    color: '#475569',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.background = '#3b82f6';
+                                    e.target.style.color = 'white';
+                                    e.target.style.borderColor = '#3b82f6';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.background = '#f1f5f9';
+                                    e.target.style.color = '#475569';
+                                    e.target.style.borderColor = '#e2e8f0';
+                                  }}
+                                >
+                                  {suggestion}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="category-services-grid" style={{
@@ -2019,27 +2148,42 @@ const CustomerDashboard = () => {
                               <motion.div 
                                 key={service.id} 
                                 className="service-card"
-                                whileHover={{ 
-                                  y: -8,
-                                  boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
-                                  transition: { duration: 0.3 }
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ 
+                                  duration: 0.5,
+                                  delay: idx * 0.1,
+                                  ease: "easeOut"
                                 }}
-                                variants={itemVariants}
+                                whileHover={{ 
+                                  y: -12,
+                                  scale: 1.02,
+                                  boxShadow: '0 25px 50px rgba(0,0,0,0.15)',
+                                  transition: { duration: 0.3, ease: "easeOut" }
+                                }}
+                                whileTap={{ scale: 0.98 }}
                                 onClick={() => handleOpenBookingModal(service)}
                                 style={{
                                   background: '#fff',
-                                  borderRadius: '16px',
-                                  padding: '2rem',
-                                  border: '1px solid #f1f5f9',
-                                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-                                  transition: 'all 0.3s ease',
+                                  borderRadius: '20px',
+                                  padding: '0',
+                                  border: 'none',
+                                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                                  transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
                                   position: 'relative',
                                   overflow: 'hidden',
-                                  cursor: 'pointer'
+                                  cursor: 'pointer',
+                                  minHeight: '420px',
+                                  display: 'flex',
+                                  flexDirection: 'column'
                                 }}
                               >
                                 {/* Gradient accent */}
-                                <div style={{
+                                <motion.div 
+                                  initial={{ scaleX: 0 }}
+                                  animate={{ scaleX: 1 }}
+                                  transition={{ delay: idx * 0.1 + 0.3, duration: 0.6 }}
+                                  style={{
                                   position: 'absolute',
                                   top: 0,
                                   left: 0,
@@ -2047,134 +2191,165 @@ const CustomerDashboard = () => {
                                   height: '4px',
                                   background: hasOffer 
                                     ? 'linear-gradient(90deg, #dc2626 0%, #ef4444 100%)'
-                                    : 'linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%)'
-                                }} />
+                                      : 'linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%)',
+                                    transformOrigin: 'left'
+                                  }} 
+                                />
                                 
+                                {/* Main Content */}
                                 <div style={{
+                                  padding: '2rem',
                                   display: 'flex',
                                   flexDirection: 'column',
                                   height: '100%',
                                   gap: '1.5rem'
                                 }}>
-                                  {/* Header */}
+                                  {/* Header with Icon */}
                                   <div style={{
                                     display: 'flex',
-                                    alignItems: 'flex-start',
-                                    justifyContent: 'space-between',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    textAlign: 'center',
                                     gap: '1rem'
                                   }}>
-                                    <div style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '1rem',
-                                      flex: 1
-                                    }}>
-                                      <div style={{
-                                        width: '60px',
-                                        height: '60px',
-                                        borderRadius: '12px',
+                                    <motion.div 
+                                      initial={{ scale: 0, rotate: -180 }}
+                                      animate={{ scale: 1, rotate: 0 }}
+                                      transition={{ delay: idx * 0.1 + 0.2, duration: 0.5, ease: "backOut" }}
+                                      style={{
+                                        width: '80px',
+                                        height: '80px',
+                                        borderRadius: '20px',
                                         background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        border: '2px solid #e2e8f0'
-                                      }}>
+                                        border: '3px solid #e2e8f0',
+                                        position: 'relative',
+                                        overflow: 'hidden'
+                                      }}
+                                    >
                                         {service.icon_url ? (
                                           <img 
                                             src={service.icon_url} 
                                             alt={service.name}
-                                            style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 8 }}
+                                          style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 12 }}
                                             onError={(e) => {
                                               e.currentTarget.style.display = 'none';
                                               e.currentTarget.nextSibling.style.display = 'block';
                                             }}
                                           />
                                         ) : null}
-                                        <Settings size={40} style={{ display: service.icon_url ? 'none' : 'block', color: '#3b82f6' }} />
-                                      </div>
+                                      <Settings size={50} style={{ display: service.icon_url ? 'none' : 'block', color: '#3b82f6' }} />
+                                      
+                                      {/* Subtle glow effect */}
+                                      <div style={{
+                                        position: 'absolute',
+                                        top: '-2px',
+                                        left: '-2px',
+                                        right: '-2px',
+                                        bottom: '-2px',
+                                        background: 'linear-gradient(45deg, #3b82f6, #1d4ed8)',
+                                        borderRadius: '22px',
+                                        opacity: 0.1,
+                                        zIndex: -1
+                                      }} />
+                                    </motion.div>
+
                                       <div>
-                                        <h3 style={{ 
-                                          margin: '0 0 0.25rem 0', 
-                                          fontSize: '1.25rem', 
-                                          fontWeight: '700',
+                                      <motion.h3 
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: idx * 0.1 + 0.4, duration: 0.4 }}
+                                        style={{ 
+                                          margin: '0 0 0.5rem 0', 
+                                          fontSize: '1.5rem', 
+                                          fontWeight: '800',
                                           color: '#1e293b',
-                                          lineHeight: '1.3'
-                                        }}>
+                                          lineHeight: '1.2'
+                                        }}
+                                      >
                                           {service.name}
-                                        </h3>
+                                      </motion.h3>
+                                      
                                         {service.duration && (
-                                          <p style={{ 
-                                            margin: '0', 
+                                        <motion.div
+                                          initial={{ opacity: 0 }}
+                                          animate={{ opacity: 1 }}
+                                          transition={{ delay: idx * 0.1 + 0.5, duration: 0.4 }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '0.5rem',
                                             color: '#64748b', 
                                             fontSize: '0.875rem',
                                             fontWeight: '500'
-                                          }}>
-                                            Duration: {service.duration}
-                                          </p>
+                                          }}
+                                        >
+                                          <Clock size={16} />
+                                          <span>{service.duration}</span>
+                                        </motion.div>
                                         )}
                                       </div>
-                                    </div>
-                                    {hasOffer && (
-                                      <div style={{
-                                        background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)',
-                                        color: 'white',
-                                        padding: '0.5rem 0.75rem',
-                                        borderRadius: '8px',
-                                        fontSize: '0.75rem',
-                                        fontWeight: '700',
-                                        textAlign: 'center',
-                                        boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)'
-                                      }}>
-                                        {discount}%<br/>OFF
-                                      </div>
-                                    )}
                                   </div>
                                   
                                   {/* Description */}
                                   {service.description && (
-                                    <div style={{
-                                      background: '#f8fafc',
-                                      padding: '1rem',
-                                      borderRadius: '12px',
-                                      border: '1px solid #e2e8f0'
-                                    }}>
+                                    <motion.div 
+                                      initial={{ opacity: 0, y: 10 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      transition={{ delay: idx * 0.1 + 0.6, duration: 0.4 }}
+                                      style={{
+                                        background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                                        padding: '1.5rem',
+                                        borderRadius: '16px',
+                                        border: '1px solid #e2e8f0',
+                                        flex: 1
+                                      }}
+                                    >
                                       <p style={{ 
                                         margin: '0', 
                                         color: '#475569', 
-                                        fontSize: '0.875rem',
-                                        lineHeight: '1.6'
+                                        fontSize: '0.9rem',
+                                        lineHeight: '1.6',
+                                        textAlign: 'center'
                                       }}>
                                         {service.description}
                                       </p>
-                                    </div>
+                                    </motion.div>
                                   )}
                                   
-                                  {/* Pricing and Actions */}
+                                  {/* Pricing Section */}
+                                  <motion.div 
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: idx * 0.1 + 0.7, duration: 0.4 }}
+                                    style={{
+                                      textAlign: 'center',
+                                      padding: '1rem',
+                                      background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                                      borderRadius: '16px',
+                                      border: '1px solid #bbf7d0'
+                                    }}
+                                  >
                                   <div style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    paddingTop: '1rem',
-                                    borderTop: '1px solid #f1f5f9',
-                                    marginTop: 'auto'
-                                  }}>
-                                    <div>
-                                      <div style={{
-                                        display: 'flex',
-                                        alignItems: 'baseline',
-                                        gap: '0.75rem',
+                                      justifyContent: 'center',
+                                      gap: '0.5rem',
                                         marginBottom: '0.5rem'
                                       }}>
                                         <span style={{ 
-                                          fontSize: '1.75rem', 
-                                          fontWeight: '800', 
+                                        fontSize: '2rem', 
+                                        fontWeight: '900', 
                                           color: '#059669'
                                         }}>
                                           ₹{hasOffer ? service.offer_price : service.price}
                                         </span>
                                         {hasOffer && service.price > service.offer_price && (
                                           <span style={{ 
-                                            fontSize: '1.125rem', 
+                                          fontSize: '1rem', 
                                             color: '#94a3b8', 
                                             textDecoration: 'line-through',
                                             fontWeight: '500'
@@ -2183,71 +2358,141 @@ const CustomerDashboard = () => {
                                           </span>
                                         )}
                                       </div>
-                                      {hasOffer && (
-                                        <div style={{
-                                          background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)',
-                                          color: 'white',
-                                          padding: '0.25rem 0.5rem',
-                                          borderRadius: '6px',
-                                          fontSize: '0.75rem',
-                                          fontWeight: '600',
-                                          display: 'inline-block'
-                                        }}>
-                                          Save ₹{service.price - service.offer_price}
-                                        </div>
-                                      )}
-                                      
-                                      {/* Review Section */}
-                                      <div 
+                                    
+                                    {service.duration && (
+                                      <p style={{
+                                        margin: '0',
+                                        color: '#64748b',
+                                        fontSize: '0.875rem',
+                                        fontWeight: '500'
+                                      }}>
+                                        per {service.duration}
+                                      </p>
+                                    )}
+                                  </motion.div>
+
+                                  {/* Rating Section */}
+                                  <motion.div 
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: idx * 0.1 + 0.8, duration: 0.4 }}
                                         style={{
                                           display: 'flex',
                                           alignItems: 'center',
-                                          gap: '0.5rem',
-                                          marginTop: '0.75rem',
+                                      justifyContent: 'center',
+                                      gap: '0.75rem',
+                                      padding: '1rem',
+                                      background: 'linear-gradient(135deg, #fefce8 0%, #fef3c7 100%)',
+                                      borderRadius: '16px',
+                                      border: '1px solid #fde68a',
                                           cursor: 'pointer',
-                                          padding: '0.5rem',
-                                          borderRadius: '8px',
-                                          transition: 'background-color 0.2s ease'
+                                      transition: 'all 0.2s ease'
                                         }}
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           handleOpenReviewModal(service);
                                         }}
                                         onMouseEnter={(e) => {
-                                          e.target.style.backgroundColor = 'rgba(251, 191, 36, 0.1)';
+                                      e.target.style.background = 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)';
+                                      e.target.style.transform = 'translateY(-2px)';
                                         }}
                                         onMouseLeave={(e) => {
-                                          e.target.style.backgroundColor = 'transparent';
+                                      e.target.style.background = 'linear-gradient(135deg, #fefce8 0%, #fef3c7 100%)';
+                                      e.target.style.transform = 'translateY(0)';
                                         }}
                                       >
-                                        <div style={{ display: 'flex', gap: '2px' }}>
+                                    <div style={{ display: 'flex', gap: '3px' }}>
                                           {[...Array(5)].map((_, i) => (
-                                            <Star key={i} size={14} fill={i < Math.floor(service.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
+                                        <Star 
+                                          key={i} 
+                                          size={16} 
+                                          fill={i < Math.floor(service.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} 
+                                          color="#fbbf24" 
+                                        />
                                           ))}
                                         </div>
                                         <span style={{ 
                                           fontSize: '0.875rem', 
-                                          color: '#64748b', 
-                                          fontWeight: '500' 
+                                      color: '#92400e', 
+                                      fontWeight: '600' 
                                         }}>
-                                          {(service.rating || 4.2).toFixed(1)} ({service.review_count || Math.floor(Math.random() * 50) + 10} reviews)
+                                      {(service.rating || 4.2).toFixed(1)}
                                         </span>
                                         <span style={{ 
                                           fontSize: '0.75rem', 
-                                          color: '#3b82f6', 
-                                          fontWeight: '500',
-                                          marginLeft: '0.5rem'
+                                      color: '#a16207', 
+                                      fontWeight: '500'
                                         }}>
-                                          Click to review
+                                      ({service.review_count || Math.floor(Math.random() * 50) + 10} reviews)
                                         </span>
-                                      </div>
-                                    </div>
-                                    
-                                    <div style={{
+                                  </motion.div>
+                                  
+                                  {/* Action Buttons */}
+                                  <motion.div 
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: idx * 0.1 + 0.9, duration: 0.4 }}
+                                    style={{
                                       display: 'flex',
-                                      gap: '0.75rem'
-                                    }}>
-                                      <button 
+                                      gap: '0.75rem',
+                                      justifyContent: 'center',
+                                      flexWrap: 'wrap'
+                                    }}
+                                  >
+                                    {/* Like Button */}
+                                    <motion.button 
+                                      whileHover={{ scale: 1.05 }}
+                                      whileTap={{ scale: 0.95 }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleWishlist(service);
+                                      }}
+                                      style={{
+                                        background: isInWishlist(service.id) 
+                                          ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                                          : 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                                        border: isInWishlist(service.id) 
+                                          ? 'none'
+                                          : '2px solid #e2e8f0',
+                                        borderRadius: '16px',
+                                        padding: '1rem',
+                                        color: isInWishlist(service.id) ? 'white' : '#64748b',
+                                        fontWeight: '600',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        boxShadow: isInWishlist(service.id) 
+                                          ? '0 6px 20px rgba(239, 68, 68, 0.4)'
+                                          : '0 4px 12px rgba(0, 0, 0, 0.05)',
+                                        minWidth: '56px',
+                                        position: 'relative',
+                                        overflow: 'hidden'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        if (!isInWishlist(service.id)) {
+                                          e.target.style.borderColor = '#ef4444';
+                                          e.target.style.color = '#ef4444';
+                                          e.target.style.background = '#fef2f2';
+                                        }
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        if (!isInWishlist(service.id)) {
+                                          e.target.style.borderColor = '#e2e8f0';
+                                          e.target.style.color = '#64748b';
+                                          e.target.style.background = 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)';
+                                        }
+                                      }}
+                                    >
+                                      <Heart size={20} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />
+                                    </motion.button>
+
+                                    {/* Add to Cart Button */}
+                                    <motion.button 
+                                      whileHover={{ scale: 1.05, y: -2 }}
+                                      whileTap={{ scale: 0.95 }}
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           isInCart(service.id) ? removeFromCart(service.id) : addToCart(service);
@@ -2257,26 +2502,57 @@ const CustomerDashboard = () => {
                                             ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
                                             : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
                                           border: 'none',
-                                          borderRadius: '12px',
-                                          padding: '0.875rem 1.5rem',
+                                        borderRadius: '16px',
+                                        padding: '1rem 1.5rem',
                                           color: 'white',
-                                          fontWeight: '600',
+                                        fontWeight: '700',
                                           cursor: 'pointer',
                                           fontSize: '0.875rem',
                                           display: 'flex',
                                           alignItems: 'center',
                                           gap: '0.5rem',
-                                          transition: 'all 0.2s ease',
+                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                                           boxShadow: isInCart(service.id) 
-                                            ? '0 4px 12px rgba(5, 150, 105, 0.4)'
-                                            : '0 4px 12px rgba(59, 130, 246, 0.4)'
-                                        }}
-                                      >
-                                        <ShoppingCart size={16} />
-                                        {isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
-                                      </button>
-                                    </div>
-                                  </div>
+                                          ? '0 6px 20px rgba(5, 150, 105, 0.4)'
+                                          : '0 6px 20px rgba(59, 130, 246, 0.4)',
+                                        position: 'relative',
+                                        overflow: 'hidden'
+                                      }}
+                                    >
+                                      <ShoppingCart size={18} />
+                                      <span>{isInCart(service.id) ? 'In Cart' : 'Cart'}</span>
+                                    </motion.button>
+
+                                    {/* Book Now Button */}
+                                    <motion.button 
+                                      whileHover={{ scale: 1.05, y: -2 }}
+                                      whileTap={{ scale: 0.95 }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenBookingModal(service);
+                                      }}
+                                      style={{
+                                        background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                                        border: 'none',
+                                        borderRadius: '16px',
+                                        padding: '1rem 1.5rem',
+                                        color: 'white',
+                                        fontWeight: '700',
+                                        cursor: 'pointer',
+                                        fontSize: '0.875rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        boxShadow: '0 6px 20px rgba(139, 92, 246, 0.4)',
+                                        position: 'relative',
+                                        overflow: 'hidden'
+                                      }}
+                                    >
+                                      <Calendar size={18} />
+                                      <span>Book Now</span>
+                                    </motion.button>
+                                  </motion.div>
                                 </div>
                               </motion.div>
                             );
@@ -2500,7 +2776,7 @@ const CustomerDashboard = () => {
                                     <button 
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleBookService();
+                                        handleCategoryClick(category);
                                       }}
                                       style={{
                                         background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
@@ -2814,17 +3090,68 @@ const CustomerDashboard = () => {
                               <div style={{
                                 display: 'flex',
                                 gap: '0.75rem',
-                                marginTop: '1rem'
+                                marginTop: '1rem',
+                                flexWrap: 'wrap'
                               }}>
+                                {/* Like Button */}
                                 <button 
-                                  onClick={() => isInCart(service.id) ? removeFromCart(service.id) : addToCart(service)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleWishlist(service);
+                                  }}
+                                  style={{
+                                    background: isInWishlist(service.id) 
+                                      ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                                      : 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                                    border: isInWishlist(service.id) 
+                                      ? 'none'
+                                      : '2px solid #e2e8f0',
+                                    borderRadius: '12px',
+                                    padding: '0.875rem',
+                                    color: isInWishlist(service.id) ? 'white' : '#64748b',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    fontSize: '0.875rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'all 0.2s ease',
+                                    boxShadow: isInWishlist(service.id) 
+                                      ? '0 4px 12px rgba(239, 68, 68, 0.4)'
+                                      : '0 2px 8px rgba(0, 0, 0, 0.05)',
+                                    minWidth: '48px'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!isInWishlist(service.id)) {
+                                      e.target.style.borderColor = '#ef4444';
+                                      e.target.style.color = '#ef4444';
+                                      e.target.style.background = '#fef2f2';
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!isInWishlist(service.id)) {
+                                      e.target.style.borderColor = '#e2e8f0';
+                                      e.target.style.color = '#64748b';
+                                      e.target.style.background = 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)';
+                                    }
+                                  }}
+                                >
+                                  <Heart size={18} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />
+                                </button>
+
+                                {/* Add to Cart Button */}
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    isInCart(service.id) ? removeFromCart(service.id) : addToCart(service);
+                                  }}
                                   style={{
                                     background: isInCart(service.id) 
                                       ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
                                       : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
                                     border: 'none',
                                     borderRadius: '12px',
-                                    padding: '0.875rem 1.5rem',
+                                    padding: '0.875rem 1.25rem',
                                     color: 'white',
                                     fontWeight: '600',
                                     cursor: 'pointer',
@@ -2840,12 +3167,17 @@ const CustomerDashboard = () => {
                                   }}
                                 >
                                   <ShoppingCart size={16} />
-                                  {isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
+                                  {isInCart(service.id) ? 'In Cart' : 'Cart'}
                                 </button>
+
+                                {/* Book Now Button */}
                                 <button 
-                                  onClick={() => handleOpenBookingModal(service)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenBookingModal(service);
+                                  }}
                                   style={{
-                                    background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                                     border: 'none',
                                     borderRadius: '12px',
                                     padding: '0.875rem 1.5rem',
@@ -2857,7 +3189,15 @@ const CustomerDashboard = () => {
                                     alignItems: 'center',
                                     gap: '0.5rem',
                                     transition: 'all 0.2s ease',
-                                    boxShadow: '0 4px 12px rgba(5, 150, 105, 0.4)'
+                                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.4)'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.transform = 'translateY(-2px)';
+                                    e.target.style.boxShadow = '0 6px 20px rgba(245, 158, 11, 0.5)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.transform = 'translateY(0)';
+                                    e.target.style.boxShadow = '0 4px 12px rgba(245, 158, 11, 0.4)';
                                   }}
                                 >
                                   <Calendar size={16} />
@@ -3129,7 +3469,20 @@ const CustomerDashboard = () => {
                            return sum + (price * item.quantity);
                          }, 0) + 50}</span>
                        </div>
-                      <button className="checkout-btn" onClick={handleBookService}>
+                      <button className="checkout-btn" onClick={() => {
+                        if (cart.length === 0) {
+                          toast.error('Your cart is empty');
+                          return;
+                        }
+                        // Navigate to booking page with cart items
+                        navigate('/booking', { 
+                          state: { 
+                            cartItems: cart,
+                            user: user,
+                            isMultiService: true
+                          } 
+                        });
+                      }}>
                         Proceed to Checkout
                       </button>
                     </div>

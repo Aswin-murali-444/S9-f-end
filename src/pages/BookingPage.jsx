@@ -4,13 +4,14 @@ import { useInView } from 'react-intersection-observer';
 import { 
   ArrowLeft, Calendar, Clock, MapPin, User, Phone, MessageSquare, 
   CreditCard, Shield, CheckCircle, AlertCircle, Star, 
-  ArrowRight, Bell, LogOut, ChevronDown, DollarSign
+  ArrowRight, Bell, LogOut, ChevronDown, DollarSign, Navigation
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../hooks/useAuth';
 import { apiService } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import ToastContainer from '../components/ToastContainer';
+import LocationMap from '../components/LocationMap';
 import LoadingSpinner from '../components/LoadingSpinner';
 import useToast from '../hooks/useToast';
 import Logo from '../components/Logo';
@@ -84,6 +85,8 @@ const BookingPage = () => {
   const [selectedTime, setSelectedTime] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [tempAddress, setTempAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('upi');
   const [isLoading, setIsLoading] = useState(false);
@@ -115,11 +118,28 @@ const BookingPage = () => {
     prefetchDashboard();
   }, []);
 
-  // Available time slots
-  const timeSlots = [
-    '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', 
-    '15:00', '16:00', '17:00', '18:00'
-  ];
+  // Business hours configuration
+  const BUSINESS_HOURS = {
+    start: 9, // 9 AM
+    end: 18,  // 6 PM
+    lunchStart: 12, // 12 PM (noon)
+    lunchEnd: 13    // 1 PM
+  };
+
+  // Generate available time slots based on business hours
+  const getAvailableTimeSlots = () => {
+    const slots = [];
+    for (let hour = BUSINESS_HOURS.start; hour < BUSINESS_HOURS.end; hour++) {
+      // Skip lunch break if configured
+      if (hour >= BUSINESS_HOURS.lunchStart && hour < BUSINESS_HOURS.lunchEnd) {
+        continue;
+      }
+      slots.push(`${hour.toString().padStart(2, '0')}:00`);
+    }
+    return slots;
+  };
+
+  const timeSlots = getAvailableTimeSlots();
 
   const steps = [
     { id: 1, name: 'Service Details', icon: Star },
@@ -142,11 +162,17 @@ const BookingPage = () => {
   };
 
   const formatDate = (date) => {
-    return date.toISOString().split('T')[0];
+    // Format date in local timezone to avoid UTC conversion issues
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const formatDisplayDate = (dateString) => {
-    const date = new Date(dateString);
+    // Parse the date string correctly to avoid timezone issues
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // month is 0-indexed
     return date.toLocaleDateString('en-US', { 
       weekday: 'long', 
       year: 'numeric', 
@@ -158,19 +184,47 @@ const BookingPage = () => {
   // Helpers for availability
   const isToday = (dateString) => {
     if (!dateString) return false;
-    const d = new Date(dateString);
+    const [year, month, day] = dateString.split('-').map(Number);
+    const d = new Date(year, month - 1, day); // month is 0-indexed
     const now = new Date();
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
   };
 
-  const isPastTimeForSelectedDate = (timeStr) => {
+  // Enhanced time slot validation for service providers
+  const isTimeSlotAvailable = (timeStr) => {
     if (!selectedDate) return false;
-    if (!isToday(selectedDate)) return false;
+    
     const [hh, mm] = timeStr.split(':').map(Number);
-    const now = new Date();
-    const slot = new Date();
-    slot.setHours(hh, mm || 0, 0, 0);
-    return slot.getTime() <= now.getTime();
+    
+    // Check if it's within business hours
+    if (hh < BUSINESS_HOURS.start || hh >= BUSINESS_HOURS.end) {
+      return false;
+    }
+    
+    // Check if it's during lunch break
+    if (hh >= BUSINESS_HOURS.lunchStart && hh < BUSINESS_HOURS.lunchEnd) {
+      return false;
+    }
+    
+    // For today's date, check if time has passed
+    if (isToday(selectedDate)) {
+      const now = new Date();
+      const slot = new Date();
+      slot.setHours(hh, mm || 0, 0, 0);
+      
+      // Add buffer time (e.g., 2 hours) - service providers need advance notice
+      const bufferHours = 2;
+      const bufferTime = now.getTime() + (bufferHours * 60 * 60 * 1000);
+      
+      return slot.getTime() >= bufferTime;
+    }
+    
+    // For future dates, all business hours are available
+    return true;
+  };
+
+  const isPastTimeForSelectedDate = (timeStr) => {
+    return !isTimeSlotAvailable(timeStr);
   };
 
   // When changing date, clear any previously chosen past time.
@@ -179,6 +233,28 @@ const BookingPage = () => {
       setSelectedTime('');
     }
   }, [selectedDate]);
+
+  // Location editing functions
+  const handleChangeLocationClick = () => {
+    setIsEditingLocation(true);
+    setTempAddress(address || '');
+  };
+
+  const handleCancelEditLocation = () => {
+    setIsEditingLocation(false);
+    setTempAddress('');
+  };
+
+  const handleSaveNewLocation = async () => {
+    if (tempAddress.trim()) {
+      setAddress(tempAddress.trim());
+      setIsEditingLocation(false);
+      setTempAddress('');
+      toastManager.success('Location updated successfully!');
+    } else {
+      toastManager.error('Please enter a valid address');
+    }
+  };
 
   const nextStep = () => {
     if (currentStep < steps.length) {
@@ -589,37 +665,118 @@ const BookingPage = () => {
         </div>
       </motion.header>
 
-      {/* Page Title Section */}
-      <div className="page-title-section">
+      {/* Enhanced Page Title Section */}
+      <motion.div 
+        className="page-title-section"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+      >
         <div className="title-container">
-          <button className="back-button" onClick={() => navigate(-1)}>
-            <ArrowLeft size={16} />
-            Back
-          </button>
-          {/* Breadcrumb replacing back button to keep height */}
-          <div className="breadcrumb">
-            <span className="crumb" onClick={() => navigate('/dashboard')}>Dashboard</span>
-            <span className="separator">/</span>
-            <span className="crumb" onClick={() => navigate('/dashboard?tab=services')}>Services</span>
-            <span className="separator">/</span>
-            <span className="crumb current">Booking</span>
+          {/* Enhanced Navigation Bar */}
+          <div className="navigation-bar">
+            <motion.button 
+              className="enhanced-back-button" 
+              onClick={() => navigate(-1)}
+              whileHover={{ scale: 1.05, x: -2 }}
+              whileTap={{ scale: 0.95 }}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2, duration: 0.4 }}
+            >
+              <div className="back-icon-wrapper">
+                <ArrowLeft size={18} />
+              </div>
+              <span>Back</span>
+            </motion.button>
+            
+            {/* Enhanced Breadcrumb */}
+            <motion.div 
+              className="enhanced-breadcrumb"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.4 }}
+            >
+              <span className="crumb" onClick={() => navigate('/dashboard')}>
+                <span className="crumb-icon">🏠</span>
+                Dashboard
+              </span>
+              <div className="separator">
+                <ChevronDown size={14} style={{ transform: 'rotate(-90deg)' }} />
+              </div>
+              <span className="crumb" onClick={() => navigate('/dashboard?tab=services')}>
+                <span className="crumb-icon">🔧</span>
+                Services
+              </span>
+              <div className="separator">
+                <ChevronDown size={14} style={{ transform: 'rotate(-90deg)' }} />
+              </div>
+              <span className="crumb current">
+                <span className="crumb-icon">📋</span>
+                Booking
+              </span>
+            </motion.div>
+
           </div>
-          <div className="page-context">
-            <h1>Book {service.name}</h1>
-            <p>Complete your booking in {steps.length} easy steps</p>
-          </div>
-          {/* Context chips to preserve visual weight */}
-          <div className="context-chips">
-            <span className="chip primary">Secure Checkout</span>
-            <span className="chip neutral">No hidden fees</span>
-            <span className="chip success">Instant confirmation</span>
-          </div>
+
+          {/* Enhanced Page Context */}
+          <motion.div 
+            className="enhanced-page-context"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.6 }}
+          >
+            <div className="service-title-wrapper">
+              <h1>Book {service.name}</h1>
+              <div className="title-accent"></div>
+            </div>
+            <p className="subtitle">Complete your booking in {steps.length} easy steps</p>
+            
+            {/* Enhanced Feature Highlights */}
+            <div className="enhanced-context-chips">
+              <motion.span 
+                className="enhanced-chip secure"
+                whileHover={{ scale: 1.05, y: -2 }}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.6, duration: 0.4 }}
+              >
+                <Shield size={14} />
+                Secure Checkout
+              </motion.span>
+              <motion.span 
+                className="enhanced-chip transparent"
+                whileHover={{ scale: 1.05, y: -2 }}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.7, duration: 0.4 }}
+              >
+                <CheckCircle size={14} />
+                No hidden fees
+              </motion.span>
+              <motion.span 
+                className="enhanced-chip instant"
+                whileHover={{ scale: 1.05, y: -2 }}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.8, duration: 0.4 }}
+              >
+                <Star size={14} />
+                Instant confirmation
+              </motion.span>
+            </div>
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
 
       <div className="booking-page-content">
-        {/* Progress Indicator */}
-        <div className="booking-progress">
+        {/* Enhanced Progress Indicator */}
+        <motion.div 
+          className="enhanced-booking-progress"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7, duration: 0.6 }}
+        >
           {steps.map((step, index) => {
             const StepIcon = step.icon;
             const isActive = currentStep === step.id;
@@ -628,20 +785,66 @@ const BookingPage = () => {
             
             return (
               <React.Fragment key={step.id}>
-                <div 
-                  className={`progress-step ${isClickable ? 'clickable' : ''} ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
+                <motion.div 
+                  className={`enhanced-progress-step ${isClickable ? 'clickable' : ''} ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
                   onClick={() => isClickable && goToStep(step.id)}
+                  whileHover={isClickable ? { scale: 1.05, y: -2 } : {}}
+                  whileTap={isClickable ? { scale: 0.95 } : {}}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.8 + (index * 0.1), duration: 0.4 }}
                 >
-                  <div className="progress-dot">
-                    {isCompleted ? <CheckCircle size={16} /> : <StepIcon size={16} />}
-                  </div>
-                  <span>{step.name}</span>
-                </div>
-                {index < steps.length - 1 && <div className="progress-line"></div>}
+                  <motion.div 
+                    className="enhanced-progress-dot"
+                    animate={{
+                      scale: isActive ? 1.1 : 1,
+                      boxShadow: isActive ? '0 0 20px rgba(59, 130, 246, 0.4)' : '0 4px 12px rgba(0, 0, 0, 0.1)'
+                    }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {isCompleted ? (
+                      <motion.div
+                        initial={{ scale: 0, rotate: -180 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        transition={{ duration: 0.5, ease: "backOut" }}
+                      >
+                        <CheckCircle size={18} />
+                      </motion.div>
+                    ) : (
+                      <StepIcon size={18} />
+                    )}
+                  </motion.div>
+                  <motion.span 
+                    className="step-name"
+                    animate={{ 
+                      color: isActive ? '#3b82f6' : isCompleted ? '#10b981' : '#64748b',
+                      fontWeight: isActive ? 700 : 500
+                    }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {step.name}
+                  </motion.span>
+                  {isCompleted && (
+                    <motion.div 
+                      className="completion-indicator"
+                      initial={{ opacity: 0, scale: 0 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.3, duration: 0.4 }}
+                    />
+                  )}
+                </motion.div>
+                {index < steps.length - 1 && (
+                  <motion.div 
+                    className="enhanced-progress-line"
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: 1 }}
+                    transition={{ delay: 0.9 + (index * 0.1), duration: 0.6 }}
+                  />
+                )}
               </React.Fragment>
             );
           })}
-        </div>
+        </motion.div>
 
         {/* Main Content */}
         <div className="booking-main-content">
@@ -662,80 +865,153 @@ const BookingPage = () => {
                     <Star size={24} className="step-icon" />
                     <h3>Service Details</h3>
                   </div>
-                  <div className="service-overview">
-                    <div className="service-card">
-                      <div className="service-icon">
-                        {service.icon_url ? (
-                          <img src={service.icon_url} alt={service.name} />
-                        ) : (
-                          <div className="default-icon">🔧</div>
-                        )}
-                      </div>
-                      <div className="service-info">
-                        <h4>{service.name}</h4>
-                        <p className="service-description">{service.description}</p>
-                        <div className="service-badges">
-                          <span className="badge primary">Popular Choice</span>
-                          <span className="badge success">Insured</span>
-                          <span className="badge neutral">Verified Pros</span>
+                  <div className="enhanced-service-overview">
+                    {/* Enhanced Service Card */}
+                    <motion.div 
+                      className="enhanced-service-card"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.6, ease: "easeOut" }}
+                    >
+                      <div className="service-header">
+                        <motion.div 
+                          className="enhanced-service-icon"
+                          initial={{ scale: 0, rotate: -180 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          transition={{ delay: 0.2, duration: 0.6, ease: "backOut" }}
+                        >
+                          {service.icon_url ? (
+                            <img src={service.icon_url} alt={service.name} />
+                          ) : (
+                            <div className="default-icon">🔧</div>
+                          )}
+                        </motion.div>
+                        <div className="service-title-section">
+                          <motion.h4 
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.3, duration: 0.5 }}
+                          >
+                            {service.name}
+                          </motion.h4>
+                          <motion.div 
+                            className="enhanced-service-badges"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.4, duration: 0.5 }}
+                          >
+                            <span className="enhanced-badge primary">
+                              <Star size={12} />
+                              Popular Choice
+                            </span>
+                            <span className="enhanced-badge success">
+                              <Shield size={12} />
+                              Insured
+                            </span>
+                            <span className="enhanced-badge verified">
+                              <CheckCircle size={12} />
+                              Verified Pros
+                            </span>
+                          </motion.div>
                         </div>
-                        <div className="service-meta">
-                          <div className="meta-item">
-                            <Clock size={16} />
+                      </div>
+                      
+                      {/* Enhanced Description */}
+                      <motion.div 
+                        className="enhanced-description-section"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.5, duration: 0.5 }}
+                      >
+                        <p className="enhanced-service-description">
+                          {service.description}
+                        </p>
+                      </motion.div>
+
+                      {/* Enhanced Meta Information */}
+                      <motion.div 
+                        className="enhanced-service-meta"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.6, duration: 0.5 }}
+                      >
+                        <div className="meta-row">
+                          <div className="meta-item duration">
+                            <Clock size={18} />
                             <span>Duration: {service.duration || '1 hour'}</span>
                           </div>
                           <div 
-                            className="meta-item rating-meta"
+                            className="meta-item rating-section"
                             onClick={handleOpenReviews}
                             role="button"
                             tabIndex={0}
                             onKeyDown={handleKeyOpenReviews}
                             onMouseEnter={prefetchDashboard}
                           >
-                            <div className="rating-stars">
+                            <div className="enhanced-rating-stars">
                               {Array.from({ length: 5 }).map((_, i) => {
                                 const filled = i < Math.round(4.8);
                                 return (
-                                  <Star key={i} size={16} style={{
+                                  <Star key={i} size={18} style={{
                                     fill: filled ? '#f59e0b' : 'transparent',
-                                    stroke: '#f59e0b'
+                                    stroke: '#f59e0b',
+                                    strokeWidth: 2
                                   }} />
                                 );
                               })}
                             </div>
-                            <span className="rating-text">4.8</span>
-                            <button className="review-link" onClick={handleOpenReviews} onMouseEnter={prefetchDashboard}>
-                              (127 reviews)
-                            </button>
+                            <div className="rating-details">
+                              <span className="rating-number">4.8</span>
+                              <span className="rating-count">(127 reviews)</span>
+                            </div>
                           </div>
                         </div>
+                      </motion.div>
+                    </motion.div>
+
+                    {/* Enhanced Price Breakdown */}
+                    <motion.div 
+                      className="enhanced-price-breakdown"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.7, duration: 0.6 }}
+                    >
+                      <div className="price-header">
+                        <h4>Price Breakdown</h4>
+                        <div className="price-accent"></div>
                       </div>
-                    </div>
-                    <div className="price-breakdown">
-                      <h4>Price Breakdown</h4>
-                      <div className="price-row">
-                        <span>Service Price</span>
-                        <span>₹{basePrice}</span>
-                      </div>
-                      {service.offer_enabled && service.offer_price && (
-                        <div className="price-row original">
-                          <span>Original Price</span>
-                          <span>₹{service.price}</span>
+                      
+                      <div className="price-items">
+                        <div className="price-item">
+                          <span className="price-label">Service Price</span>
+                          <span className="price-value">₹{basePrice}</span>
                         </div>
-                      )}
-                      <div className="price-row">
-                        <span>Service Fee (10%)</span>
-                        <span>₹{serviceFee}</span>
+                        
+                        {service.offer_enabled && service.offer_price && (
+                          <div className="price-item original-price">
+                            <span className="price-label">Original Price</span>
+                            <span className="price-value original">₹{service.price}</span>
+                          </div>
+                        )}
+                        
+                        <div className="price-item">
+                          <span className="price-label">Service Fee (10%)</span>
+                          <span className="price-value">₹{serviceFee}</span>
+                        </div>
+                        
+                        <div className="price-item">
+                          <span className="price-label">Tax (18%)</span>
+                          <span className="price-value">₹{tax}</span>
+                        </div>
+                        
+                        <div className="price-divider"></div>
+                        
+                        <div className="price-item total-price">
+                          <span className="price-label">Total Amount</span>
+                          <span className="price-value total">₹{total}</span>
+                        </div>
                       </div>
-                      <div className="price-row">
-                        <span>Tax (18%)</span>
-                        <span>₹{tax}</span>
-                      </div>
-                      <div className="price-row total">
-                        <span>Total</span>
-                        <span>₹{total}</span>
-                      </div>
-                    </div>
+                    </motion.div>
                   </div>
                 </div>
               )}
@@ -770,20 +1046,125 @@ const BookingPage = () => {
                     </div>
                     <div className="form-group">
                       <label>Select Time Slot</label>
+                      {selectedDate && (
+                        <div className="business-hours-info">
+                          <p className="hours-text">
+                            <Clock size={16} />
+                            Business Hours: {BUSINESS_HOURS.start}:00 AM - {BUSINESS_HOURS.end}:00 PM
+                            {isToday(selectedDate) && (
+                              <span className="buffer-notice">
+                                (2-hour advance notice required for today)
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      )}
                       <div className="time-slots">
                         {timeSlots.map(time => {
                           const disabled = isPastTimeForSelectedDate(time);
+                          const isLunchTime = time >= '12:00' && time < '13:00';
                           return (
-                          <button
-                            key={time}
-                            className={`time-option ${selectedTime === time ? 'selected' : ''}`}
-                            onClick={() => setSelectedTime(time)}
-                            disabled={disabled}
-                          >
-                            {time}
-                          </button>
+                            <button
+                              key={time}
+                              className={`time-option ${selectedTime === time ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
+                              onClick={() => !disabled && setSelectedTime(time)}
+                              disabled={disabled}
+                              title={disabled ? 'Not available' : 'Available'}
+                            >
+                              {time}
+                              {isLunchTime && <span className="lunch-label">Lunch</span>}
+                            </button>
                           );
                         })}
+                      </div>
+                      {selectedDate && isToday(selectedDate) && (
+                        <p className="availability-notice">
+                          <AlertCircle size={16} />
+                          Same-day bookings require at least 2 hours advance notice
+                        </p>
+                      )}
+                    </div>
+                    
+                    {/* Additional Information Sections */}
+                    <div className="form-group">
+                      <label>Service Duration</label>
+                      <div className="duration-info">
+                        <div className="duration-card">
+                          <Clock size={20} />
+                          <div className="duration-details">
+                            <span className="duration-time">{service.duration || '1 hour'}</span>
+                            <span className="duration-label">Estimated Duration</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Booking Policies</label>
+                      <div className="policies-info">
+                        <div className="policy-item">
+                          <CheckCircle size={16} />
+                          <span>Free cancellation up to 2 hours before service</span>
+                        </div>
+                        <div className="policy-item">
+                          <CheckCircle size={16} />
+                          <span>Professional and insured service providers</span>
+                        </div>
+                        <div className="policy-item">
+                          <CheckCircle size={16} />
+                          <span>Quality guarantee on all services</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Service Provider Information</label>
+                      <div className="provider-info">
+                        <div className="provider-card">
+                          <div className="provider-avatar">
+                            <User size={24} />
+                          </div>
+                          <div className="provider-details">
+                            <span className="provider-name">Verified Professional</span>
+                            <span className="provider-rating">
+                              <Star size={14} fill="#f59e0b" />
+                              <Star size={14} fill="#f59e0b" />
+                              <Star size={14} fill="#f59e0b" />
+                              <Star size={14} fill="#f59e0b" />
+                              <Star size={14} fill="#f59e0b" />
+                              <span className="rating-text">4.8 (127 reviews)</span>
+                            </span>
+                            <span className="provider-badges">
+                              <span className="badge">✓ Verified</span>
+                              <span className="badge">✓ Insured</span>
+                              <span className="badge">✓ Background Checked</span>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>What to Expect</label>
+                      <div className="expectations-info">
+                        <div className="expectation-item">
+                          <div className="expectation-number">1</div>
+                          <div className="expectation-text">
+                            <strong>Confirmation:</strong> Receive instant booking confirmation
+                          </div>
+                        </div>
+                        <div className="expectation-item">
+                          <div className="expectation-number">2</div>
+                          <div className="expectation-text">
+                            <strong>Service:</strong> Professional arrives on time with equipment
+                          </div>
+                        </div>
+                        <div className="expectation-item">
+                          <div className="expectation-number">3</div>
+                          <div className="expectation-text">
+                            <strong>Completion:</strong> Quality service delivered as promised
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -883,34 +1264,128 @@ const BookingPage = () => {
             </motion.div>
           </div>
 
-          {/* Sidebar */}
+          {/* Enhanced Sidebar */}
           <div className="booking-sidebar">
-            <div className="sidebar-card">
-              <h4>Booking Summary</h4>
-              <div className="summary-item">
-                <span>Service</span>
-                <span>{service.name}</span>
+            <motion.div 
+              className="enhanced-sidebar-card"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+            >
+              <div className="sidebar-header">
+                <h4>Booking Summary</h4>
+                <div className="header-accent"></div>
               </div>
-              {selectedDate && selectedTime && (
-                <div className="summary-item">
-                  <span>Date & Time</span>
-                  <span>{formatDisplayDate(selectedDate)} at {selectedTime}</span>
-                </div>
-              )}
-              {address && (
-                <div className="summary-item">
-                  <span>Location</span>
-                  <span className="address-preview">{address.substring(0, 50)}...</span>
-                </div>
-              )}
-              <div className="summary-divider"></div>
-              <div className="total-summary">
-                <div className="total-row">
-                  <span>Total Amount</span>
-                  <span className="total-amount">₹{total}</span>
-                </div>
+              
+              <div className="summary-content">
+                {/* Service Details */}
+                <motion.div 
+                  className="enhanced-summary-item"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1, duration: 0.5 }}
+                >
+                  <div className="summary-label">
+                    <Star size={16} />
+                    Service
+                  </div>
+                  <div className="summary-value service-value">
+                    {service.name}
+                  </div>
+                </motion.div>
+
+                {/* Date & Time */}
+                {selectedDate && selectedTime && (
+                  <motion.div 
+                    className="enhanced-summary-item"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2, duration: 0.5 }}
+                  >
+                    <div className="summary-label">
+                      <Calendar size={16} />
+                      Date & Time
+                    </div>
+                    <div className="summary-value datetime-value">
+                      <div className="date-text">{formatDisplayDate(selectedDate)}</div>
+                      <div className="time-text">{selectedTime}</div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Location with Map */}
+                {address && (
+                  <motion.div 
+                    className="enhanced-summary-item location-item"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.5 }}
+                  >
+                    <div className="summary-label">
+                      <MapPin size={16} />
+                      Location
+                    </div>
+                    <div className="location-content">
+                      {isEditingLocation ? (
+                        <div className="location-edit-form">
+                          <input
+                            type="text"
+                            value={tempAddress}
+                            onChange={(e) => setTempAddress(e.target.value)}
+                            placeholder="Enter new address"
+                            className="address-input"
+                          />
+                          <div className="edit-actions">
+                            <button className="save-location-btn" onClick={handleSaveNewLocation}>
+                              Save
+                            </button>
+                            <button className="cancel-location-btn" onClick={handleCancelEditLocation}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="address-text">{address}</div>
+                          
+                          {/* Enhanced Map Integration */}
+                          <LocationMap
+                            latitude={userProfile?.user_profiles?.location_latitude}
+                            longitude={userProfile?.user_profiles?.location_longitude}
+                            address={address}
+                            height="600px"
+                            zoom={16}
+                            className="booking-map"
+                          />
+                        </>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Total Amount */}
+                <motion.div 
+                  className="enhanced-summary-item total-item"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4, duration: 0.5 }}
+                >
+                  <div className="summary-divider"></div>
+                  <div className="total-summary">
+                    <div className="total-row">
+                      <span className="total-label">
+                        <DollarSign size={16} />
+                        Total Amount
+                      </span>
+                      <span className="total-amount">₹{total}</span>
+                    </div>
+                    <div className="total-note">
+                      Includes service fee and taxes
+                    </div>
+                  </div>
+                </motion.div>
               </div>
-            </div>
+            </motion.div>
 
             {/* Navigation */}
             <div className="sidebar-navigation">
