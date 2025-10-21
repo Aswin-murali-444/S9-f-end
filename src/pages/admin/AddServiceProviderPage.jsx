@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Save, User, Mail, Phone, Settings, Briefcase, FileText, CheckCircle } from 'lucide-react';
+import { Save, User, Mail, Phone, Settings, Briefcase, FileText, CheckCircle, Users, UserPlus, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/AdminLayout';
 import { validationUtils } from '../../utils/validation';
@@ -9,6 +9,8 @@ import './AdminPages.css';
 
 const AddServiceProviderPage = () => {
   const navigate = useNavigate();
+  const [providerType, setProviderType] = useState('individual'); // 'individual' or 'team'
+  
   const [formData, setFormData] = useState({
     // Personal Information
     full_name: '',
@@ -26,11 +28,21 @@ const AddServiceProviderPage = () => {
     // Admin Settings
     sendEmail: true
   });
-  
+
+  // Team-specific state
+  const [teamData, setTeamData] = useState({
+    name: '',
+    description: '',
+    max_members: 5,
+    team_members: [] // Array of selected user IDs
+  });
+
   const [categories, setCategories] = useState([]);
   const [services, setServices] = useState([]);
   const [filteredServices, setFilteredServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
+  const [availableProviders, setAvailableProviders] = useState([]);
+  const [filteredProviders, setFilteredProviders] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [touched, setTouched] = useState({});
@@ -38,6 +50,7 @@ const AddServiceProviderPage = () => {
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [isEmailAvailable, setIsEmailAvailable] = useState(true);
   const [successModal, setSuccessModal] = useState({ open: false, title: '', message: '' });
+
   // Lock body scroll when modal is open
   useEffect(() => {
     if (successModal.open) {
@@ -91,7 +104,7 @@ const AddServiceProviderPage = () => {
     );
   };
 
-  // Load categories and services
+  // Load categories, services, and available providers
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -106,8 +119,18 @@ const AddServiceProviderPage = () => {
         const servicesResponse = await fetch('/api/services');
         if (servicesResponse.ok) {
           const servicesData = await servicesResponse.json();
+          console.log('Loaded services:', servicesData);
+          console.log('Sample service structure:', servicesData[0]);
           setServices(servicesData);
         }
+
+        // Load all available providers for team creation
+        const providersData = await apiService.getAvailableProviders();
+        const allProviders = providersData.providers || [];
+        console.log('Loaded providers:', allProviders);
+        console.log('Sample provider structure:', allProviders[0]);
+        setAvailableProviders(allProviders);
+        setFilteredProviders(allProviders);
       } catch (error) {
         console.error('Error loading data:', error);
       }
@@ -115,6 +138,62 @@ const AddServiceProviderPage = () => {
     
     loadData();
   }, []);
+
+  // Filter available providers based on selected category and service
+  useEffect(() => {
+    if (formData.providerType === 'team') {
+      let filtered = [...availableProviders];
+      
+      console.log('Filtering providers:', {
+        totalProviders: availableProviders.length,
+        serviceCategoryId: formData.service_category_id,
+        serviceId: formData.service_id,
+        providerType: formData.providerType
+      });
+      
+      // Filter by service category if selected
+      if (formData.service_category_id) {
+        filtered = filtered.filter(provider => {
+          const providerCategory = provider.service_provider_details?.service_category_id;
+          // Handle both string and number comparisons
+          const matches = providerCategory === formData.service_category_id || 
+                         providerCategory === parseInt(formData.service_category_id) ||
+                         providerCategory?.toString() === formData.service_category_id;
+          console.log('Category filter:', {
+            providerId: provider.id,
+            providerCategory,
+            selectedCategory: formData.service_category_id,
+            matches
+          });
+          return matches;
+        });
+      }
+      
+      // Filter by specific service if selected
+      if (formData.service_id) {
+        filtered = filtered.filter(provider => {
+          const providerService = provider.service_provider_details?.service_id;
+          // Handle both string and number comparisons
+          const matches = providerService === formData.service_id || 
+                         providerService === parseInt(formData.service_id) ||
+                         providerService?.toString() === formData.service_id;
+          console.log('Service filter:', {
+            providerId: provider.id,
+            providerService,
+            selectedService: formData.service_id,
+            matches
+          });
+          return matches;
+        });
+      }
+      
+      console.log('Filtered providers result:', filtered.length);
+      setFilteredProviders(filtered);
+    } else {
+      // If not team provider, show all available providers
+      setFilteredProviders(availableProviders);
+    }
+  }, [formData.service_category_id, formData.service_id, formData.providerType, availableProviders]);
 
   // Debounced email availability check
   useEffect(() => {
@@ -251,6 +330,30 @@ const AddServiceProviderPage = () => {
         }
         return undefined;
       }
+
+      // Team validation
+      case 'team_name': {
+        if (providerType === 'team' && (!value || value.trim() === '')) {
+          return 'Team name is required';
+        }
+        if (value && value.trim().length < 2) {
+          return 'Team name must be at least 2 characters';
+        }
+        if (value && value.trim().length > 100) {
+          return 'Team name must be less than 100 characters';
+        }
+        return undefined;
+      }
+
+      case 'max_members': {
+        if (providerType === 'team' && (!value || value < 2)) {
+          return 'Maximum members must be at least 2';
+        }
+        if (value && value > 20) {
+          return 'Maximum members cannot exceed 20';
+        }
+        return undefined;
+      }
       
       default:
         return undefined;
@@ -260,15 +363,39 @@ const AddServiceProviderPage = () => {
   // Real-time validation for better UX
   const validateForm = () => {
     const errors = {};
-    const requiredFields = ['full_name', 'email', 'service_category_id', 'service_id', 'specialization', 'status'];
     
-    // Validate required fields
-    requiredFields.forEach(field => {
-      const error = validateField(field, formData[field]);
-      if (error) {
-        errors[field] = error;
-      }
-    });
+    if (providerType === 'individual') {
+      const requiredFields = ['full_name', 'email', 'service_category_id', 'service_id', 'specialization', 'status'];
+      
+      // Validate required fields
+      requiredFields.forEach(field => {
+        const error = validateField(field, formData[field]);
+        if (error) {
+          errors[field] = error;
+        }
+      });
+    } else {
+      // Team validation
+      const requiredFields = ['full_name', 'email', 'service_category_id', 'service_id', 'specialization', 'status'];
+      const teamRequiredFields = ['team_name', 'max_members'];
+      
+      // Validate individual provider fields
+      requiredFields.forEach(field => {
+        const error = validateField(field, formData[field]);
+        if (error) {
+          errors[field] = error;
+        }
+      });
+      
+      // Validate team fields
+      teamRequiredFields.forEach(field => {
+        const value = field === 'team_name' ? teamData.name : teamData.max_members;
+        const error = validateField(field, value);
+        if (error) {
+          errors[field] = error;
+        }
+      });
+    }
 
     // Email uniqueness guard right before submit
     if (!isEmailAvailable) {
@@ -299,6 +426,8 @@ const AddServiceProviderPage = () => {
     const { name, value, type, checked } = e.target;
     const newValue = type === 'checkbox' ? checked : value;
     
+    console.log('Form input changed:', { name, value: newValue });
+    
     setFormData(prev => ({
       ...prev,
       [name]: newValue
@@ -306,7 +435,14 @@ const AddServiceProviderPage = () => {
     
     // Handle service category change - filter services
     if (name === 'service_category_id') {
-      const filtered = services.filter(service => service.category === value);
+      console.log('Filtering services for category:', value);
+      console.log('Available services:', services);
+      const filtered = services.filter(service => 
+        service.category_id === parseInt(value) || 
+        service.category === value || 
+        service.service_category_id === parseInt(value)
+      );
+      console.log('Filtered services:', filtered);
       setFilteredServices(filtered);
       // Clear service selection when category changes
       setFormData(prev => ({ ...prev, service_id: '', specialization: '' }));
@@ -315,7 +451,9 @@ const AddServiceProviderPage = () => {
     
     // Handle service selection - update specialization and basic pay
     if (name === 'service_id') {
+      console.log('Service selected:', value);
       const service = services.find(s => s.id === value);
+      console.log('Found service:', service);
       setSelectedService(service);
       if (service) {
         const getServiceRupee = (s) => {
@@ -338,6 +476,21 @@ const AddServiceProviderPage = () => {
     setValidationErrors(prev => ({ ...prev, [name]: error }));
   };
 
+  const handleTeamDataChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    const newValue = type === 'checkbox' ? checked : value;
+    
+    setTeamData(prev => ({
+      ...prev,
+      [name]: newValue
+    }));
+    
+    // Mark as touched and validate
+    setTouched(prev => ({ ...prev, [name]: true }));
+    const error = validateField(name, newValue);
+    setValidationErrors(prev => ({ ...prev, [name]: error }));
+  };
+
   // Enhanced toggle handler with animation
   const handleToggleChange = (e) => {
     setIsToggleAnimating(true);
@@ -352,15 +505,37 @@ const AddServiceProviderPage = () => {
     }, 600);
   };
 
+  const addTeamMember = (userId) => {
+    if (!teamData.team_members.includes(userId)) {
+      setTeamData(prev => ({
+        ...prev,
+        team_members: [...prev.team_members, userId]
+      }));
+    }
+  };
+
+  const removeTeamMember = (userId) => {
+    setTeamData(prev => ({
+      ...prev,
+      team_members: prev.team_members.filter(id => id !== userId)
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     // Mark all fields as touched for validation display
     const allFields = ['full_name', 'email', 'phone', 'service_category_id', 'service_id', 'specialization', 'status', 'notes'];
+    const teamFields = ['team_name', 'max_members'];
     const touchedFields = {};
     allFields.forEach(field => {
       touchedFields[field] = true;
     });
+    if (providerType === 'team') {
+      teamFields.forEach(field => {
+        touchedFields[field] = true;
+      });
+    }
     setTouched(touchedFields);
     
     // Validate entire form
@@ -384,40 +559,92 @@ const AddServiceProviderPage = () => {
     setValidationErrors({});
     
     try {
-      const result = await apiService.adminCreateProvider(formData);
-      
-      // apiService.request throws on non-2xx; reaching here means success
-      // Treat presence of user or message as success indicator
-      if (result && (result.user || result.message)) {
-        const emailInfo = result.emailSent ? 'Email sent.' : (result.emailError ? `Email failed: ${result.emailError}.` : 'Email skipped.');
-        setSuccessModal({
-          open: true,
-          title: 'Service Provider Created',
-          message: `The provider account was created successfully. ${emailInfo}`
-        });
+      if (providerType === 'individual') {
+        // Create individual provider
+        const result = await apiService.adminCreateProvider(formData);
         
-        // Reset form
-        setFormData({
-          full_name: '',
-          email: '',
-          phone: '',
-          specialization: '',
-          service_category_id: '',
-          service_id: '',
-          basic_pay: '',
-          status: 'active',
-          notes: '',
-          sendEmail: true
-        });
-        setTouched({});
-        setValidationErrors({});
-        setSelectedService(null);
-        
-        // Navigate back to admin dashboard
-        // keep user on page until they close modal
+        if (result && (result.user || result.message)) {
+          const emailInfo = result.emailSent ? 'Email sent.' : (result.emailError ? `Email failed: ${result.emailError}.` : 'Email skipped.');
+          setSuccessModal({
+            open: true,
+            title: 'Service Provider Created',
+            message: `The provider account was created successfully. ${emailInfo}`
+          });
+        }
       } else {
-        setValidationErrors({ submit: 'Failed to create service provider. Please try again.' });
+        // Create team with team leader data and member data
+        const teamPayload = {
+          name: teamData.name,
+          description: teamData.description,
+          team_leader_data: {
+            full_name: formData.full_name,
+            email: formData.email,
+            phone: formData.phone,
+            specialization: formData.specialization,
+            service_category_id: formData.service_category_id,
+            service_id: formData.service_id,
+            status: formData.status,
+            notes: formData.notes,
+            sendEmail: formData.sendEmail
+          },
+          service_category_id: formData.service_category_id,
+          service_id: formData.service_id,
+          max_members: teamData.max_members,
+          team_members_data: teamData.team_members.map(memberId => {
+            const member = filteredProviders.find(p => p.id === memberId);
+            return {
+              full_name: `${member.user_profiles?.first_name} ${member.user_profiles?.last_name}`,
+              email: member.email,
+              phone: member.user_profiles?.phone,
+              specialization: member.service_provider_details?.specialization || formData.specialization,
+              service_category_id: formData.service_category_id,
+              service_id: formData.service_id,
+              status: 'active',
+              notes: `Team member for ${teamData.name}`,
+              sendEmail: true,
+              role: 'member'
+            };
+          })
+        };
+        
+        // Create the team (this will create the team leader and all members)
+        const teamResult = await apiService.createTeam(teamPayload);
+        
+        if (teamResult && teamResult.team) {
+          const memberCount = teamResult.createdAccounts.members + 1; // +1 for leader
+          const hasErrors = teamResult.createdAccounts.memberErrors && teamResult.createdAccounts.memberErrors.length > 0;
+          
+          setSuccessModal({
+            open: true,
+            title: 'Team Created Successfully',
+            message: `Team "${teamData.name}" has been created with ${memberCount} members. ${hasErrors ? `Note: ${teamResult.createdAccounts.memberErrors.length} members failed to create.` : 'All team members have been notified via email.'}`
+          });
+        }
       }
+      
+      // Reset form
+      setFormData({
+        full_name: '',
+        email: '',
+        phone: '',
+        specialization: '',
+        service_category_id: '',
+        service_id: '',
+        basic_pay: '',
+        status: 'active',
+        notes: '',
+        sendEmail: true
+      });
+      setTeamData({
+        name: '',
+        description: '',
+        max_members: 5,
+        team_members: []
+      });
+      setTouched({});
+      setValidationErrors({});
+      setSelectedService(null);
+      
     } catch (error) {
       const msg = String(error?.message || '').toLowerCase();
       if (msg.includes('email already registered')) {
@@ -472,7 +699,31 @@ const AddServiceProviderPage = () => {
         <motion.div className="page-header" variants={itemVariants}>
           <div className="page-title">
             <h1>Add Service Provider</h1>
-            <p>Create a new service provider account with specialized permissions</p>
+            <p>Create a new service provider account or team with specialized permissions</p>
+          </div>
+        </motion.div>
+
+        {/* Provider Type Selection */}
+        <motion.div className="provider-type-selection" variants={itemVariants}>
+          <div className="type-toggle">
+            <button
+              type="button"
+              className={`type-option ${providerType === 'individual' ? 'active' : ''}`}
+              onClick={() => setProviderType('individual')}
+            >
+              <User size={20} />
+              <span>Individual Provider</span>
+              <small>Single service provider</small>
+            </button>
+            <button
+              type="button"
+              className={`type-option ${providerType === 'team' ? 'active' : ''}`}
+              onClick={() => setProviderType('team')}
+            >
+              <Users size={20} />
+              <span>Team Provider</span>
+              <small>Group of service providers</small>
+            </button>
           </div>
         </motion.div>
 
@@ -483,11 +734,93 @@ const AddServiceProviderPage = () => {
           variants={itemVariants}
         >
           <div className="form-sections">
+            
+            {/* Team Information (only for team type) */}
+            {providerType === 'team' && (
+              <div className="form-section">
+                <h3>
+                  <Users size={20} />
+                  Team Information
+                </h3>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label htmlFor="team_name">Team Name *</label>
+                    <div className="input-container">
+                      <input
+                        id="team_name"
+                        name="team_name"
+                        type="text"
+                        value={teamData.name}
+                        onChange={handleTeamDataChange}
+                        onBlur={() => setTouched(prev => ({ ...prev, team_name: true }))}
+                        placeholder="e.g., Pest Control Team Alpha"
+                        required
+                        autoComplete="off"
+                        maxLength={100}
+                        className={`${touched.team_name && validationErrors.team_name ? 'error' : ''} ${touched.team_name && !validationErrors.team_name ? 'valid' : ''}`}
+                      />
+                      <div className="input-feedback">
+                        {touched.team_name && validationErrors.team_name && (
+                          <small className="error-text">{validationErrors.team_name}</small>
+                        )}
+                        {touched.team_name && !validationErrors.team_name && teamData.name && (
+                          <small className="success-text">✓ Valid team name</small>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="max_members">Maximum Team Members *</label>
+                    <div className="input-container">
+                      <input
+                        id="max_members"
+                        name="max_members"
+                        type="number"
+                        value={teamData.max_members}
+                        onChange={handleTeamDataChange}
+                        onBlur={() => setTouched(prev => ({ ...prev, max_members: true }))}
+                        placeholder="5"
+                        min="2"
+                        max="20"
+                        required
+                        className={`${touched.max_members && validationErrors.max_members ? 'error' : ''} ${touched.max_members && !validationErrors.max_members ? 'valid' : ''}`}
+                      />
+                      <div className="input-feedback">
+                        {touched.max_members && validationErrors.max_members && (
+                          <small className="error-text">{validationErrors.max_members}</small>
+                        )}
+                        {touched.max_members && !validationErrors.max_members && teamData.max_members && (
+                          <small className="success-text">✓ Valid capacity</small>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="form-group full-width">
+                    <label htmlFor="team_description">Team Description</label>
+                    <textarea
+                      id="team_description"
+                      name="description"
+                      value={teamData.description}
+                      onChange={handleTeamDataChange}
+                      onBlur={() => setTouched(prev => ({ ...prev, description: true }))}
+                      placeholder="Brief description of the team's expertise and capabilities..."
+                      rows={3}
+                      maxLength={500}
+                      className={touched.description && validationErrors.description ? 'error' : ''}
+                    />
+                    <small className="form-help">Optional description of team capabilities and specializations</small>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Personal Information */}
             <div className="form-section">
               <h3>
                 <User size={20} />
-                Personal Information
+                {providerType === 'team' ? 'Team Leader Information' : 'Personal Information'}
               </h3>
               <div className="form-grid">
                 <div className="form-group">
@@ -513,7 +846,6 @@ const AddServiceProviderPage = () => {
                       {touched.full_name && !validationErrors.full_name && formData.full_name && (
                         <small className="success-text">✓ Valid name</small>
                       )}
-                      {/* counter hidden */}
                     </div>
                   </div>
                 </div>
@@ -614,7 +946,7 @@ const AddServiceProviderPage = () => {
                       onChange={handleInputChange}
                       placeholder="Select a service"
                       disabled={!formData.service_category_id}
-                      options={filteredServices.map(s => {
+                      options={(filteredServices.length > 0 ? filteredServices : services).map(s => {
                         const rupee = s.price_inr ?? s.wage_inr ?? s.wage ?? s.price;
                         const display = typeof rupee === 'number' ? `₹${rupee}` : (rupee ? `₹${rupee}` : '₹N/A');
                         return { value: s.id, label: `${s.name} - ${display}` };
@@ -715,6 +1047,116 @@ const AddServiceProviderPage = () => {
               </div>
             </div>
 
+            {/* Team Members Selection (only for team type) */}
+            {providerType === 'team' && (
+              <div className="form-section">
+                <h3>
+                  <UserPlus size={20} />
+                  Team Members
+                </h3>
+                <div className="form-grid">
+                  <div className="form-group full-width">
+                    <label>Select Team Members</label>
+                    <div className="team-members-selection">
+                      <div className="available-providers">
+                        <h4>
+                          Available Service Providers
+                          {formData.service_category_id && (
+                            <span className="filter-indicator">
+                              {formData.service_id ? ' (Filtered by Service)' : ' (Filtered by Category)'}
+                            </span>
+                          )}
+                        </h4>
+                        <div className="debug-info" style={{fontSize: '0.75rem', color: '#666', marginBottom: '1rem'}}>
+                          Debug: Total providers: {availableProviders.length}, Filtered: {filteredProviders.length}, 
+                          Category: {formData.service_category_id || 'none'}, Service: {formData.service_id || 'none'}
+                        </div>
+                        <div className="providers-grid">
+                          {filteredProviders
+                            .filter(provider => !teamData.team_members.includes(provider.id))
+                            .length === 0 ? (
+                            <div className="no-providers-message">
+                              <div className="no-providers-icon">🔍</div>
+                              <p>No available providers found</p>
+                              <p className="hint">
+                                {formData.service_category_id 
+                                  ? 'Try selecting a different category or service'
+                                  : 'Please select a service category first'
+                                }
+                              </p>
+                            </div>
+                          ) : (
+                            filteredProviders
+                              .filter(provider => !teamData.team_members.includes(provider.id))
+                              .map(provider => (
+                              <div key={provider.id} className="provider-card">
+                                <div className="provider-info">
+                                  <h5>{provider.user_profiles?.first_name} {provider.user_profiles?.last_name}</h5>
+                                  <p>{provider.email}</p>
+                                  <p className="specialization">
+                                    {provider.service_provider_details?.specialization || 'No specialization'}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="add-member-btn"
+                                  onClick={() => addTeamMember(provider.id)}
+                                  disabled={teamData.team_members.length >= teamData.max_members}
+                                >
+                                  <UserPlus size={16} />
+                                  Add
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="selected-members">
+                        <h4>Selected Team Members ({teamData.team_members.length}/{teamData.max_members})</h4>
+                        <div className="members-list">
+                          {teamData.team_members.map(memberId => {
+                            const member = filteredProviders.find(p => p.id === memberId);
+                            return member ? (
+                              <div key={memberId} className="member-card">
+                                <div className="member-info">
+                                  <h5>{member.user_profiles?.first_name} {member.user_profiles?.last_name}</h5>
+                                  <p>{member.email}</p>
+                                  <span className="member-role">Member</span>
+                                </div>
+                                <div className="member-actions">
+                                  <span className="member-status">Active</span>
+                                  <button
+                                    type="button"
+                                    className="remove-member-btn"
+                                    onClick={() => removeTeamMember(memberId)}
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null;
+                          })}
+                        </div>
+                        {teamData.team_members.length === 0 && (
+                          <div className="empty-members">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                              <circle cx="9" cy="7" r="4"></circle>
+                              <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                            <p>No team members selected yet</p>
+                            <p className="hint">Click on available providers to add them to your team</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Additional Information */}
             <div className="form-section">
               <h3>
@@ -777,6 +1219,12 @@ const AddServiceProviderPage = () => {
                   <CheckCircle size={16} />
                   <span>Provider will be created with "pending_verification" status</span>
                 </div>
+                {providerType === 'team' && (
+                  <div className="info-item">
+                    <CheckCircle size={16} />
+                    <span>Team leader will manage team assignments and bookings</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -810,12 +1258,12 @@ const AddServiceProviderPage = () => {
               {isSubmitting ? (
                 <>
                   <div className="spinner"></div>
-                  Creating Provider...
+                  {providerType === 'team' ? 'Creating Team...' : 'Creating Provider...'}
                 </>
               ) : (
                 <>
                   <Save size={20} />
-                  Create Service Provider
+                  {providerType === 'team' ? 'Create Team' : 'Create Service Provider'}
                 </>
               )}
             </button>

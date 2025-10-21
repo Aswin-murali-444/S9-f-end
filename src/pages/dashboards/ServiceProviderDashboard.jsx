@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
+import EditableProfileSections from '../../components/EditableProfileSections';
+import ChangePasswordModal from '../../components/ChangePasswordModal';
 import { 
   User, 
   LogOut, 
@@ -47,6 +49,7 @@ import {
   Award,
   Target,
   Clipboard,
+  Key,
   BookOpen,
   Globe,
   Smartphone,
@@ -69,6 +72,7 @@ import {
   Archive,
   Trash,
   MoreHorizontal,
+  Plus,
   ExternalLink,
   Copy,
   Save,
@@ -95,10 +99,12 @@ import {
   CalendarSearch,
   CalendarClock,
   CalendarHeart,
-  CalendarRange
+  CalendarRange,
+  Camera
 } from 'lucide-react';
 import Logo from '../../components/Logo';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import ProfileCompletionModal from '../../components/ProfileCompletionModal';
 import './ServiceProviderDashboard.css';
 import { apiService } from '../../services/api';
 
@@ -116,6 +122,9 @@ const ServiceProviderDashboard = () => {
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [providerDetails, setProviderDetails] = useState(null);
+  const [providerProfile, setProviderProfile] = useState(null);
+  const [isLoadingProviderProfile, setIsLoadingProviderProfile] = useState(true);
 
   // Animation states
   const [isLoading, setIsLoading] = useState(true);
@@ -125,6 +134,44 @@ const ServiceProviderDashboard = () => {
     jobs: 0,
     rating: 0
   });
+
+  // Respect user reduced-motion preferences
+  const prefersReducedMotion = useReducedMotion();
+
+  // Animation variants
+  const containerStagger = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: prefersReducedMotion ? 0 : 0.08,
+        delayChildren: prefersReducedMotion ? 0 : 0.05
+      }
+    }
+  };
+
+  const itemRise = {
+    hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 12 },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: prefersReducedMotion ? 0.15 : 0.35, ease: 'easeOut' }
+    }
+  };
+
+  const softHover = {
+    whileHover: prefersReducedMotion ? {} : { y: -3, scale: 1.02 },
+    whileTap: prefersReducedMotion ? {} : { scale: 0.98 }
+  };
+
+  // Subtle animated glow for the header card
+  const glowKeyframes = prefersReducedMotion
+    ? {}
+    : { boxShadow: [
+        '0 8px 24px rgba(79,156,249,0.06)',
+        '0 12px 32px rgba(139,92,246,0.10)',
+        '0 8px 24px rgba(79,156,249,0.06)'
+      ] };
 
   // Loading states for different data sections
   const [jobsLoading, setJobsLoading] = useState(false);
@@ -168,6 +215,16 @@ const ServiceProviderDashboard = () => {
   const animatedJobs = useAnimatedCounter(48, 2000);
   const animatedRating = useAnimatedCounter(4.9, 2200);
 
+
+  // Helpers to format role/status labels
+  const toTitleCase = (str) => {
+    if (!str) return '';
+    return String(str)
+      .replace(/_/g, ' ')
+      .toLowerCase()
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+
   // Data loading function
   const loadDashboardData = async (isRefresh = false) => {
     try {
@@ -188,13 +245,41 @@ const ServiceProviderDashboard = () => {
         new Promise(resolve => setTimeout(resolve, 500))  // Profile
       ]);
       
-      // In a real app, you would fetch actual data here
-      // const [jobsData, notificationsData, earningsData, profileData] = await Promise.all([
-      //   apiService.getProviderJobs(),
-      //   apiService.getNotifications(),
-      //   apiService.getEarnings(),
-      //   apiService.getProfile()
-      // ]);
+      // Load logged-in user's profile and role details
+      if (user?.id) {
+        try {
+          const profileData = await apiService.getUserProfile(user.id);
+          // Compose readable name and contact
+          const firstName = profileData?.profile?.first_name || '';
+          const lastName = profileData?.profile?.last_name || '';
+          const fullName = `${firstName} ${lastName}`.trim();
+          setProfile(prev => ({
+            ...prev,
+            name: fullName || prev.name || profileData?.email || 'Service Provider',
+            email: profileData?.email || prev.email,
+            phone: profileData?.profile?.phone || prev.phone
+          }));
+          setProviderDetails({
+            ...(profileData?.roleDetails || {}),
+            role: profileData?.role || 'service_provider'
+          });
+          
+          // Update profile with service provider details from database
+          console.log('Profile data from database:', profileData?.roleDetails);
+          setProfile(prev => ({
+            ...prev,
+            service_category: profileData?.roleDetails?.service_category_name || '',
+            service: profileData?.roleDetails?.service_name || '',
+            experience_years: profileData?.roleDetails?.experience_years || 0,
+            hourly_rate: parseFloat(profileData?.roleDetails?.basic_pay) || 0, // Using basic_pay field
+            availability: profileData?.roleDetails?.availability || prev.availability
+          }));
+          
+          // Profile completion check will be handled in useEffect after data is loaded
+        } catch (e) {
+          console.error('Failed to load provider profile:', e);
+        }
+      }
       
       if (isRefresh) {
         toast.success('Dashboard data refreshed');
@@ -212,9 +297,68 @@ const ServiceProviderDashboard = () => {
     }
   };
 
+  // Fetch provider profile from provider_profiles table
+  const fetchProviderProfile = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setIsLoadingProviderProfile(true);
+      const profileData = await apiService.getProviderProfile(user.id);
+      setProviderProfile(profileData?.data || null);
+    } catch (error) {
+      console.error('Failed to fetch provider profile:', error);
+      setProviderProfile(null);
+    } finally {
+      setIsLoadingProviderProfile(false);
+    }
+  };
+
+  // Fetch bookings assigned to this service provider
+  const fetchProviderBookings = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setJobsLoading(true);
+      setJobsError(null);
+      
+      const response = await apiService.getProviderBookings(user.id, {
+        limit: 50,
+        offset: 0
+      });
+      
+      setJobs(response.bookings || []);
+    } catch (error) {
+      console.error('Failed to fetch provider bookings:', error);
+      setJobsError('Failed to load bookings. Please try again.');
+      setJobs([]);
+    } finally {
+      setJobsLoading(false);
+    }
+  };
+
+  // Fetch bookings matching this service provider's specialization
+  const fetchMatchingBookings = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const response = await apiService.getMatchingBookings(user.id, {
+        limit: 20,
+        offset: 0
+      });
+      
+      setMatchingJobs(response.bookings || []);
+    } catch (error) {
+      console.error('Failed to fetch matching bookings:', error);
+      setMatchingJobs([]);
+    }
+  };
+
   // Refresh dashboard data
   const handleRefresh = () => {
     loadDashboardData(true);
+    fetchProviderProfile(); // Also refresh provider profile
+    fetchProviderBookings(); // Refresh bookings
+    fetchMatchingBookings(); // Refresh matching bookings
   };
 
   // Loading effect
@@ -226,80 +370,20 @@ const ServiceProviderDashboard = () => {
     // Load dashboard data
     loadDashboardData();
     
+    // Load provider profile
+    fetchProviderProfile();
+    
+    // Load booking data
+    fetchProviderBookings();
+    fetchMatchingBookings();
+    
     return () => clearTimeout(timer);
   }, []);
 
-  // Mock data - replace with actual API calls
-  const [jobs, setJobs] = useState([
-    {
-      id: 1,
-      customerName: "John Smith",
-      serviceType: "House Cleaning",
-      address: "123 Main St, City, State",
-      scheduledDate: "2024-01-15",
-      scheduledTime: "14:00",
-      description: "Deep cleaning of living room and kitchen",
-      specialInstructions: "Please use eco-friendly products",
-      status: "pending",
-      amount: 75,
-      customerPhone: "+1-555-0123",
-      customerEmail: "john@email.com",
-      attachments: ["floor_plan.pdf", "special_requirements.docx"],
-      progressNotes: [],
-      completionPhotos: []
-    },
-    {
-      id: 2,
-      customerName: "Sarah Johnson",
-      serviceType: "Plumbing Repair",
-      address: "456 Oak Ave, City, State",
-      scheduledDate: "2024-01-16",
-      scheduledTime: "10:00",
-      description: "Fix leaking kitchen faucet",
-      specialInstructions: "Customer prefers morning appointments",
-      status: "confirmed",
-      amount: 120,
-      customerPhone: "+1-555-0456",
-      customerEmail: "sarah@email.com",
-      attachments: [],
-      progressNotes: ["Arrived on time", "Identified the issue"],
-      completionPhotos: []
-    },
-    {
-      id: 3,
-      customerName: "Mike Wilson",
-      serviceType: "Electrical Work",
-      address: "789 Pine Rd, City, State",
-      scheduledDate: "2024-01-14",
-      scheduledTime: "09:00",
-      description: "Install new light fixtures",
-      specialInstructions: "Turn off power at main breaker",
-      status: "in_progress",
-      amount: 200,
-      customerPhone: "+1-555-0789",
-      customerEmail: "mike@email.com",
-      attachments: ["fixture_instructions.pdf"],
-      progressNotes: ["Power turned off", "Started installation"],
-      completionPhotos: []
-    },
-    {
-      id: 4,
-      customerName: "Emma Davis",
-      serviceType: "Garden Maintenance",
-      address: "321 Elm St, City, State",
-      scheduledDate: "2024-01-13",
-      scheduledTime: "08:00",
-      description: "Weekly garden maintenance",
-      specialInstructions: "Water plants in backyard",
-      status: "completed",
-      amount: 60,
-      customerPhone: "+1-555-0321",
-      customerEmail: "emma@email.com",
-      attachments: [],
-      progressNotes: ["Completed all tasks", "Customer satisfied"],
-      completionPhotos: ["garden_before.jpg", "garden_after.jpg"]
-    }
-  ]);
+  // Real booking data - fetched from API
+  const [jobs, setJobs] = useState([]);
+  const [matchingJobs, setMatchingJobs] = useState([]);
+  const [jobsError, setJobsError] = useState(null);
 
   const [notifications, setNotifications] = useState([
     {
@@ -321,7 +405,7 @@ const ServiceProviderDashboard = () => {
     {
       id: 3,
       title: "Payment Received",
-      message: "Payment of $120 received for Plumbing Repair job",
+      message: "Payment of ₹120 received for Plumbing Repair job",
       type: "payment",
       time: "2 hours ago",
       unread: false
@@ -362,10 +446,15 @@ const ServiceProviderDashboard = () => {
   ]);
 
   const [profile, setProfile] = useState({
-    name: "Alex Provider",
-    email: user?.email || "provider@example.com",
-    phone: "+1-555-0123",
+    name: "",
+    email: user?.email || "",
+    phone: "",
     skills: ["House Cleaning", "Plumbing", "Electrical Work", "Garden Maintenance"],
+    specialization: "",
+    service_category: "",
+    service: "",
+    experience_years: 0,
+    hourly_rate: 0,
     availability: {
       monday: { start: "08:00", end: "17:00", available: true },
       tuesday: { start: "08:00", end: "17:00", available: true },
@@ -384,11 +473,93 @@ const ServiceProviderDashboard = () => {
     }
   });
 
+  // State for profile completion progress
+  const [profileCompletionStep, setProfileCompletionStep] = useState(1);
+  const [isProfileComplete, setIsProfileComplete] = useState(false);
+  const [isProfileCheckReady, setIsProfileCheckReady] = useState(false);
+  const [personalInfoComplete, setPersonalInfoComplete] = useState(false);
+  const [isProfileCompletionOpen, setIsProfileCompletionOpen] = useState(false);
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
+
+  // Check if personal information is complete
+  const checkPersonalInfoComplete = () => {
+    const hasName = profile.name && profile.name.trim().length > 0;
+    const hasPhone = profile.phone && profile.phone.trim().length > 0;
+    const hasEmail = profile.email && profile.email.trim().length > 0;
+    return hasName && hasPhone && hasEmail;
+  };
+
+  // Check if all profile information is complete
+  const checkProfileComplete = () => {
+    const personalComplete = checkPersonalInfoComplete();
+    // Check if service provider details exist in database
+    const hasServiceDetails = providerDetails && 
+      providerDetails.service_category_id && 
+      providerDetails.service_id && 
+      providerDetails.specialization &&
+      providerDetails.experience_years !== undefined &&
+      providerDetails.basic_pay !== undefined;
+    
+    // Check if provider profile exists in provider_profiles table
+    const hasProviderProfile = providerProfile && 
+      providerProfile.first_name && 
+      providerProfile.last_name && 
+      providerProfile.phone && 
+      providerProfile.pincode && 
+      providerProfile.city && 
+      providerProfile.state && 
+      providerProfile.address;
+    
+    return personalComplete && hasServiceDetails && hasProviderProfile;
+  };
+
+  // Update profile completion status when inputs are ready
+  useEffect(() => {
+    // Only evaluate completeness after provider profile fetch completes
+    if (providerDetails === null || isLoadingProviderProfile) {
+      setIsProfileCheckReady(false);
+      return;
+    }
+
+    const personalComplete = checkPersonalInfoComplete();
+    const allComplete = checkProfileComplete();
+
+    setPersonalInfoComplete(personalComplete);
+    setIsProfileComplete(allComplete);
+    setIsProfileCheckReady(true);
+
+    // If personal info is complete but not all info, move to step 2
+    if (personalComplete && !allComplete && profileCompletionStep === 1) {
+      setProfileCompletionStep(2);
+    }
+  }, [profile, providerDetails, providerProfile, isLoadingProviderProfile]);
+
+  // Check profile completion after data is loaded and show modal if incomplete
+  useEffect(() => {
+    if (!isProfileCheckReady) return;
+    if (providerDetails !== null && profile.name !== '') {
+      if (!isProfileComplete && activeTab !== 'profile') {
+        // Only show modal if not already on profile tab
+        setTimeout(() => setIsProfileCompletionOpen(true), 300);
+      }
+    }
+  }, [isProfileCheckReady, isProfileComplete, providerDetails, profile.name, activeTab]);
+
+  // Handle personal information completion
+  const handlePersonalInfoComplete = () => {
+    if (checkPersonalInfoComplete()) {
+      setProfileCompletionStep(2);
+      toast.success('Personal information saved! Now add your service details.');
+    } else {
+      toast.error('Please fill in all personal information fields.');
+    }
+  };
+
   const stats = [
-    { label: "Total Earnings", value: `$${animatedEarnings.toLocaleString()}`, icon: DollarSign, color: "#10b981", change: "+12%" },
     { label: "Active Requests", value: animatedRequests.toString(), icon: Calendar, color: "#4f9cf9", change: "+3" },
     { label: "Completed Jobs", value: animatedJobs.toString(), icon: CheckCircle, color: "#8b5cf6", change: "+5" },
-    { label: "Client Rating", value: animatedRating.toFixed(1), icon: Star, color: "#f59e0b", change: "+0.2" }
+    { label: "Client Rating", value: animatedRating.toFixed(1), icon: Star, color: "#f59e0b", change: "+0.2" },
+    { label: "Hourly Rate", value: `₹${profile.hourly_rate.toLocaleString('en-IN')}`, icon: DollarSign, color: "#059669", change: "Current" }
   ];
 
   const navigationItems = [
@@ -396,7 +567,7 @@ const ServiceProviderDashboard = () => {
     { key: 'jobs', label: 'My Jobs', icon: Briefcase },
     { key: 'earnings', label: 'Earnings', icon: DollarSign },
     { key: 'schedule', label: 'Schedule', icon: Calendar },
-    { key: 'profile', label: 'Profile', icon: User },
+    { key: 'profile', label: 'Profile', icon: User, incomplete: isProfileCheckReady ? !isProfileComplete : false },
     { key: 'reviews', label: 'Reviews', icon: Star },
     { key: 'analytics', label: 'Analytics', icon: BarChart3 },
     { key: 'settings', label: 'Settings', icon: Settings }
@@ -444,12 +615,21 @@ const ServiceProviderDashboard = () => {
     }
   };
 
+  const handleProfileCompletion = () => {
+    // Refresh dashboard data after profile completion
+    loadDashboardData(true);
+    setIsProfileCompletionOpen(false);
+    // Reset profile completion step
+    setProfileCompletionStep(1);
+  };
+
   const handleJobAction = async (jobId, action) => {
     setActionLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Update booking status via API
+      await apiService.updateBookingStatus(jobId, action);
       
+      // Update local state
       setJobs(prev => prev.map(job => {
         if (job.id === jobId) {
           return { ...job, status: action };
@@ -459,7 +639,31 @@ const ServiceProviderDashboard = () => {
       
       toast.success(`Job ${action} successfully`);
     } catch (error) {
+      console.error('Failed to update job status:', error);
       toast.error(`Failed to ${action} job`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Handle accepting a job (assigning it to this provider)
+  const handleAcceptJob = async (jobId) => {
+    setActionLoading(true);
+    try {
+      // Assign booking to this provider
+      await apiService.assignBooking(jobId, user.id);
+      
+      // Update local state - move from matching jobs to assigned jobs
+      setMatchingJobs(prev => prev.filter(job => job.id !== jobId));
+      
+      // Refresh both lists to get updated data
+      fetchProviderBookings();
+      fetchMatchingBookings();
+      
+      toast.success('Job accepted successfully!');
+    } catch (error) {
+      console.error('Failed to accept job:', error);
+      toast.error('Failed to accept job. Please try again.');
     } finally {
       setActionLoading(false);
     }
@@ -468,9 +672,10 @@ const ServiceProviderDashboard = () => {
   const handleUpdateJobStatus = async (jobId, status) => {
     setActionLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Update booking status via API
+      await apiService.updateBookingStatus(jobId, status);
       
+      // Update local state
       setJobs(prev => prev.map(job => {
         if (job.id === jobId) {
           return { ...job, status };
@@ -480,6 +685,7 @@ const ServiceProviderDashboard = () => {
       
       toast.success(`Job status updated to ${status}`);
     } catch (error) {
+      console.error('Failed to update job status:', error);
       toast.error(`Failed to update job status`);
     } finally {
       setActionLoading(false);
@@ -551,6 +757,11 @@ const ServiceProviderDashboard = () => {
   });
 
   const unreadNotifications = notifications.filter(n => n.unread).length;
+
+  // Prefer provider profile experience when available
+  const mergedExperienceYears = (
+    providerProfile?.years_of_experience ?? providerDetails?.experience_years ?? 0
+  );
 
   // Loading skeleton component
   const LoadingSkeleton = () => (
@@ -637,13 +848,19 @@ const ServiceProviderDashboard = () => {
                 <item.icon size={20} />
               </motion.div>
               {!sidebarCollapsed && (
-                <motion.span
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: index * 0.05 + 0.3 }}
+                  className="nav-item-content"
                 >
-                  {item.label}
-                </motion.span>
+                  <span>{item.label}</span>
+                  {item.incomplete && (
+                    <span className="incomplete-indicator" title="Profile incomplete">
+                      <AlertCircle size={12} />
+                    </span>
+                  )}
+                </motion.div>
               )}
             </motion.button>
           ))}
@@ -677,7 +894,12 @@ const ServiceProviderDashboard = () => {
             <div className="breadcrumb">
               <span className="breadcrumb-item">Dashboard</span>
               <span className="breadcrumb-separator">/</span>
-              <span className="breadcrumb-current">{navigationItems.find(item => item.key === activeTab)?.label}</span>
+              <span className="breadcrumb-current">
+                {navigationItems.find(item => item.key === activeTab)?.label}
+                {providerDetails?.specialization && activeTab === 'home' && (
+                  <span className="breadcrumb-specialization"> • {providerDetails.specialization}</span>
+                )}
+              </span>
             </div>
           </div>
           
@@ -711,10 +933,40 @@ const ServiceProviderDashboard = () => {
                   <span className="notification-badge">{unreadNotifications}</span>
                 )}
               </button>
+              {isNotificationsOpen && (
+                <div className="notifications-dropdown">
+                  <div className="notifications-header">
+                    <h3>Notifications</h3>
+                    <button 
+                      className="mark-all-read"
+                      onClick={() => setNotifications(prev => prev.map(n => ({ ...n, unread: false })))}
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+                  <div className="notifications-list">
+                    {notifications.slice(0, 6).map(item => (
+                      <div key={item.id} className={`notification-item ${item.unread ? 'unread' : ''}`}>
+                        <div className="notification-icon">
+                          {item.type === 'job_request' && <Briefcase size={16} />}
+                          {item.type === 'schedule_change' && <Clock size={16} />}
+                          {item.type === 'payment' && <DollarSign size={16} />}
+                          {item.type === 'review' && <Star size={16} />}
+                        </div>
+                        <div className="notification-content">
+                          <h4>{item.title}</h4>
+                          <p>{item.message}</p>
+                          <span className="notification-time">{item.time}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               
                   <div className="user-menu">
                     <button 
-                      className="user-btn"
+                      className="user-profile-card"
                       onClick={(e) => {
                         console.log('👤 User button clicked, current state:', isProfileOpen);
                         e.preventDefault();
@@ -722,22 +974,50 @@ const ServiceProviderDashboard = () => {
                         setIsProfileOpen(!isProfileOpen);
                       }}
                     >
-                      <div className="user-avatar">
-                        {(() => {
-                          const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.photoURL;
-                          return avatar ? (
-                            <img src={avatar} alt="Profile" />
-                          ) : (
-                            <User size={16} />
-                          );
-                        })()}
-                      </div>
-                      <div className="user-info">
-                        <span className="user-name">{profile.name || 'Service Provider'}</span>
-                        <span className="user-role">Service Provider</span>
-                      </div>
-                      <div className="user-status">
-                        <div className="status-indicator"></div>
+                      <div className="profile-card-content">
+                        <div className="profile-avatar-section">
+                          <div className="profile-avatar">
+                            {(() => {
+                              // Priority: Provider profile photo > User metadata avatar
+                              const avatar = providerProfile?.profile_photo_url || 
+                                           user?.user_metadata?.avatar_url || 
+                                           user?.user_metadata?.picture || 
+                                           user?.user_metadata?.photoURL;
+                              return avatar ? (
+                                <img src={avatar} alt="Profile" />
+                              ) : (
+                                <User size={20} />
+                              );
+                            })()}
+                          </div>
+                          <div className="online-indicator"></div>
+                        </div>
+                        
+                        <div className="profile-details">
+                          <div className="profile-name">
+                            {providerProfile?.first_name && providerProfile?.last_name 
+                              ? `${providerProfile.first_name} ${providerProfile.last_name}`
+                              : profile.name || 'Service Provider'
+                            }
+                          </div>
+                          <div className="profile-specialization">{providerDetails?.specialization || 'Service Provider'}</div>
+                        </div>
+                        
+                        <div className="profile-status">
+                          <div className={`status-badge ${providerDetails?.status === 'pending_verification' ? 'pending' : 'active'}`}>
+                            {providerDetails?.status === 'pending_verification' ? (
+                              <>
+                                <Clock size={10} />
+                                <span>Pending</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle size={10} />
+                                <span>Active</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </button>
                 
@@ -746,7 +1026,11 @@ const ServiceProviderDashboard = () => {
                     <div className="user-info">
                       <div className="user-avatar-large">
                         {(() => {
-                          const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.photoURL;
+                          // Priority: Provider profile photo > User metadata avatar
+                          const avatar = providerProfile?.profile_photo_url || 
+                                       user?.user_metadata?.avatar_url || 
+                                       user?.user_metadata?.picture || 
+                                       user?.user_metadata?.photoURL;
                           return avatar ? (
                             <img src={avatar} alt="Profile" />
                           ) : (
@@ -755,8 +1039,19 @@ const ServiceProviderDashboard = () => {
                         })()}
                       </div>
                       <div>
-                        <h4>{profile.name}</h4>
+                        <h4>
+                          {providerProfile?.first_name && providerProfile?.last_name 
+                            ? `${providerProfile.first_name} ${providerProfile.last_name}`
+                            : profile.name
+                          }
+                        </h4>
                         <p>{profile.email}</p>
+                        {providerDetails?.specialization && (
+                          <p className="user-specialization">{providerDetails.specialization}</p>
+                        )}
+                        {providerDetails?.service_category_name && (
+                          <p className="user-category">{providerDetails.service_category_name}</p>
+                        )}
                       </div>
                     </div>
                     <div className="dropdown-actions">
@@ -764,9 +1059,9 @@ const ServiceProviderDashboard = () => {
                         <User size={16} />
                         Profile Settings
                       </button>
-                      <button onClick={() => setActiveTab('settings')}>
-                        <Settings size={16} />
-                        Preferences
+                      <button onClick={() => setIsChangePasswordModalOpen(true)}>
+                        <Key size={16} />
+                        Change Password
                       </button>
                       <hr />
                       <button 
@@ -791,37 +1086,7 @@ const ServiceProviderDashboard = () => {
           </div>
         </header>
 
-        {/* Notifications Dropdown */}
-        {isNotificationsOpen && (
-          <div className="notifications-dropdown">
-            <div className="notifications-header">
-              <h3>Notifications</h3>
-              <button 
-                className="mark-all-read"
-                onClick={() => setNotifications(prev => prev.map(n => ({ ...n, unread: false })))}
-              >
-                Mark all read
-              </button>
-            </div>
-            <div className="notifications-list">
-              {notifications.slice(0, 6).map(item => (
-                <div key={item.id} className={`notification-item ${item.unread ? 'unread' : ''}`}>
-                  <div className="notification-icon">
-                    {item.type === 'job_request' && <Briefcase size={16} />}
-                    {item.type === 'schedule_change' && <Clock size={16} />}
-                    {item.type === 'payment' && <DollarSign size={16} />}
-                    {item.type === 'review' && <Star size={16} />}
-                  </div>
-                  <div className="notification-content">
-                    <h4>{item.title}</h4>
-                    <p>{item.message}</p>
-                    <span className="notification-time">{item.time}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        
 
         {/* Page Content */}
         <div className="page-content">
@@ -840,6 +1105,78 @@ const ServiceProviderDashboard = () => {
                   <LoadingSkeleton />
                 ) : (
                   <>
+              {/* Service Provider Information Card */}
+              {providerDetails && (
+                <motion.div 
+                  className="provider-info-card"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0, ...glowKeyframes }}
+                  transition={{ delay: 0.15, duration: prefersReducedMotion ? 0.2 : 0.5, repeat: prefersReducedMotion ? 0 : Infinity, repeatType: 'mirror', repeatDelay: 4 }}
+                >
+                  <div className="provider-info-header">
+                    <div className="provider-avatar">
+                      <User size={24} />
+                    </div>
+                    <div className="provider-details">
+                      <h3>{profile.name || 'Service Provider'}</h3>
+                      <p className="provider-role">
+                        {toTitleCase(providerDetails.role || 'service_provider')} • 
+                        {providerDetails.status ? ` ${toTitleCase(providerDetails.status)}` : ' Active'}
+                      </p>
+                    </div>
+                    <div className="provider-status">
+                      <div className={`status-indicator ${providerDetails.status === 'pending_verification' ? 'pending' : 'active'}`}>
+                        {providerDetails.status === 'pending_verification' ? <Clock size={12} /> : <CheckCircle size={12} />}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <motion.div className="provider-specialization" variants={containerStagger} initial="hidden" animate="show">
+                    <motion.div className="specialization-item" variants={itemRise} whileHover={softHover.whileHover} whileTap={softHover.whileTap}>
+                      <div className="specialization-icon">
+                        <Briefcase size={16} />
+                      </div>
+                      <div className="specialization-content">
+                        <span className="specialization-label">Specialization</span>
+                        <span className="specialization-value">{providerDetails.specialization || 'Not specified'}</span>
+                      </div>
+                    </motion.div>
+                    
+                    <motion.div className="specialization-item" variants={itemRise} whileHover={softHover.whileHover} whileTap={softHover.whileTap}>
+                      <div className="specialization-icon">
+                        <Package size={16} />
+                      </div>
+                      <div className="specialization-content">
+                        <span className="specialization-label">Category</span>
+                        <span className="specialization-value">{providerDetails.service_category_name || 'Not selected'}</span>
+                      </div>
+                    </motion.div>
+                    
+                    <motion.div className="specialization-item" variants={itemRise} whileHover={softHover.whileHover} whileTap={softHover.whileTap}>
+                      <div className="specialization-icon">
+                        <Target size={16} />
+                      </div>
+                      <div className="specialization-content">
+                        <span className="specialization-label">Service</span>
+                        <span className="specialization-value">{providerDetails.service_name || 'Not selected'}</span>
+                      </div>
+                    </motion.div>
+                    
+                    {mergedExperienceYears !== undefined && (
+                      <motion.div className="specialization-item" variants={itemRise} whileHover={softHover.whileHover} whileTap={softHover.whileTap}>
+                        <div className="specialization-icon">
+                          <Award size={16} />
+                        </div>
+                        <div className="specialization-content">
+                          <span className="specialization-label">Experience</span>
+                          <span className="specialization-value">{mergedExperienceYears} years</span>
+                        </div>
+                      </motion.div>
+                    )}
+                  </motion.div>
+                </motion.div>
+              )}
+
               {/* Stats Cards */}
               <div className="stats-section">
                 <div className="stats-grid">
@@ -907,10 +1244,134 @@ const ServiceProviderDashboard = () => {
                 </div>
               </div>
 
+              {/* Matching Jobs - Jobs that match your specialization */}
+              {matchingJobs.length > 0 && (
+                <div className="content-section">
+                  <div className="section-header">
+                    <h2>Jobs Matching Your Specialization</h2>
+                    <div className="section-subtitle">
+                      <Target size={16} />
+                      <span>{providerDetails?.specialization || 'Your specialization'}</span>
+                    </div>
+                  </div>
+                  <div className="jobs-grid">
+                    {matchingJobs.slice(0, 4).map((job, index) => (
+                      <motion.div 
+                        key={job.id} 
+                        className={`job-card ${job.isAssigned ? 'assigned' : 'available'}`}
+                        initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ 
+                          duration: 0.4, 
+                          delay: index * 0.1 + 0.8,
+                          type: "spring",
+                          stiffness: 120,
+                          damping: 20
+                        }}
+                        whileHover={{ 
+                          scale: 1.03, 
+                          y: -8,
+                          transition: { duration: 0.2 }
+                        }}
+                        whileTap={{ scale: 0.97 }}
+                      >
+                        <motion.div 
+                          className="job-header"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: index * 0.1 + 1.0 }}
+                        >
+                          <h4>{job.serviceType}</h4>
+                          <div className="job-badges">
+                            <motion.span 
+                              className="status-badge" 
+                              style={{ backgroundColor: getStatusColor(job.status) }}
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ 
+                                delay: index * 0.1 + 1.1,
+                                type: "spring",
+                                stiffness: 300
+                              }}
+                            >
+                              {job.status.replace('_', ' ')}
+                            </motion.span>
+                            {job.isAssigned ? (
+                              <span className="assignment-badge assigned">
+                                <CheckCircle size={12} />
+                                Assigned
+                              </span>
+                            ) : (
+                              <span className="assignment-badge available">
+                                <Clock size={12} />
+                                Available
+                              </span>
+                            )}
+                          </div>
+                        </motion.div>
+                        <motion.div 
+                          className="job-client"
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.1 + 1.2 }}
+                        >
+                          <User size={14} />
+                          {job.customerName}
+                        </motion.div>
+                        <motion.div 
+                          className="job-details"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: index * 0.1 + 1.3 }}
+                        >
+                          <div className="job-time">
+                            <Clock size={12} />
+                            {job.scheduledDate} at {job.scheduledTime}
+                          </div>
+                          <div className="job-location">
+                            <MapPin size={12} />
+                            {job.address}
+                          </div>
+                        </motion.div>
+                        <motion.div 
+                          className="job-amount"
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ 
+                            delay: index * 0.1 + 1.4,
+                            type: "spring",
+                            stiffness: 200
+                          }}
+                        >
+                          ₹{job.amount}
+                        </motion.div>
+                        {!job.isAssigned && (
+                          <motion.div 
+                            className="job-actions"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.1 + 1.5 }}
+                          >
+                            <button 
+                              className="btn-primary btn-sm"
+                              onClick={() => handleAcceptJob(job.id)}
+                              disabled={actionLoading}
+                            >
+                              <CheckCircle size={14} />
+                              {actionLoading ? 'Accepting...' : 'Accept Job'}
+                            </button>
+                          </motion.div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Recent Jobs */}
               <div className="content-section">
                 <div className="section-header">
-                  <h2>Recent Jobs</h2>
+                  <h2>Your Assigned Jobs</h2>
                   <button 
                     className="view-all-btn"
                     onClick={() => setActiveTab('jobs')}
@@ -995,7 +1456,7 @@ const ServiceProviderDashboard = () => {
                           stiffness: 200
                         }}
                       >
-                        ${job.amount}
+                        ₹{job.amount}
                       </motion.div>
                     </motion.div>
                   ))}
@@ -1028,10 +1489,26 @@ const ServiceProviderDashboard = () => {
                   <div className="loading-placeholder" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
                     <LoadingSpinner size="small" text="Loading jobs..." />
                   </div>
+                ) : jobsError ? (
+                  <div className="error-state" style={{ padding: '2rem', textAlign: 'center', color: '#ef4444' }}>
+                    <AlertCircle size={48} style={{ opacity: 0.7, marginBottom: '1rem' }} />
+                    <p>{jobsError}</p>
+                    <button 
+                      className="btn-primary" 
+                      onClick={fetchProviderBookings}
+                      style={{ marginTop: '1rem' }}
+                    >
+                      <RefreshCw size={16} />
+                      Try Again
+                    </button>
+                  </div>
                 ) : filteredJobs.length === 0 ? (
                   <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
                     <Briefcase size={48} style={{ opacity: 0.5, marginBottom: '1rem' }} />
-                    <p>No jobs found</p>
+                    <p>No jobs assigned to you yet</p>
+                    <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
+                      Jobs matching your specialization will appear here when customers book services.
+                    </p>
                   </div>
                 ) : filteredJobs.map(job => {
                   const StatusIcon = getStatusIcon(job.status);
@@ -1061,7 +1538,7 @@ const ServiceProviderDashboard = () => {
                         </div>
                         <div className="detail-item">
                           <DollarSign size={16} />
-                          ${job.amount}
+                          ₹{job.amount}
                         </div>
                         <div className="detail-item">
                           <Phone size={16} />
@@ -1179,7 +1656,7 @@ const ServiceProviderDashboard = () => {
                   </div>
                   <div className="summary-content">
                     <h3>Total Earnings</h3>
-                    <div className="summary-amount">${earnings.reduce((sum, earning) => sum + earning.amount, 0)}</div>
+                    <div className="summary-amount">₹{earnings.reduce((sum, earning) => sum + earning.amount, 0)}</div>
                     <div className="summary-change positive">+12% this month</div>
                   </div>
                 </div>
@@ -1228,7 +1705,7 @@ const ServiceProviderDashboard = () => {
                     <div className="table-cell">{earning.customer}</div>
                     <div className="table-cell">{earning.service}</div>
                     <div className="table-cell">{earning.date}</div>
-                    <div className="table-cell earning-amount">${earning.amount}</div>
+                    <div className="table-cell earning-amount">₹{earning.amount}</div>
                     <div className={`table-cell earning-status ${earning.status}`}>
                       {earning.status}
                     </div>
@@ -1321,79 +1798,114 @@ const ServiceProviderDashboard = () => {
 
           {/* Profile Tab */}
           {activeTab === 'profile' && (
-            <div className="tab-content">
+            <div className="tab-content profile-tab-enhanced">
               <div className="content-header">
-                <h1>Profile & Skills</h1>
+                <div className="header-left">
+                  <h1>Profile & Skills</h1>
+                  <p>Manage your professional profile and service offerings</p>
+                </div>
                 <div className="header-actions">
+                  {isProfileComplete ? (
                   <button className="btn-primary" disabled={profileLoading}>
                     {profileLoading ? <LoadingSpinner size="small" /> : <Save size={16} />}
                     Save Changes
                   </button>
+                  ) : (
+                    <button 
+                      className="btn-primary"
+                      onClick={() => setIsProfileCompletionOpen(true)}
+                    >
+                      <User size={16} />
+                      Complete Profile
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="profile-form">
-                <div className="profile-header">
-                  <div className="profile-avatar-large">
-                    <User size={32} />
-                  </div>
-                  <div className="profile-info">
-                    <h2>{profile.name}</h2>
-                    <p>{profile.email}</p>
-                    <p>{profile.phone}</p>
-                  </div>
-                </div>
-
-                <div className="form-sections">
-                  <div className="form-section">
-                    <h3>Personal Information</h3>
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label>Full Name</label>
-                        <input 
-                          type="text" 
-                          value={profile.name}
-                          onChange={(e) => setProfile(prev => ({ ...prev, name: e.target.value }))}
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Phone Number</label>
-                        <input 
-                          type="tel" 
-                          value={profile.phone}
-                          onChange={(e) => setProfile(prev => ({ ...prev, phone: e.target.value }))}
-                        />
+              {/* Profile Completion Notice */}
+              {isProfileCheckReady && !isProfileComplete && (
+                <div className="profile-completion-banner">
+                  <div className="banner-content">
+                    <div className="banner-icon">
+                      <AlertCircle size={24} />
+                    </div>
+                    <div className="banner-text">
+                      <h3>Complete Your Profile to Access Work</h3>
+                      <p>
+                        Your profile is incomplete. Complete it to start receiving service requests and access job opportunities.
+                      </p>
+                      <div className="banner-benefits">
+                        <div className="benefit-item">
+                          <CheckCircle size={16} />
+                          <span>Get matched with customers</span>
+                        </div>
+                        <div className="benefit-item">
+                          <CheckCircle size={16} />
+                          <span>Start receiving job requests</span>
+                        </div>
+                        <div className="benefit-item">
+                          <CheckCircle size={16} />
+                          <span>Build your professional reputation</span>
+                        </div>
+                        <div className="benefit-item">
+                          <CheckCircle size={16} />
+                          <span>Access premium features</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="form-section">
-                    <h3>Service Skills</h3>
-                    <div className="service-tags">
-                      {profile.skills.map((skill, index) => (
-                        <span key={index} className="tag">
-                          {skill}
-                          <button 
-                            onClick={() => {
-                              setProfile(prev => ({
-                                ...prev,
-                                skills: prev.skills.filter((_, i) => i !== index)
-                              }));
-                            }}
-                            className="tag-remove"
-                          >
-                            <X size={14} />
-                          </button>
-                        </span>
-                      ))}
-                      <button className="add-tag-btn">
-                        <Plus size={16} />
-                        Add Skill
+                    <div className="banner-actions">
+                      <button 
+                        onClick={() => setIsProfileCompletionOpen(true)}
+                        className="complete-profile-cta"
+                      >
+                        <User size={20} />
+                        Complete Profile Now
                       </button>
                     </div>
                   </div>
                 </div>
+              )}
+
+              {providerDetails?.status === 'pending_verification' && isProfileComplete && (
+                <div className="profile-completion-banner">
+                  <div className="banner-content">
+                    <div className="banner-icon">
+                      <AlertCircle size={24} />
+                    </div>
+                    <div className="banner-text">
+                      <h3>Profile Under Review</h3>
+                      <p>
+                        Your profile is currently being reviewed by our team. 
+                        You can still receive service requests while we verify your information.
+                      </p>
+                    </div>
+                    <div className="banner-actions">
+                      <button className="btn-outline">
+                        <FileText size={16} />
+                        View Requirements
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Only show profile form when profile is complete */}
+              {isProfileComplete && (
+              <div className="profile-form-enhanced">
+                {/* Use the new EditableProfileSections component */}
+                <EditableProfileSections 
+                  providerId={user?.id}
+                  onProfileUpdate={(action) => {
+                    if (action === 'open-completion-modal') {
+                      setIsProfileCompletionOpen(true);
+                    } else {
+                      // Refresh profile data
+                      fetchProviderProfile();
+                    }
+                  }}
+                />
               </div>
+              )}
             </div>
           )}
 
@@ -1637,7 +2149,7 @@ const ServiceProviderDashboard = () => {
               <p><strong>Customer:</strong> {selectedJob.customerName}</p>
               <p><strong>Date & Time:</strong> {selectedJob.scheduledDate} at {selectedJob.scheduledTime}</p>
               <p><strong>Location:</strong> {selectedJob.address}</p>
-              <p><strong>Amount:</strong> ${selectedJob.amount}</p>
+              <p><strong>Amount:</strong> ₹{selectedJob.amount}</p>
               
               {selectedJob.description && (
                 <div>
@@ -1740,6 +2252,22 @@ const ServiceProviderDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Profile Completion Modal */}
+      <ProfileCompletionModal
+        isOpen={isProfileCompletionOpen}
+        onClose={() => setIsProfileCompletionOpen(false)}
+        onComplete={handleProfileCompletion}
+        onProfileUpdated={fetchProviderProfile}
+        user={user}
+      />
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordModalOpen}
+        onClose={() => setIsChangePasswordModalOpen(false)}
+        userId={user?.id}
+      />
     </div>
   );
 };

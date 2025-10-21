@@ -10,6 +10,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useSearch } from '../contexts/SearchContext';
 import Logo from './Logo';
 import '../pages/admin/AdminPages.css';
+import '../pages/dashboards/AdminDashboard.css';
 
 const AdminLayout = ({ children }) => {
   const navigate = useNavigate();

@@ -4,7 +4,7 @@ import { useInView } from 'react-intersection-observer';
 import { 
   ArrowLeft, Calendar, Clock, MapPin, User, Phone, MessageSquare, 
   CreditCard, Shield, CheckCircle, AlertCircle, Star, 
-  ArrowRight, Bell, LogOut, ChevronDown, DollarSign, Navigation
+  ArrowRight, Bell, LogOut, ChevronDown, IndianRupee, Navigation
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../hooks/useAuth';
@@ -30,7 +30,7 @@ const prefetchDashboard = () => {
 const BookingPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { service, user } = location.state || {};
+  const { service, user, cartItems = [], isMultiService = false } = location.state || {};
   const { logout } = useAuth();
   
   // Header refs and state - Same as Customer Dashboard
@@ -103,10 +103,11 @@ const BookingPage = () => {
 
   // Redirect if no service data
   useEffect(() => {
-    if (!service || !user) {
+    const hasMulti = Array.isArray(cartItems) && cartItems.length > 0;
+    if ((!service && !hasMulti) || !user) {
       navigate('/dashboard');
     }
-  }, [service, user, navigate]);
+  }, [service, cartItems, user, navigate]);
 
   // Ensure page opens at the top when navigating here
   useEffect(() => {
@@ -494,6 +495,18 @@ const BookingPage = () => {
   };
 
   const calculateTotal = () => {
+    // Multi-service cart uses the same breakdown as cart summary on dashboard: flat fee + GST
+    if (isMultiService && Array.isArray(cartItems) && cartItems.length > 0) {
+      const subtotal = cartItems.reduce((sum, item) => {
+        const hasOffer = item.offer_enabled && item.offer_price;
+        const price = hasOffer ? item.offer_price : item.price;
+        const qty = item.quantity || 1;
+        return sum + price * qty;
+      }, 0);
+      const serviceFee = 50; // keep consistent with CustomerDashboard cart summary
+      const tax = Math.round((subtotal + serviceFee) * 0.18);
+      return Math.round(subtotal + serviceFee + tax);
+    }
     if (!service) return 0;
     const basePrice = service.offer_enabled && service.offer_price ? service.offer_price : service.price;
     const serviceFee = Math.round(basePrice * 0.1); // 10% service fee
@@ -508,14 +521,15 @@ const BookingPage = () => {
     }
   }, [user?.id]);
 
-  if (!service || !user) {
+  if ((!service && !(Array.isArray(cartItems) && cartItems.length > 0)) || !user) {
     return null; // Will redirect in useEffect
   }
 
   const total = calculateTotal();
-  const basePrice = service.offer_enabled && service.offer_price ? service.offer_price : service.price;
-  const serviceFee = Math.round(basePrice * 0.1);
-  const tax = Math.round((basePrice + serviceFee) * 0.18);
+  const isMulti = isMultiService && Array.isArray(cartItems) && cartItems.length > 0;
+  const basePrice = !isMulti && service ? (service.offer_enabled && service.offer_price ? service.offer_price : service.price) : 0;
+  const serviceFee = !isMulti ? Math.round(basePrice * 0.1) : 0;
+  const tax = !isMulti ? Math.round((basePrice + serviceFee) * 0.18) : 0;
 
   const handleLogout = async () => {
     await logout();
@@ -597,7 +611,7 @@ const BookingPage = () => {
                             <div key={item.id} className={`notification-item ${item.type}`}>
                               <div className="notification-icon-wrapper">
                                 {item.type === 'reminder' && <Clock size={16} />}
-                                {item.type === 'billing' && <DollarSign size={16} />}
+                                {item.type === 'billing' && <IndianRupee size={16} />}
                                 {item.type === 'security' && <Shield size={16} />}
                                 {item.type === 'service' && <CheckCircle size={16} />}
                               </div>
@@ -727,7 +741,7 @@ const BookingPage = () => {
             transition={{ delay: 0.5, duration: 0.6 }}
           >
             <div className="service-title-wrapper">
-              <h1>Book {service.name}</h1>
+              <h1>{isMulti ? `Book ${cartItems.length} Services` : `Book ${service?.name || 'Service'}`}</h1>
               <div className="title-accent"></div>
             </div>
             <p className="subtitle">Complete your booking in {steps.length} easy steps</p>
@@ -866,6 +880,186 @@ const BookingPage = () => {
                     <h3>Service Details</h3>
                   </div>
                   <div className="enhanced-service-overview">
+                    {isMulti ? (
+                      <>
+                        {/* Multi-service cart list */}
+                        <motion.div 
+                          className="enhanced-service-card"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.6, ease: "easeOut" }}
+                        >
+                          <div className="service-header">
+                            <div className="service-title-section">
+                              <motion.h4 
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: 0.2, duration: 0.5 }}
+                              >
+                                Cart Items ({cartItems.length})
+                              </motion.h4>
+                              <motion.div 
+                                className="cart-summary-info"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.3, duration: 0.5 }}
+                                style={{ marginTop: '8px', fontSize: '14px', color: '#64748b' }}
+                              >
+                                {(() => {
+                                  const categories = [...new Set(cartItems.map(item => item.category_name).filter(Boolean))];
+                                  const totalQuantity = cartItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
+                                  return (
+                                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                                      <span>Total Items: {totalQuantity}</span>
+                                      {categories.length > 0 && (
+                                        <span>Categories: {categories.join(', ')}</span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </motion.div>
+                            </div>
+                          </div>
+                          <div className="enhanced-service-meta">
+                            {cartItems.map((item) => {
+                              const hasOffer = item.offer_enabled && item.offer_price;
+                              const unit = hasOffer ? item.offer_price : item.price;
+                              const qty = item.quantity || 1;
+                              const lineTotal = unit * qty;
+                              return (
+                                <div key={item.id} className="cart-item-card" style={{ 
+                                  border: '1px solid #e2e8f0', 
+                                  borderRadius: '12px', 
+                                  padding: '16px', 
+                                  marginBottom: '12px',
+                                  backgroundColor: '#f8fafc'
+                                }}>
+                                  <div className="cart-item-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                                    <div className="cart-item-icon" style={{ 
+                                      width: '40px', 
+                                      height: '40px', 
+                                      borderRadius: '8px', 
+                                      backgroundColor: '#e2e8f0',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '20px'
+                                    }}>
+                                      {item.icon_url ? (
+                                        <img src={item.icon_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+                                      ) : (
+                                        <span>🔧</span>
+                                      )}
+                                    </div>
+                                    <div className="cart-item-info" style={{ flex: 1 }}>
+                                      <h5 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#0f172a' }}>
+                                        {item.name}
+                                      </h5>
+                                      {item.description && (
+                                        <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#64748b', lineHeight: '1.4' }}>
+                                          {item.description.length > 80 ? `${item.description.substring(0, 80)}...` : item.description}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className="cart-item-price" style={{ textAlign: 'right' }}>
+                                      <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
+                                        ₹{lineTotal}
+                                      </div>
+                                      {qty > 1 && (
+                                        <div style={{ fontSize: '12px', color: '#64748b' }}>
+                                          ₹{unit} × {qty}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="cart-item-details" style={{ 
+                                    display: 'flex', 
+                                    justifyContent: 'space-between', 
+                                    alignItems: 'center',
+                                    fontSize: '14px',
+                                    color: '#64748b'
+                                  }}>
+                                    <div className="cart-item-meta" style={{ display: 'flex', gap: '16px' }}>
+                                      {item.duration && (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <Clock size={14} />
+                                          {item.duration}
+                                        </span>
+                                      )}
+                                      {item.category_name && (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <Star size={14} />
+                                          {item.category_name}
+                                        </span>
+                                      )}
+                                    </div>
+                                    
+                                    {hasOffer && (
+                                      <div className="offer-badge" style={{
+                                        backgroundColor: '#dcfce7',
+                                        color: '#166534',
+                                        padding: '4px 8px',
+                                        borderRadius: '6px',
+                                        fontSize: '12px',
+                                        fontWeight: 600
+                                      }}>
+                                        Save ₹{item.price - item.offer_price}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </motion.div>
+
+                        {/* Multi-service price breakdown */}
+                        <motion.div 
+                          className="enhanced-price-breakdown"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.2, duration: 0.6 }}
+                        >
+                          <div className="price-header">
+                            <h4>Price Breakdown</h4>
+                            <div className="price-accent"></div>
+                          </div>
+                          {(() => {
+                            const subtotal = cartItems.reduce((sum, item) => {
+                              const hasOffer = item.offer_enabled && item.offer_price;
+                              const price = hasOffer ? item.offer_price : item.price;
+                              const qty = item.quantity || 1;
+                              return sum + price * qty;
+                            }, 0);
+                            const fee = 50;
+                            const taxMulti = Math.round((subtotal + fee) * 0.18);
+                            return (
+                              <div className="price-items">
+                                <div className="price-item">
+                                  <span className="price-label">Subtotal</span>
+                                  <span className="price-value">₹{subtotal}</span>
+                                </div>
+                                <div className="price-item">
+                                  <span className="price-label">Service Fee</span>
+                                  <span className="price-value">₹{fee}</span>
+                                </div>
+                                <div className="price-item">
+                                  <span className="price-label">Tax (18%)</span>
+                                  <span className="price-value">₹{taxMulti}</span>
+                                </div>
+                                <div className="price-divider"></div>
+                                <div className="price-item total-price">
+                                  <span className="price-label">Total Amount</span>
+                                  <span className="price-value total">₹{subtotal + fee + taxMulti}</span>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </motion.div>
+                      </>
+                    ) : (
+                    <>
                     {/* Enhanced Service Card */}
                     <motion.div 
                       className="enhanced-service-card"
@@ -1012,6 +1206,8 @@ const BookingPage = () => {
                         </div>
                       </div>
                     </motion.div>
+                    </>
+                    )}
                   </div>
                 </div>
               )}
@@ -1092,7 +1288,7 @@ const BookingPage = () => {
                         <div className="duration-card">
                           <Clock size={20} />
                           <div className="duration-details">
-                            <span className="duration-time">{service.duration || '1 hour'}</span>
+                            <span className="duration-time">{isMulti ? 'Multiple services' : (service?.duration || '1 hour')}</span>
                             <span className="duration-label">Estimated Duration</span>
                           </div>
                         </div>
@@ -1272,27 +1468,235 @@ const BookingPage = () => {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, ease: "easeOut" }}
             >
-              <div className="sidebar-header">
-                <h4>Booking Summary</h4>
-                <div className="header-accent"></div>
+              <div className="sidebar-header" style={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                borderRadius: '12px 12px 0 0',
+                padding: '20px',
+                margin: '-20px -20px 20px -20px',
+                color: 'white'
+              }}>
+                <h4 style={{
+                  margin: 0,
+                  fontSize: '20px',
+                  fontWeight: '700',
+                  color: 'white',
+                  textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}>Booking Summary</h4>
+                <div style={{
+                  height: '3px',
+                  background: 'linear-gradient(90deg, #ffd700 0%, #ffed4e 100%)',
+                  borderRadius: '2px',
+                  marginTop: '8px',
+                  boxShadow: '0 2px 4px rgba(255,215,0,0.3)'
+                }}></div>
               </div>
               
               <div className="summary-content">
-                {/* Service Details */}
-                <motion.div 
-                  className="enhanced-summary-item"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1, duration: 0.5 }}
-                >
-                  <div className="summary-label">
-                    <Star size={16} />
-                    Service
-                  </div>
-                  <div className="summary-value service-value">
-                    {service.name}
-                  </div>
-                </motion.div>
+                {/* Service Details or Cart Items */}
+                {isMulti ? (
+                  <motion.div 
+                    className="enhanced-summary-item"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1, duration: 0.5 }}
+                    style={{
+                      background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      marginBottom: '16px',
+                      border: '1px solid #cbd5e1',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                      color: '#1f2937'
+                    }}
+                  >
+                    <div className="summary-label" style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '12px',
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      color: '#374151'
+                    }}>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                        borderRadius: '50%',
+                        padding: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Star size={16} color="white" />
+                      </div>
+                      Cart Items
+                    </div>
+                    <div className="summary-value service-value" style={{ width: '100%', color: '#1f2937' }}>
+                       {cartItems.map((ci) => {
+                         const hasOffer = ci.offer_enabled && ci.offer_price;
+                         const unit = hasOffer ? ci.offer_price : ci.price;
+                         const qty = ci.quantity || 1;
+                         return (
+                           <div key={ci.id} style={{ 
+                             display: 'flex !important', 
+                             justifyContent: 'space-between !important', 
+                             alignItems: 'flex-start !important',
+                             marginBottom: '12px !important',
+                             padding: '16px !important',
+                             background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important',
+                             borderRadius: '12px !important',
+                             border: '1px solid #e2e8f0 !important',
+                             boxShadow: '0 4px 16px rgba(0,0,0,0.08) !important',
+                             opacity: '1 !important',
+                             visibility: 'visible !important',
+                             color: '#1e293b !important',
+                             minHeight: '70px',
+                             transition: 'all 0.3s ease !important',
+                             position: 'relative !important',
+                             overflow: 'hidden !important'
+                           }}>
+                             {/* Subtle accent line */}
+                             <div style={{
+                               position: 'absolute',
+                               top: 0,
+                               left: 0,
+                               right: 0,
+                               height: '3px',
+                               background: 'linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)',
+                               borderRadius: '12px 12px 0 0'
+                             }}></div>
+                             
+                             <div style={{ 
+                               flex: '1 !important', 
+                               marginRight: '12px !important',
+                               color: '#1e293b !important',
+                               paddingTop: '8px'
+                             }}>
+                               <div style={{ 
+                                 fontWeight: '700 !important', 
+                                 fontSize: '16px !important', 
+                                 color: '#1e293b !important', 
+                                 marginBottom: '6px !important',
+                                 opacity: '1 !important',
+                                 visibility: 'visible !important',
+                                 lineHeight: '1.3'
+                               }}>
+                                 {ci.name}
+                               </div>
+                               {qty > 1 && (
+                                 <div style={{ 
+                                   fontSize: '13px !important', 
+                                   color: '#6b7280 !important', 
+                                   marginBottom: '4px !important', 
+                                   fontWeight: '600 !important',
+                                   opacity: '1 !important',
+                                   visibility: 'visible !important',
+                                   background: '#f3f4f6',
+                                   padding: '2px 8px',
+                                   borderRadius: '6px',
+                                   display: 'inline-block'
+                                 }}>
+                                   Qty: {qty}
+                                 </div>
+                               )}
+                               <div style={{ display: 'flex', gap: '12px', marginTop: '4px', color: '#1f2937' }}>
+                                 {ci.duration && (
+                                   <div style={{ 
+                                     fontSize: '12px !important', 
+                                     color: '#1f2937 !important', 
+                                     display: 'inline-flex !important', 
+                                     alignItems: 'center !important', 
+                                     gap: '4px !important', 
+                                     fontWeight: '600 !important',
+                                     opacity: '1 !important',
+                                     visibility: 'visible !important',
+                                     background: '#ffffff !important',
+                                     padding: '6px 10px !important',
+                                     borderRadius: '8px !important',
+                                     border: '2px solid #3b82f6 !important',
+                                     boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2) !important',
+                                     minWidth: '80px !important',
+                                     justifyContent: 'center !important'
+                                   }}>
+                                     <Clock size={14} color="#3b82f6" />
+                                     <span style={{ color: '#1f2937 !important', fontWeight: '600 !important' }}>{ci.duration}</span>
+                                   </div>
+                                 )}
+                                 {ci.category_name && (
+                                   <div style={{ 
+                                     fontSize: '12px !important', 
+                                     color: '#1f2937 !important', 
+                                     display: 'inline-flex !important', 
+                                     alignItems: 'center !important', 
+                                     gap: '4px !important', 
+                                     fontWeight: '600 !important',
+                                     opacity: '1 !important',
+                                     visibility: 'visible !important',
+                                     background: '#ffffff !important',
+                                     padding: '6px 10px !important',
+                                     borderRadius: '8px !important',
+                                     border: '2px solid #8b5cf6 !important',
+                                     boxShadow: '0 2px 4px rgba(139, 92, 246, 0.2) !important',
+                                     minWidth: '80px !important',
+                                     justifyContent: 'center !important'
+                                   }}>
+                                     <Star size={14} color="#8b5cf6" />
+                                     <span style={{ color: '#1f2937 !important', fontWeight: '600 !important' }}>{ci.category_name}</span>
+                                   </div>
+                                 )}
+                               </div>
+                             </div>
+                             <div style={{ 
+                               textAlign: 'right !important',
+                               color: '#1e293b !important',
+                               paddingTop: '8px'
+                             }}>
+                               <div style={{ 
+                                 fontWeight: '800 !important', 
+                                 fontSize: '18px !important', 
+                                 color: '#1e293b !important',
+                                 opacity: '1 !important',
+                                 visibility: 'visible !important',
+                                 marginBottom: '4px'
+                               }}>
+                                 ₹{unit * qty}
+                               </div>
+                               {hasOffer && (
+                                 <div style={{ 
+                                   fontSize: '11px !important', 
+                                   color: '#059669 !important', 
+                                   fontWeight: '700 !important',
+                                   opacity: '1 !important',
+                                   visibility: 'visible !important',
+                                   background: '#dcfce7',
+                                   padding: '2px 6px',
+                                   borderRadius: '4px',
+                                   border: '1px solid #bbf7d0'
+                                 }}>
+                                   Save ₹{ci.price - ci.offer_price}
+                                 </div>
+                               )}
+                             </div>
+                           </div>
+                         );
+                       })}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    className="enhanced-summary-item"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1, duration: 0.5 }}
+                  >
+                    <div className="summary-label">
+                      <Star size={16} />
+                      Service
+                    </div>
+                    <div className="summary-value service-value">
+                      {service.name}
+                    </div>
+                  </motion.div>
+                )}
 
                 {/* Date & Time */}
                 {selectedDate && selectedTime && (
@@ -1369,17 +1773,85 @@ const BookingPage = () => {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4, duration: 0.5 }}
+                  style={{
+                    background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    marginTop: '16px',
+                    border: '1px solid #475569',
+                    boxShadow: '0 8px 24px rgba(30, 41, 59, 0.2)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
                 >
-                  <div className="summary-divider"></div>
+                  {/* Decorative elements */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '-20px',
+                    right: '-20px',
+                    width: '60px',
+                    height: '60px',
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                    borderRadius: '50%',
+                    opacity: 0.1
+                  }}></div>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-10px',
+                    left: '-10px',
+                    width: '40px',
+                    height: '40px',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    borderRadius: '50%',
+                    opacity: 0.1
+                  }}></div>
+                  
+                  <div className="summary-divider" style={{
+                    height: '1px',
+                    background: 'linear-gradient(90deg, transparent 0%, #64748b 50%, transparent 100%)',
+                    marginBottom: '16px'
+                  }}></div>
                   <div className="total-summary">
-                    <div className="total-row">
-                      <span className="total-label">
-                        <DollarSign size={16} />
+                    <div className="total-row" style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '8px'
+                    }}>
+                      <span className="total-label" style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontSize: '18px',
+                        fontWeight: '600',
+                        color: '#f1f5f9'
+                      }}>
+                        <div style={{
+                          background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                          borderRadius: '50%',
+                          padding: '6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          <IndianRupee size={16} color="white" />
+                        </div>
                         Total Amount
                       </span>
-                      <span className="total-amount">₹{total}</span>
+                      <span className="total-amount" style={{
+                        fontSize: '24px',
+                        fontWeight: '800',
+                        color: '#ffffff',
+                        textShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                      }}>₹{total}</span>
                     </div>
-                    <div className="total-note">
+                    <div className="total-note" style={{
+                      fontSize: '14px',
+                      color: '#94a3b8',
+                      fontWeight: '500',
+                      textAlign: 'center',
+                      fontStyle: 'italic'
+                    }}>
                       Includes service fee and taxes
                     </div>
                   </div>
@@ -1408,7 +1880,7 @@ const BookingPage = () => {
               ) : (
                 <button 
                   className="btn-primary btn-confirm"
-                  onClick={handleBooking}
+                  onClick={isMulti ? () => toastManager.error('Multi-service booking not yet supported. Please book services individually.') : handleBooking}
                   disabled={!canProceedToNext() || isLoading}
                 >
                   {isLoading ? (
@@ -1440,37 +1912,136 @@ const BookingPage = () => {
           >
             <motion.div 
               className="booking-success"
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
+              initial={{ scale: 0.8, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.8, opacity: 0, y: -20 }}
+              transition={{ 
+                type: "spring", 
+                stiffness: 300, 
+                damping: 30,
+                duration: 0.6 
+              }}
             >
-              <div className="success-icon">
-                <CheckCircle size={64} />
+              {/* Animated Background Elements */}
+              <div className="success-background">
+                <div className="floating-circle circle-1"></div>
+                <div className="floating-circle circle-2"></div>
+                <div className="floating-circle circle-3"></div>
               </div>
-              <h2>Booking Confirmed!</h2>
-              <p>Your service booking has been successfully confirmed.</p>
-              <div className="booking-details">
-                <div className="detail-item">
-                  <span>Service:</span>
-                  <span>{service.name}</span>
+
+              {/* Success Icon with Enhanced Animation */}
+              <motion.div 
+                className="success-icon"
+                initial={{ scale: 0, rotate: -180 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ 
+                  delay: 0.2, 
+                  type: "spring", 
+                  stiffness: 200, 
+                  damping: 15 
+                }}
+              >
+                <div className="icon-container">
+                  <CheckCircle size={72} />
+                  <div className="icon-ring"></div>
                 </div>
-                <div className="detail-item">
-                  <span>Date:</span>
-                  <span>{formatDisplayDate(selectedDate)}</span>
+              </motion.div>
+
+              {/* Success Content */}
+              <motion.div 
+                className="success-content"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4, duration: 0.6 }}
+              >
+                <h2>🎉 Booking Confirmed!</h2>
+                <p className="success-subtitle">Your service booking has been successfully confirmed and payment processed.</p>
+                
+                {/* Enhanced Booking Details Card */}
+                <div className="booking-details-card">
+                  <div className="details-header">
+                    <h3>Booking Summary</h3>
+                    <div className="booking-id">#BK{Date.now().toString().slice(-6)}</div>
+                  </div>
+                  
+                  <div className="details-grid">
+                    <div className="detail-item">
+                      <div className="detail-icon">
+                        <Star size={20} />
+                      </div>
+                      <div className="detail-content">
+                        <span className="detail-label">Service</span>
+                        <span className="detail-value">{isMulti ? `${cartItems.length} Services` : (service?.name || 'Service')}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="detail-item">
+                      <div className="detail-icon">
+                        <Calendar size={20} />
+                      </div>
+                      <div className="detail-content">
+                        <span className="detail-label">Date</span>
+                        <span className="detail-value">{formatDisplayDate(selectedDate)}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="detail-item">
+                      <div className="detail-icon">
+                        <Clock size={20} />
+                      </div>
+                      <div className="detail-content">
+                        <span className="detail-label">Time</span>
+                        <span className="detail-value">{selectedTime}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="detail-item">
+                      <div className="detail-icon">
+                        <CreditCard size={20} />
+                      </div>
+                      <div className="detail-content">
+                        <span className="detail-label">Amount Paid</span>
+                        <span className="detail-value amount">₹{total}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="detail-item">
-                  <span>Time:</span>
-                  <span>{selectedTime}</span>
+
+                {/* Next Steps */}
+                <div className="next-steps">
+                  <h4>What happens next?</h4>
+                  <div className="steps-list">
+                    <div className="step-item">
+                      <div className="step-number">1</div>
+                      <div className="step-text">You'll receive confirmation SMS & email</div>
+                    </div>
+                    <div className="step-item">
+                      <div className="step-number">2</div>
+                      <div className="step-text">Service provider will contact you 30 minutes before</div>
+                    </div>
+                    <div className="step-item">
+                      <div className="step-number">3</div>
+                      <div className="step-text">Enjoy your professional service!</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="detail-item">
-                  <span>Amount:</span>
-                  <span>₹{total}</span>
+
+                {/* Action Buttons */}
+                <div className="success-actions">
+                  <motion.button 
+                    className="btn-primary"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      setBookingSuccess(false);
+                      navigate('/dashboard');
+                    }}
+                  >
+                    <Shield size={18} />
+                    View Booking Details
+                  </motion.button>
                 </div>
-              </div>
-              <p className="success-message">
-                You will receive a confirmation SMS and email shortly. 
-                Our service provider will contact you before the scheduled time.
-              </p>
+              </motion.div>
             </motion.div>
           </motion.div>
         )}

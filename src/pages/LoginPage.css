@@ -803,4 +803,25 @@ a:hover {
 
 .auth-enhanced .divider {
   margin: 14px 0;
+}
+
+/* Spinner styles for loading states */
+.submit-btn .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid #ffffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 8px;
+}
+
+.submit-btn.loading {
+  opacity: 0.8;
+  cursor: not-allowed;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 } 

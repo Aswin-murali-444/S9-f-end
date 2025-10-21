@@ -9,6 +9,7 @@ import ToastContainer from '../../components/ToastContainer';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import useToast from '../../hooks/useToast';
 import useNetworkStatus from '../../hooks/useNetworkStatus';
+import cartWishlistService from '../../services/cartWishlistService';
 import { 
   Home, 
   Calendar, 
@@ -28,7 +29,7 @@ import {
   Play, 
   X, 
   Circle, 
-  DollarSign,
+  IndianRupee,
   Camera,
   CreditCard,
   MessageCircle,
@@ -63,7 +64,11 @@ import {
   ChevronLeft, 
   ChevronRight,
   ChevronDown,
-  LayoutGrid
+  LayoutGrid,
+  Minus,
+  Send,
+  RotateCcw,
+  Image
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
 import AllServicesIcon from '../../components/AllServicesIcon';
@@ -71,8 +76,11 @@ import Logo from '../../components/Logo';
 import CustomerProfileForm from '../../components/CustomerProfileForm';
 import './SharedDashboard.css';
 import './CustomerDashboard.css';
+import './EnhancedCartWishlist.css';
+import './AIAssistant.css';
 import { apiService } from '../../services/api';
 import { supabase } from '../../hooks/useAuth';
+import aiAssistantService from '../../services/aiAssistantService';
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
@@ -122,6 +130,18 @@ const CustomerDashboard = () => {
   const [selectedService, setSelectedService] = useState(null);
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersFilter, setOrdersFilter] = useState('all');
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [isOrderDetailsOpen, setIsOrderDetailsOpen] = useState(false);
+  const [viewedOrderId, setViewedOrderId] = useState(null);
+  
+  // AI Assistant states
+  const [aiMessages, setAiMessages] = useState([]);
+  const [aiInput, setAiInput] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiStatus, setAiStatus] = useState('active');
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
   const [recommendProvider, setRecommendProvider] = useState(false);
@@ -222,6 +242,7 @@ const CustomerDashboard = () => {
   const [error, setError] = useState(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const notificationsRef = useRef(null);
+  const chatMessagesRef = useRef(null);
   
   const [headerRef, headerInView] = useInView({ threshold: 0.3, triggerOnce: true });
   const [statsRef, statsInView] = useInView({ threshold: 0.2, triggerOnce: true });
@@ -265,6 +286,8 @@ const CustomerDashboard = () => {
   const [viewingCategory, setViewingCategory] = useState(null);
   const [cart, setCart] = useState([]);
   const [wishlist, setWishlist] = useState([]);
+  const [cartLoading, setCartLoading] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
 
   const iconForCategoryName = (name) => {
     const n = String(name || '').toLowerCase();
@@ -277,39 +300,106 @@ const CustomerDashboard = () => {
     return Settings;
   };
 
-  // Cart and Wishlist functions
-  const addToCart = (service) => {
-    setCart(prev => {
-      const existingItem = prev.find(item => item.id === service.id);
-      if (existingItem) {
-        return prev.map(item => 
-          item.id === service.id 
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      }
-      return [...prev, { ...service, quantity: 1 }];
-    });
+  // Cart and Wishlist functions - Updated to use persistent storage
+  const addToCart = async (service) => {
+    try {
+      setCartLoading(true);
+      await cartWishlistService.addToCart(service.id);
+      await loadCart(); // Reload cart from server
     toast.success(`${service.name} added to cart!`);
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      toast.error('Failed to add item to cart');
+    } finally {
+      setCartLoading(false);
+    }
   };
 
-  const removeFromCart = (serviceId) => {
-    setCart(prev => prev.filter(item => item.id !== serviceId));
+  const removeFromCart = async (serviceId) => {
+    try {
+      setCartLoading(true);
+      // Find the cart item ID
+      const cartItem = cart.find(item => item.id === serviceId);
+      if (cartItem && cartItem.cartItemId) {
+        await cartWishlistService.removeFromCart(cartItem.cartItemId);
+        await loadCart(); // Reload cart from server
     toast.success('Item removed from cart');
+      }
+    } catch (error) {
+      console.error('Error removing from cart:', error);
+      toast.error('Failed to remove item from cart');
+    } finally {
+      setCartLoading(false);
+    }
   };
 
-  const toggleWishlist = (service) => {
-    setWishlist(prev => {
-      const isLiked = prev.some(item => item.id === service.id);
-      if (isLiked) {
-        toast.success(`${service.name} removed from wishlist`);
-        return prev.filter(item => item.id !== service.id);
-      } else {
-        toast.success(`${service.name} added to wishlist!`);
-        return [...prev, service];
-      }
-    });
+  const updateCartItemQuantity = async (itemId, newQuantity) => {
+    try {
+      setCartLoading(true);
+      await cartWishlistService.updateCartItemQuantity(itemId, newQuantity);
+      await loadCart(); // Reload cart from server
+      toast.success('Cart updated');
+    } catch (error) {
+      console.error('Error updating cart item:', error);
+      toast.error('Failed to update cart item');
+    } finally {
+      setCartLoading(false);
+    }
   };
+
+  const toggleWishlist = async (service) => {
+    try {
+      setWishlistLoading(true);
+      const result = await cartWishlistService.toggleWishlist(service.id);
+      await loadWishlist(); // Reload wishlist from server
+      
+      if (result.action === 'added') {
+        toast.success(`${service.name} added to wishlist!`);
+      } else {
+        toast.success(`${service.name} removed from wishlist`);
+      }
+    } catch (error) {
+      console.error('Error toggling wishlist:', error);
+      toast.error('Failed to update wishlist');
+    } finally {
+      setWishlistLoading(false);
+    }
+  };
+
+  // Load cart and wishlist from server
+  const loadCart = async () => {
+    try {
+      const cartItems = await cartWishlistService.getCart();
+      setCart(cartItems);
+    } catch (error) {
+      console.error('Error loading cart:', error);
+      // Show error toast for debugging
+      toast.error(`Failed to load cart: ${error.message}`);
+    }
+  };
+
+  const loadWishlist = async () => {
+    try {
+      const wishlistItems = await cartWishlistService.getWishlist();
+      setWishlist(wishlistItems);
+    } catch (error) {
+      console.error('Error loading wishlist:', error);
+      // Show error toast for debugging
+      toast.error(`Failed to load wishlist: ${error.message}`);
+    }
+  };
+
+  // Load cart and wishlist when user changes
+  useEffect(() => {
+    if (user?.id) {
+      loadCart();
+      loadWishlist();
+    } else {
+      // Clear cart and wishlist when user logs out
+      setCart([]);
+      setWishlist([]);
+    }
+  }, [user?.id]);
 
   const isInCart = (serviceId) => cart.some(item => item.id === serviceId);
   const isInWishlist = (serviceId) => wishlist.some(item => item.id === serviceId);
@@ -733,6 +823,7 @@ const CustomerDashboard = () => {
         .eq('auth_user_id', user.id)
         .single();
       if (uErr || !dbUser) {
+        setOrders([]);
         return;
       }
       const { data, error } = await supabase
@@ -761,7 +852,12 @@ const CustomerDashboard = () => {
           paymentStatus: row.payment_status
         }));
         setOrders(mapped);
+      } else {
+        setOrders([]);
       }
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      setOrders([]);
     } finally {
       setOrdersLoading(false);
     }
@@ -770,6 +866,42 @@ const CustomerDashboard = () => {
   useEffect(() => {
     fetchOrders();
   }, [user?.id]);
+
+  // Helper functions for orders
+  const getFilteredOrders = () => {
+    if (ordersFilter === 'last30days') {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      return orders.filter(order => new Date(order.date) >= thirtyDaysAgo);
+    }
+    if (ordersFilter === 'completed') {
+      return orders.filter(order => order.bookingStatus === 'completed');
+    }
+    if (ordersFilter === 'pending') {
+      return orders.filter(order => order.bookingStatus === 'pending' || order.bookingStatus === 'confirmed');
+    }
+    if (ordersFilter === 'cancelled') {
+      return orders.filter(order => order.bookingStatus === 'cancelled');
+    }
+    return orders;
+  };
+
+  const getOrderStats = () => {
+    const filtered = getFilteredOrders();
+    const total = filtered.length;
+    const completed = filtered.filter(o => o.bookingStatus === 'completed').length;
+    const pending = filtered.filter(o => o.bookingStatus === 'pending' || o.bookingStatus === 'confirmed').length;
+    const cancelled = filtered.filter(o => o.bookingStatus === 'cancelled').length;
+    const totalAmount = filtered.reduce((sum, order) => sum + (order.total || 0), 0);
+    
+    return { total, completed, pending, cancelled, totalAmount };
+  };
+
+  const handleViewOrderDetails = (order) => {
+    setSelectedOrder(order);
+    setIsOrderDetailsOpen(true);
+    setViewedOrderId(order.id);
+  };
 
   const handlePayBill = (bill) => {
     setSelectedService(bill);
@@ -830,6 +962,103 @@ const CustomerDashboard = () => {
     setFeedbackRating(0);
     setFeedbackText('');
     setRecommendProvider(false);
+  };
+
+  // AI Assistant handlers
+
+  const sendAIMessage = async (message, imageData = null) => {
+    if (!message.trim() && !imageData) return;
+
+    // Convert image to base64 for storage in message
+    let imageBase64 = null;
+    if (imageData && imageData instanceof File) {
+      imageBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(imageData);
+      });
+    } else if (imageData) {
+      imageBase64 = imageData;
+    }
+
+    // Use appropriate message content
+    const messageContent = message.trim() || (imageBase64 ? 'Please analyze this image' : '');
+
+    const userMessage = { 
+      role: 'user', 
+      content: messageContent, 
+      imageData: imageBase64, // Store base64 for display
+      timestamp: new Date() 
+    };
+    setAiMessages(prev => [...prev, userMessage]);
+    setAiInput('');
+    setSelectedImage(null);
+    setImagePreview(null);
+    setAiLoading(true);
+
+    try {
+      const conversationHistory = aiMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
+      const response = await aiAssistantService.sendMessage(messageContent, conversationHistory, imageBase64);
+      
+      const aiMessage = { 
+        role: 'assistant', 
+        content: response.response, 
+        timestamp: new Date() 
+      };
+      
+      setAiMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('AI Assistant Error:', error);
+      toastManager.error('Failed to get AI response. Please try again.');
+      
+      const errorMessage = { 
+        role: 'assistant', 
+        content: 'Sorry, I encountered an error. Please try again or contact support.', 
+        timestamp: new Date(),
+        isError: true
+      };
+      setAiMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleAISubmit = (e) => {
+    e.preventDefault();
+    sendAIMessage(aiInput, selectedImage);
+  };
+
+  const clearAIConversation = () => {
+    setAiMessages([]);
+    setSelectedImage(null);
+    setImagePreview(null);
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        toastManager.error('Image size should be less than 10MB');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target.result);
+        setSelectedImage(file);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
   };
 
   // Review modal handlers
@@ -971,6 +1200,20 @@ const CustomerDashboard = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Load AI status when AI assistant tab is active
+  useEffect(() => {
+    if (activeTab === 'ai-assistant') {
+      // AI assistant is ready when tab is active
+    }
+  }, [activeTab]);
+
+  // Auto-scroll chat messages
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [aiMessages, aiLoading]);
+
   // Welcome message on dashboard load
   useEffect(() => {
     const hasVisited = localStorage.getItem('dashboard-visited');
@@ -1096,7 +1339,7 @@ const CustomerDashboard = () => {
     { 
       label: "Total Value", 
       value: `₹${serviceStats.totalSpent.toLocaleString()}`, 
-      icon: DollarSign, 
+      icon: IndianRupee, 
       color: "#4f9cf9", 
       change: serviceStats.monthlySavings > 0 ? `₹${serviceStats.monthlySavings} saved` : "No savings yet", 
       changeType: serviceStats.monthlySavings > 0 ? "positive" : "neutral" 
@@ -1115,11 +1358,11 @@ const CustomerDashboard = () => {
   const navItems = [
     { key: 'home', label: 'Home', icon: Home },
     { key: 'categories', label: 'Categories', icon: Settings },
-    { key: 'orders', label: 'Your Orders', icon: Package },
+    { key: 'orders', label: 'Your Orders', icon: Receipt },
     { key: 'wishlist', label: 'Wishlist', icon: Heart },
     { key: 'cart', label: 'Cart', icon: Package },
     { key: 'account', label: 'Your Account', icon: User },
-    { key: 'support', label: 'Customer Service', icon: MessageCircle }
+    { key: 'ai-assistant', label: 'Nexus AI Assistant', icon: MessageCircle }
   ];
 
   return (
@@ -1215,7 +1458,7 @@ const CustomerDashboard = () => {
                             <div key={item.id} className={`notification-item ${item.type}`}>
                               <div className="notification-icon-wrapper">
                                 {item.type === 'reminder' && <Clock size={16} />}
-                                {item.type === 'billing' && <DollarSign size={16} />}
+                                {item.type === 'billing' && <IndianRupee size={16} />}
                                 {item.type === 'security' && <Shield size={16} />}
                                 {item.type === 'service' && <CheckCircle size={16} />}
                               </div>
@@ -1560,11 +1803,29 @@ const CustomerDashboard = () => {
                                   </div>
                               </div>
                                 <div className="deal-actions">
-                                  <button className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`} onClick={() => isInCart(service.id) ? removeFromCart(service.id) : addToCart(service)}>
-                                    <ShoppingCart size={16} />{isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
+                                  <button 
+                                    className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`} 
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      if (cartLoading) return;
+                                      isInCart(service.id) ? removeFromCart(service.id) : addToCart(service); 
+                                    }}
+                                    disabled={cartLoading}
+                                  >
+                                    <ShoppingCart size={16} />
+                                    {cartLoading ? 'Loading...' : (isInCart(service.id) ? 'In Cart' : 'Add to Cart')}
                               </button>
-                                  <button className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`} onClick={() => toggleWishlist(service)}>
-                                    <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />{isInWishlist(service.id) ? 'Liked' : 'Like'}
+                                  <button 
+                                    className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`} 
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      if (wishlistLoading) return;
+                                      toggleWishlist(service); 
+                                    }}
+                                    disabled={wishlistLoading}
+                                  >
+                                    <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />
+                                    {wishlistLoading ? 'Loading...' : (isInWishlist(service.id) ? 'Liked' : 'Like')}
                                   </button>
                                   <button className="deal-btn deal-btn-book" onClick={() => handleOpenBookingModal(service)}>
                                     <Calendar size={16} />Book Now
@@ -1650,11 +1911,29 @@ const CustomerDashboard = () => {
                                 </div>
                               </div>
                               <div className="deal-actions">
-                                <button className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`} onClick={() => isInCart(service.id) ? removeFromCart(service.id) : addToCart(service)}>
-                                  <ShoppingCart size={16} />{isInCart(service.id) ? 'In Cart' : 'Add to Cart'}
+                                <button 
+                                  className={`deal-btn ${isInCart(service.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`} 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    if (cartLoading) return;
+                                    isInCart(service.id) ? removeFromCart(service.id) : addToCart(service); 
+                                  }}
+                                  disabled={cartLoading}
+                                >
+                                  <ShoppingCart size={16} />
+                                  {cartLoading ? 'Loading...' : (isInCart(service.id) ? 'In Cart' : 'Add to Cart')}
                                 </button>
-                                <button className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`} onClick={() => toggleWishlist(service)}>
-                                  <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />{isInWishlist(service.id) ? 'Liked' : 'Like'}
+                                <button 
+                                  className={`deal-btn ${isInWishlist(service.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`} 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    if (wishlistLoading) return;
+                                    toggleWishlist(service); 
+                                  }}
+                                  disabled={wishlistLoading}
+                                >
+                                  <Heart size={16} fill={isInWishlist(service.id) ? 'currentColor' : 'none'} />
+                                  {wishlistLoading ? 'Loading...' : (isInWishlist(service.id) ? 'Liked' : 'Like')}
                                 </button>
                                 <button className="deal-btn deal-btn-book" onClick={() => handleOpenBookingModal(service)}>
                                   <Calendar size={16} />Book Now
@@ -3220,111 +3499,240 @@ const CustomerDashboard = () => {
 
               {activeTab === 'wishlist' && (
                 <motion.div 
-                  className="wishlist-tab"
+                  className="wishlist-tab enhanced-wishlist"
                   initial="hidden"
                   animate="visible"
                   variants={containerVariants}
                 >
-                  <div className="wishlist-header">
-                    <h3>My Wishlist</h3>
+                  {/* Enhanced Wishlist Header */}
+                  <div className="enhanced-section-header">
+                    <div className="header-content">
+                      <div className="header-icon">
+                        <Heart size={32} fill="#e11d48" />
+                      </div>
+                      <div className="header-text">
+                        <h2>My Wishlist</h2>
                     <p>Services you've saved for later</p>
+                        <div className="wishlist-stats">
+                          <span className="stat-item">
+                            <Heart size={16} />
+                            {wishlist.length} {wishlist.length === 1 ? 'item' : 'items'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="deals-grid">
+                  {/* Enhanced Wishlist Content */}
+                  <div className="enhanced-wishlist-content">
                     {wishlist.length > 0 ? (
-                      wishlist.map(item => {
+                      <div className="wishlist-section">
+                        <div className="wishlist-header">
+                          <div className="wishlist-title">
+                            <h3>Saved Services</h3>
+                            <span className="wishlist-count">{wishlist.length} items</span>
+                          </div>
+                          <button 
+                            className="clear-wishlist-btn-section"
+                            onClick={async () => {
+                              try {
+                                await cartWishlistService.clearWishlist();
+                                await loadWishlist();
+                                toast.success('Wishlist cleared');
+                              } catch (error) {
+                                toast.error('Failed to clear wishlist');
+                              }
+                            }}
+                          >
+                            🗑️ Clear All
+                          </button>
+                        </div>
+                        <div className="wishlist-grid">
+                        {wishlist.map((item, index) => {
                         const hasOffer = item.offer_enabled && item.offer_price;
                         const discount = hasOffer && item.price ? 
                           Math.round(((item.price - item.offer_price) / item.price) * 100) : 0;
+                          
                         return (
                           <motion.div 
                             key={item.id} 
-                            className="deal-card"
-                            whileHover={{ y: -4 }}
-                            variants={itemVariants}
-                            onClick={() => handleOpenBookingModal(item)}
-                            style={{ cursor: 'pointer' }}
-                          >
+                              className="enhanced-wishlist-card"
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: index * 0.1 }}
+                              whileHover={{ 
+                                y: -8,
+                                boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
+                                transition: { duration: 0.3 }
+                              }}
+                            >
+                              {/* Card Header */}
+                              <div className="card-header">
                             {hasOffer && discount > 0 && (
-                              <div className="deal-badge">{discount}% OFF</div>
-                            )}
-                            <div className="deal-image">
-                              {item.icon_url ? (
-                                <img 
-                                  src={item.icon_url} 
-                                  alt={item.name}
-                                  style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8 }}
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                    e.currentTarget.nextSibling.style.display = 'block';
-                                  }}
-                                />
-                              ) : null}
-                              <Settings size={60} style={{ display: item.icon_url ? 'none' : 'block' }} />
-                            </div>
-                            <div className="deal-content">
-                              <h4>{item.name}</h4>
-                              <p className="provider-name">{item.category_name || item.category}</p>
+                                  <div className="discount-badge">
+                                    <span>{discount}% OFF</span>
+                                  </div>
+                                )}
+                                <div className="card-actions">
+                                  <button 
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      width: '36px',
+                                      height: '36px',
+                                      background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '10px',
+                                      cursor: 'pointer',
+                                      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)'
+                                    }}
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      if (wishlistLoading) return;
+                                      toggleWishlist(item); 
+                                    }}
+                                    disabled={wishlistLoading}
+                                    title="Remove from wishlist"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Service Image */}
+                              <div className="service-image-container">
+                                {/* Fallback icon */}
+                                <div className="fallback-icon">
+                                  ⚙️
+                                </div>
+                                
+                                {/* Actual service image */}
+                                {item.icon_url && item.icon_url.trim() !== '' && (
+                                  <img 
+                                    src={item.icon_url} 
+                                    alt={item.name}
+                                    className="service-image"
+                                    onError={(e) => {
+                                      console.log('Wishlist image failed to load:', item.icon_url);
+                                      e.currentTarget.style.display = 'none';
+                                      e.currentTarget.previousSibling.style.display = 'flex';
+                                    }}
+                                    onLoad={(e) => {
+                                      console.log('Wishlist image loaded successfully:', item.icon_url);
+                                      e.currentTarget.style.display = 'block';
+                                      e.currentTarget.previousSibling.style.display = 'none';
+                                      e.currentTarget.classList.add('loaded');
+                                    }}
+                                  />
+                                )}
+                              </div>
+
+                              {/* Service Details */}
+                              <div className="service-details">
+                                <div className="service-category">
+                                  <span className="category-badge">{item.category_name || item.category}</span>
+                                </div>
+                                
+                                <h3 className="service-title">{item.name}</h3>
+                                
                               {item.description && (
-                                <p className="service-description">{item.description.slice(0, 50)}...</p>
-                              )}
+                                  <p className="service-description">
+                                    {item.description.length > 80 
+                                      ? `${item.description.slice(0, 80)}...` 
+                                      : item.description
+                                    }
+                                  </p>
+                                )}
+
+                                {/* Service Meta */}
+                                <div className="service-meta">
+                                  {item.duration && (
+                                    <div className="meta-item">
+                                      <Clock size={14} />
+                                      <span>{item.duration}</span>
+                                    </div>
+                                  )}
+                                  
+                                  <div className="rating-item">
+                                    <div className="stars">
+                                      {[...Array(5)].map((_, i) => (
+                                        <Star 
+                                          key={i} 
+                                          size={12} 
+                                          fill={i < Math.floor(item.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} 
+                                          color="#fbbf24" 
+                                        />
+                                      ))}
+                                    </div>
+                                    <span className="rating-text">
+                                      {(item.rating || 4.2).toFixed(1)} ({item.review_count || Math.floor(Math.random() * 50) + 10})
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Pricing */}
+                                <div className="pricing-section">
                               <div className="price-row">
-                                <span className="current-price">₹{hasOffer ? item.offer_price : item.price}</span>
+                                    <span className="current-price">
+                                      ₹{hasOffer ? item.offer_price : item.price}
+                                    </span>
                                 {hasOffer && item.price > item.offer_price && (
                                   <span className="original-price">₹{item.price}</span>
                                 )}
                               </div>
                               {item.duration && (
-                                <div className="duration-hint">per {item.duration}</div>
-                              )}
-                              
-                              {/* Review Section */}
-                              <div 
-                                className="service-rating clickable-review" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenReviewModal(item);
-                                }}
-                                style={{ cursor: 'pointer' }}
-                              >
-                                <div className="stars">
-                                  {[...Array(5)].map((_, i) => (
-                                    <Star key={i} size={14} fill={i < Math.floor(item.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
-                                  ))}
+                                    <div className="price-unit">per {item.duration}</div>
+                                  )}
                                 </div>
-                                <span className="rating-text">{(item.rating || 4.2).toFixed(1)} ({item.review_count || Math.floor(Math.random() * 50) + 10} reviews)</span>
-                                <span className="review-hint">Click to review</span>
                               </div>
-                                </div>
-                            <div className="deal-actions">
-                              <button 
-                                className={`deal-btn ${isInCart(item.id) ? 'deal-btn-carted' : 'deal-btn-primary'}`}
-                                onClick={() => isInCart(item.id) ? removeFromCart(item.id) : addToCart(item)}
-                              >
-                                <ShoppingCart size={16} />
-                                {isInCart(item.id) ? 'In Cart' : 'Add to Cart'}
-                              </button>
-                              <button 
-                                className="deal-btn deal-btn-liked"
-                                onClick={() => toggleWishlist(item)}
-                              >
-                                <Heart size={16} fill="currentColor" />
-                                Remove
-                              </button>
-                              <button 
-                                className="deal-btn deal-btn-book"
-                                onClick={() => handleOpenBookingModal(item)}
-                              >
-                                <Calendar size={16} />
-                                Book Now
-                              </button>
+
+                              {/* Action Buttons */}
+                              <div className="card-actions-bottom">
+                                <button 
+                                  className={`action-btn-primary ${isInCart(item.id) ? 'in-cart' : ''}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (cartLoading) return;
+                                    isInCart(item.id) ? removeFromCart(item.id) : addToCart(item); 
+                                  }}
+                                  disabled={cartLoading}
+                                >
+                                  <ShoppingCart size={16} color="currentColor" />
+                                  {cartLoading ? 'Loading...' : (isInCart(item.id) ? 'In Cart' : 'Add to Cart')}
+                                </button>
+                                
+                                <button 
+                                  className="action-btn-secondary"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenBookingModal(item);
+                                  }}
+                                >
+                                  <Calendar size={16} color="currentColor" />
+                                  Book Now
+                                </button>
                             </div>
                           </motion.div>
                         );
-                      })
+                        })}
+                        </div>
+                      </div>
                     ) : (
-                      <div className="no-services">
-                        <p>No services in wishlist yet.</p>
+                      <div className="empty-state">
+                        <div className="empty-icon">
+                          <Heart size={64} fill="#e5e7eb" />
+                        </div>
+                        <h3>Your wishlist is empty</h3>
+                        <p>Start exploring services and add them to your wishlist for easy access later.</p>
+                        <button 
+                          className="explore-btn"
+                          onClick={() => setActiveTab('home')}
+                        >
+                          <Search size={16} />
+                          Explore Services
+                        </button>
                       </div>
                     )}
                   </div>
@@ -3333,143 +3741,364 @@ const CustomerDashboard = () => {
 
               {activeTab === 'cart' && (
                 <motion.div 
-                  className="cart-tab"
+                  className="cart-tab enhanced-cart"
                   initial="hidden"
                   animate="visible"
                   variants={containerVariants}
                 >
-                  <div className="cart-header">
-                    <h3>Shopping Cart</h3>
+                  {/* Enhanced Cart Header */}
+                  <div className="enhanced-section-header">
+                    <div className="header-content">
+                      <div className="header-icon">
+                        <ShoppingCart size={32} fill="#3b82f6" />
+                      </div>
+                      <div className="header-text">
+                        <h2>Shopping Cart</h2>
                     <p>Review your selected services</p>
+                        <div className="cart-stats">
+                          <span className="stat-item">
+                            <ShoppingCart size={16} />
+                            {cart.length} {cart.length === 1 ? 'item' : 'items'}
+                          </span>
+                          <span className="stat-item">
+                            <IndianRupee size={16} />
+                            ₹{cart.reduce((sum, item) => {
+                              const hasOffer = item.offer_enabled && item.offer_price;
+                              const price = hasOffer ? item.offer_price : item.price;
+                              return sum + (price * item.quantity);
+                            }, 0)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="cart-content">
-                    <div className="deals-grid">
+                  {/* Enhanced Cart Content */}
+                  <div className="enhanced-cart-content">
                       {cart.length > 0 ? (
-                        cart.map(item => {
+                      <div className="cart-layout">
+                        {/* Cart Items */}
+                        <div className="cart-items-section">
+                          <div className="section-title">
+                            <div className="title-left">
+                              <h3>Selected Services</h3>
+                              <span className="item-count">{cart.length} items</span>
+                            </div>
+                            <button 
+                              className="clear-cart-btn-section"
+                              onClick={async () => {
+                                try {
+                                  await cartWishlistService.clearCart();
+                                  await loadCart();
+                                  toast.success('Cart cleared');
+                                } catch (error) {
+                                  toast.error('Failed to clear cart');
+                                }
+                              }}
+                            >
+                              🗑️ Clear All
+                            </button>
+                          </div>
+                          
+                          <div className="cart-items-list">
+                            {cart.map((item, index) => {
                           const hasOffer = item.offer_enabled && item.offer_price;
                           const discount = hasOffer && item.price ? 
                             Math.round(((item.price - item.offer_price) / item.price) * 100) : 0;
+                              
                           return (
                           <motion.div 
                             key={item.id} 
-                            className="deal-card"
-                            whileHover={{ y: -4 }}
-                            variants={itemVariants}
-                            onClick={() => handleOpenBookingModal(item)}
-                            style={{ cursor: 'pointer' }}
-                          >
+                                  className="enhanced-cart-item"
+                                  initial={{ opacity: 0, x: -20 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: index * 0.1 }}
+                                  whileHover={{ 
+                                    boxShadow: '0 8px 25px rgba(0,0,0,0.1)',
+                                    transition: { duration: 0.3 }
+                                  }}
+                                >
+                                  {/* Item Header */}
+                                  <div className="item-header">
                               {hasOffer && discount > 0 && (
-                                <div className="deal-badge">{discount}% OFF</div>
-                              )}
-                              <div className="deal-image">
-                                {item.icon_url ? (
-                                  <img 
-                                    src={item.icon_url} 
-                                    alt={item.name}
-                                    style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8 }}
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none';
-                                      e.currentTarget.nextSibling.style.display = 'block';
-                                    }}
-                                  />
-                                ) : null}
-                                <Settings size={60} style={{ display: item.icon_url ? 'none' : 'block' }} />
-                              </div>
-                              <div className="deal-content">
-                                <h4>{item.name}</h4>
-                                <p className="provider-name">{item.category_name || item.category}</p>
+                                      <div className="discount-badge">
+                                        <span>{discount}% OFF</span>
+                                      </div>
+                                    )}
+                                    <button 
+                                      className="remove-item-btn"
+                                      onClick={(e) => { 
+                                        e.stopPropagation(); 
+                                        if (cartLoading) return;
+                                        removeFromCart(item.id); 
+                                      }}
+                                      disabled={cartLoading}
+                                      title="Remove from cart"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </div>
+
+                                  {/* Item Content */}
+                                  <div className="item-content">
+                                    {/* Service Image */}
+                                    <div className="item-image">
+                                      {/* Fallback icon */}
+                                      <div className="fallback-icon">
+                                        ⚙️
+                                      </div>
+                                      
+                                      {/* Actual service image */}
+                                      {item.icon_url && item.icon_url.trim() !== '' && (
+                                        <img 
+                                          src={item.icon_url} 
+                                          alt={item.name}
+                                          className="service-image"
+                                          onError={(e) => {
+                                            console.log('Cart image failed to load:', item.icon_url);
+                                            e.currentTarget.style.display = 'none';
+                                            e.currentTarget.previousSibling.style.display = 'flex';
+                                          }}
+                                          onLoad={(e) => {
+                                            console.log('Cart image loaded successfully:', item.icon_url);
+                                            e.currentTarget.style.display = 'block';
+                                            e.currentTarget.previousSibling.style.display = 'none';
+                                            e.currentTarget.classList.add('loaded');
+                                          }}
+                                        />
+                                      )}
+                                    </div>
+
+                                    {/* Item Details */}
+                                    <div className="item-details">
+                                      <div className="item-category">
+                                        <span className="category-badge">{item.category_name || item.category}</span>
+                                      </div>
+                                      
+                                      <h4 className="item-title">{item.name}</h4>
+                                      
                                 {item.description && (
-                                  <p className="service-description">{item.description.slice(0, 50)}...</p>
-                                )}
+                                        <p className="item-description">
+                                          {item.description.length > 60 
+                                            ? `${item.description.slice(0, 60)}...` 
+                                            : item.description
+                                          }
+                                        </p>
+                                      )}
+
+                                      {/* Item Meta */}
+                                      <div className="item-meta">
                                 {item.duration && (
-                                  <div className="duration-row">
+                                          <div className="meta-item">
                                     <Clock size={12} />
                                     <span>{item.duration}</span>
                                 </div>
                                 )}
-                                <div className="price-row">
-                                  <span className="current-price">₹{hasOffer ? item.offer_price : item.price}</span>
-                                  {hasOffer && item.price > item.offer_price && (
-                                    <span className="original-price">₹{item.price}</span>
-                                  )}
-                              </div>
-                                {item.duration && (
-                                  <div className="duration-hint">per {item.duration}</div>
-                                )}
-                                
-                                {/* Review Section */}
-                                <div 
-                                  className="service-rating clickable-review" 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenReviewModal(item);
-                                  }}
-                                  style={{ cursor: 'pointer' }}
-                                >
+                                        
+                                        <div className="rating-item">
                                   <div className="stars">
                                     {[...Array(5)].map((_, i) => (
-                                      <Star key={i} size={14} fill={i < Math.floor(item.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
+                                              <Star 
+                                                key={i} 
+                                                size={10} 
+                                                fill={i < Math.floor(item.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} 
+                                                color="#fbbf24" 
+                                              />
                                     ))}
                                   </div>
-                                  <span className="rating-text">{(item.rating || 4.2).toFixed(1)} ({item.review_count || Math.floor(Math.random() * 50) + 10} reviews)</span>
-                                  <span className="review-hint">Click to review</span>
+                                          <span className="rating-text">
+                                            {(item.rating || 4.2).toFixed(1)}
+                                          </span>
                                 </div>
                               </div>
-                              <div className="deal-actions">
-                                <button 
-                                  className="deal-btn deal-btn-carted"
-                                  onClick={() => removeFromCart(item.id)}
-                                >
-                                  <ShoppingCart size={16} />
-                                  Remove
-                                </button>
-                                <button 
-                                  className={`deal-btn ${isInWishlist(item.id) ? 'deal-btn-liked' : 'deal-btn-secondary'}`}
-                                  onClick={() => toggleWishlist(item)}
-                                >
-                                  <Heart size={16} fill={isInWishlist(item.id) ? 'currentColor' : 'none'} />
-                                  {isInWishlist(item.id) ? 'Liked' : 'Like'}
-                                </button>
-                                <button 
-                                  className="deal-btn deal-btn-book"
-                                  onClick={() => handleOpenBookingModal(item)}
-                                >
-                                  <Calendar size={16} />
-                                  Book Now
-                                </button>
+                                    </div>
+
+                                    {/* Item Actions & Pricing */}
+                                    <div className="item-actions-pricing">
+                                      {/* Quantity Controls */}
+                                      <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.75rem',
+                                        background: 'white',
+                                        borderRadius: '12px',
+                                        padding: '0.5rem',
+                                        border: '2px solid #e2e8f0',
+                                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+                                      }}>
+                                        <button 
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            width: '32px',
+                                            height: '32px',
+                                            background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            cursor: 'pointer',
+                                            color: 'white',
+                                            boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
+                                            fontSize: '18px',
+                                            fontWeight: 'bold'
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (item.quantity > 1) {
+                                              updateCartItemQuantity(item.cartItemId, item.quantity - 1);
+                                            }
+                                          }}
+                                          disabled={cartLoading || item.quantity <= 1}
+                                        >
+                                          −
+                                        </button>
+                                        <span style={{
+                                          fontWeight: 700,
+                                          color: '#1e293b',
+                                          minWidth: '24px',
+                                          textAlign: 'center',
+                                          fontSize: '1rem',
+                                          padding: '0.25rem'
+                                        }}>
+                                          {item.quantity}
+                                        </span>
+                                        <button 
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            width: '32px',
+                                            height: '32px',
+                                            background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            cursor: 'pointer',
+                                            color: 'white',
+                                            boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
+                                            fontSize: '18px',
+                                            fontWeight: 'bold'
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            updateCartItemQuantity(item.cartItemId, item.quantity + 1);
+                                          }}
+                                          disabled={cartLoading}
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+
+                                      {/* Pricing */}
+                                      <div className="item-pricing">
+                                        <div className="price-row">
+                                          <span className="current-price">
+                                            ₹{hasOffer ? item.offer_price : item.price}
+                                          </span>
+                                          {hasOffer && item.price > item.offer_price && (
+                                            <span className="original-price">₹{item.price}</span>
+                                          )}
+                                        </div>
+                                        <div className="total-price">
+                                          Total: ₹{((hasOffer ? item.offer_price : item.price) * item.quantity)}
+                                        </div>
+                                      </div>
+
+                                      {/* Action Buttons */}
+                                      <div className="item-action-buttons">
+                                        <button 
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            width: '36px',
+                                            height: '36px',
+                                            background: isInWishlist(item.id) 
+                                              ? 'linear-gradient(135deg, #dc2626, #b91c1c)' 
+                                              : 'linear-gradient(135deg, #fecaca, #fca5a5)',
+                                            color: isInWishlist(item.id) ? 'white' : '#dc2626',
+                                            border: 'none',
+                                            borderRadius: '10px',
+                                            cursor: 'pointer',
+                                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                                            fontSize: '16px'
+                                          }}
+                                          onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            if (wishlistLoading) return;
+                                            toggleWishlist(item); 
+                                          }}
+                                          disabled={wishlistLoading}
+                                          title={isInWishlist(item.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                                        >
+                                          {isInWishlist(item.id) ? '❤️' : '🤍'}
+                                        </button>
+                                        
+                                        <button 
+                                          className="book-now-btn"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenBookingModal(item);
+                                          }}
+                                        >
+                                          <Calendar size={14} color="currentColor" />
+                                          Book Now
+                                        </button>
+                                      </div>
+                                    </div>
                               </div>
                             </motion.div>
                           );
-                        })
-                      ) : (
-                        <div className="no-services">
-                          <p>Your cart is empty.</p>
+                            })}
                         </div>
-                      )}
                     </div>
-                    <div className="cart-summary">
+
+                        {/* Order Summary */}
+                        <div className="order-summary-section">
+                          <div className="summary-card">
+                            <div className="summary-header">
+                              <h3>Order Summary</h3>
+                            </div>
+                            
+                            <div className="summary-content">
                        <div className="summary-row">
-                         <span>Subtotal:</span>
+                                <span>Subtotal ({cart.length} items):</span>
                          <span>₹{cart.reduce((sum, item) => {
                            const hasOffer = item.offer_enabled && item.offer_price;
                            const price = hasOffer ? item.offer_price : item.price;
                            return sum + (price * item.quantity);
                          }, 0)}</span>
                        </div>
+                              
                        <div className="summary-row">
                          <span>Service Fee:</span>
                          <span>₹50</span>
                        </div>
-                       <div className="summary-row total">
+                              
+                              <div className="summary-row">
+                                <span>Tax (GST):</span>
+                                <span>₹{Math.round((cart.reduce((sum, item) => {
+                                  const hasOffer = item.offer_enabled && item.offer_price;
+                                  const price = hasOffer ? item.offer_price : item.price;
+                                  return sum + (price * item.quantity);
+                                }, 0) + 50) * 0.18)}</span>
+                              </div>
+                              
+                              <div className="summary-divider"></div>
+                              
+                              <div className="summary-row total-row">
                          <span>Total:</span>
-                         <span>₹{cart.reduce((sum, item) => {
+                                <span>₹{Math.round((cart.reduce((sum, item) => {
                            const hasOffer = item.offer_enabled && item.offer_price;
                            const price = hasOffer ? item.offer_price : item.price;
                            return sum + (price * item.quantity);
-                         }, 0) + 50}</span>
+                                }, 0) + 50) * 1.18)}</span>
                        </div>
-                      <button className="checkout-btn" onClick={() => {
+                            </div>
+                            
+                            <div className="summary-actions">
+                              <button 
+                                className="checkout-btn-primary"
+                                onClick={() => {
                         if (cart.length === 0) {
                           toast.error('Your cart is empty');
                           return;
@@ -3482,10 +4111,39 @@ const CustomerDashboard = () => {
                             isMultiService: true
                           } 
                         });
-                      }}>
+                                }}
+                              >
+                                <CreditCard size={16} />
                         Proceed to Checkout
                       </button>
+                              
+                              <button 
+                                className="continue-shopping-btn"
+                                onClick={() => setActiveTab('home')}
+                              >
+                                <ArrowLeft size={16} />
+                                Continue Shopping
+                              </button>
                     </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="empty-state">
+                        <div className="empty-icon">
+                          <ShoppingCart size={64} fill="#e5e7eb" />
+                        </div>
+                        <h3>Your cart is empty</h3>
+                        <p>Add some services to your cart to get started with your booking.</p>
+                        <button 
+                          className="explore-btn"
+                          onClick={() => setActiveTab('home')}
+                        >
+                          <Search size={16} />
+                          Explore Services
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -3608,186 +4266,370 @@ const CustomerDashboard = () => {
 
               {activeTab === 'orders' && (
                 <motion.div 
-                  className="orders-tab premium-orders"
+                  className="orders-tab"
                   initial="hidden"
                   animate="visible"
                   variants={containerVariants}
                 >
-                  <div className="premium-orders-header">
-                    <div className="orders-hero">
-                      <h1>Your Service Orders</h1>
-                      <p>Track and manage all your service bookings</p>
-                    </div>
-                    <div className="premium-filter-bar">
-                      <div className="premium-filter-tabs">
-                        <button className="premium-tab active">All Orders</button>
-                        <button className="premium-tab">Active</button>
-                        <button className="premium-tab">Completed</button>
-                        <button className="premium-tab">Cancelled</button>
+                  <div className="orders-header">
+                    <div className="orders-header-content">
+                      <div className="orders-title-section">
+                        <h3>Your Orders</h3>
+                        <p>Track and manage your service bookings</p>
                       </div>
-                      <div className="premium-date-filter">
-                        <select className="premium-select">
-                          <option>Last 30 days</option>
-                          <option>Last 3 months</option>
-                          <option>Last 6 months</option>
-                          <option>This year</option>
+                      <div className="orders-filter-section">
+                        <select 
+                          value={ordersFilter} 
+                          onChange={(e) => setOrdersFilter(e.target.value)}
+                          className="orders-filter-select"
+                        >
+                          <option value="all">All Orders</option>
+                          <option value="last30days">Last 30 Days</option>
+                          <option value="completed">Completed</option>
+                          <option value="pending">Pending</option>
+                          <option value="cancelled">Cancelled</option>
                         </select>
                       </div>
                     </div>
+
+                    {/* Order Stats Cards */}
+                    {!ordersLoading && orders.length > 0 && (
+                      <div className="orders-stats-grid">
+                        <motion.div 
+                          className="stat-card total-orders"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.1 }}
+                        >
+                          <div className="stat-icon">
+                            <Receipt size={24} />
+                          </div>
+                          <div className="stat-content">
+                            <span className="stat-number">{getOrderStats().total}</span>
+                            <span className="stat-label">Total Orders</span>
+                          </div>
+                        </motion.div>
+
+                        <motion.div 
+                          className="stat-card completed-orders"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.2 }}
+                        >
+                          <div className="stat-icon">
+                            <CheckCircle size={24} />
+                          </div>
+                          <div className="stat-content">
+                            <span className="stat-number">{getOrderStats().completed}</span>
+                            <span className="stat-label">Completed</span>
+                          </div>
+                        </motion.div>
+
+                        <motion.div 
+                          className="stat-card pending-orders"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.3 }}
+                        >
+                          <div className="stat-icon">
+                            <Clock size={24} />
+                          </div>
+                          <div className="stat-content">
+                            <span className="stat-number">{getOrderStats().pending}</span>
+                            <span className="stat-label">Pending</span>
+                          </div>
+                        </motion.div>
+
+                        <motion.div 
+                          className="stat-card total-spent"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.4 }}
+                        >
+                          <div className="stat-icon">
+                            <IndianRupee size={24} />
+                          </div>
+                          <div className="stat-content">
+                            <span className="stat-number">₹{getOrderStats().totalAmount.toLocaleString('en-IN')}</span>
+                            <span className="stat-label">Total Spent</span>
+                          </div>
+                        </motion.div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Orders List */}
-                  <div className="orders-list">
-                    {ordersLoading && (
+                  <div className="orders-content">
+                    {ordersLoading ? (
                       <div className="orders-loading">
                         <div className="loading-spinner"></div>
-                        <span>Loading your orders…</span>
+                        <span>Loading your orders...</span>
                       </div>
-                    )}
-                    {!ordersLoading && orders.length === 0 && (
+                    ) : getFilteredOrders().length === 0 ? (
                       <div className="orders-empty">
-                        <p>No orders yet. Your bookings will appear here.</p>
+                        <Receipt size={64} style={{ color: '#cbd5e1', marginBottom: '1.5rem' }} />
+                        <h4>No orders found</h4>
+                        <p>
+                          {ordersFilter === 'all' 
+                            ? 'Your service bookings will appear here once you make your first booking.'
+                            : `No orders found for the selected filter: ${ordersFilter.replace(/([A-Z])/g, ' $1').toLowerCase()}`
+                          }
+                        </p>
+                        <button 
+                          className="btn-primary" 
+                          onClick={() => setActiveTab('categories')}
+                          style={{ marginTop: '1.5rem' }}
+                        >
+                          <Plus size={16} />
+                          Browse Services
+                        </button>
                       </div>
-                    )}
-                    {orders.map(order => (
-                      <div key={order.id} className="order-item">
-                        <div className="order-header-section">
-                           <div className="order-date-info">
-                             <span className="order-date">Scheduled on {order.date} at {order.time}</span>
-                             <span className="order-total">Total: ₹{order.total}</span>
-                           </div>
-                          <div className="order-id">Booking #{order.id.slice(0,8)}</div>
-                        </div>
-
-                        <div className="order-content-section">
-                          <div className="order-service-info">
-                            <div className="service-image-placeholder">
-                              <Settings size={32} />
-                            </div>
-                            <div className="service-details">
-                              <h3>{order.name}</h3>
-                              <p className="service-time">Scheduled for {order.date} at {order.time}</p>
-                              <p className="service-address">{order.address}</p>
-                            </div>
-                          </div>
-
-                          <div className="order-status-section">
-                            <div className="status-info">
-                              {(() => { const statusUi = (order.bookingStatus || '').replace('_', '-'); return (
-                                <>
-                                  <span 
-                                    className="status-indicator"
-                                    style={{ backgroundColor: getStatusColor(statusUi) }}
-                                  ></span>
-                                  <div className="status-text">
-                                    <span className="status-main">{statusUi.replace('-', ' ')}</span>
-                                    <span className="status-sub">
-                                      {statusUi === 'in-progress' && 'Provider is on the way'}
-                                      {statusUi === 'scheduled' && 'Service confirmed'}
-                                      {statusUi === 'completed' && 'Service completed successfully'}
+                    ) : (
+                      <div className="orders-grid">
+                        {getFilteredOrders().map((order, index) => (
+                          <motion.div 
+                            key={order.id} 
+                            className={`order-card ${viewedOrderId === order.id ? 'viewed' : ''}`}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.1 }}
+                            whileHover={{ y: -6, scale: 1.02 }}
+                          >
+                            {/* Order Card Header with Gradient */}
+                            <div className="order-card-header">
+                              <div className="order-header-content">
+                                <div className="order-id-section">
+                                  <div className="order-id-wrapper">
+                                    <div className="order-priority-indicator">
+                                      <div className="priority-dot"></div>
+                                    </div>
+                                  </div>
+                                  <div className="order-date-info">
+                                    <Calendar size={14} />
+                                    <span className="order-date">
+                                      {new Date(order.date).toLocaleDateString('en-IN', { 
+                                        day: 'numeric',
+                                        month: 'short',
+                                        year: 'numeric'
+                                      })}
                                     </span>
                                   </div>
-                                </>
-                              ); })()}
+                                </div>
+                                <div className="order-status-section">
+                                  <div 
+                                    className={`order-status-badge ${
+                                      order.bookingStatus === 'confirmed' ? 'confirmed' :
+                                      order.bookingStatus === 'pending' ? 'pending' :
+                                      order.bookingStatus === 'completed' ? 'completed' :
+                                      order.bookingStatus === 'cancelled' ? 'cancelled' : 'pending'
+                                    }`}
+                                  >
+                                    <div className="status-indicator"></div>
+                                    <span className="status-text">{order.bookingStatus || 'pending'}</span>
+                                    <div className="status-glow"></div>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
 
-                            <div className="order-actions">
-                              {((order.bookingStatus || '').replace('_','-') === 'in-progress') && (
-                                <>
-                                  <button className="action-btn primary">
-                                    <MapPin size={16} />
-                                    Track Live
+                            {/* Order Card Body */}
+                            <div className="order-card-body">
+                              <div className="service-section">
+                                <div className="service-icon-container">
+                                  <div className="service-icon">
+                                    <Package size={22} />
+                                  </div>
+                                  <div className="service-icon-bg"></div>
+                                </div>
+                                <div className="service-info">
+                                  <h5 className="service-name">{order.name}</h5>
+                                  <div className="service-details">
+                                    <div className="detail-item">
+                                      <Clock size={16} />
+                                      <span>{order.time}</span>
+                                    </div>
+                                    <div className="detail-item">
+                                      <MapPin size={16} />
+                                      <span>{order.address ? order.address.split(',')[0] : 'Location not specified'}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="order-meta-section">
+                                <div className="amount-section">
+                                  <div className="amount-label">Total Amount</div>
+                                  <div className="amount-value">
+                                    <IndianRupee size={18} />
+                                    <span>{order.total?.toLocaleString('en-IN') || '0'}</span>
+                                  </div>
+                                </div>
+                                <div className="payment-section">
+                                  <div className="payment-label">Payment Status</div>
+                                  <div 
+                                    className={`payment-status ${
+                                      order.paymentStatus === 'paid' ? 'paid' :
+                                      order.paymentStatus === 'pending' ? 'pending' :
+                                      order.paymentStatus === 'failed' ? 'failed' : 'pending'
+                                    }`}
+                                  >
+                                    <div className="payment-indicator"></div>
+                                    <span>{order.paymentStatus || 'pending'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Order Card Footer */}
+                            <div className="order-card-footer">
+                              <div className="action-buttons">
+                                <button 
+                                  className={`btn-details ${viewedOrderId === order.id ? 'viewed' : ''}`}
+                                  onClick={() => handleViewOrderDetails(order)}
+                                >
+                                  <Eye size={16} />
+                                  <span>View Details</span>
+                                  {viewedOrderId === order.id && <div className="btn-glow"></div>}
+                                </button>
+                                {order.bookingStatus === 'completed' && (
+                                  <button 
+                                    className="btn-feedback"
+                                    onClick={() => handleProvideFeedback(order)}
+                                  >
+                                    <MessageCircle size={16} />
+                                    <span>Feedback</span>
                                   </button>
-                                  <button className="action-btn secondary">
-                                    <Phone size={16} />
-                                    Contact Provider
+                                )}
+                                {order.paymentStatus === 'pending' && (
+                                  <button 
+                                    className="btn-pay"
+                                    onClick={() => handlePayBill(order)}
+                                  >
+                                    <CreditCard size={16} />
+                                    <span>Pay Now</span>
                                   </button>
-                                </>
-                              )}
-                              {((order.bookingStatus || '').replace('_','-') === 'scheduled') && (
-                                <>
-                                  <button className="action-btn secondary">
-                                    <Edit size={16} />
-                                    Reschedule
-                                  </button>
-                                  <button className="action-btn danger">
-                                    <X size={16} />
-                                    Cancel Order
-                                  </button>
-                                </>
-                              )}
-                              {((order.bookingStatus || '').replace('_','-') === 'completed') && (
-                                <>
-                                  <button className="action-btn primary" onClick={() => handleProvideFeedback(order)}>
-                                    <Star size={16} />
-                                    Write Review
-                                  </button>
-                                  <button className="action-btn secondary">
-                                    <RefreshCw size={16} />
-                                    Book Again
-                                  </button>
-                                  <button className="action-btn secondary">
-                                    <Download size={16} />
-                                    Invoice
-                                  </button>
-                                </>
-                      )}
-                    </div>
-                          </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Card Decorative Elements */}
+                            <div className="card-decoration">
+                              <div className="decoration-line"></div>
+                              <div className="decoration-dots">
+                                <div className="dot"></div>
+                                <div className="dot"></div>
+                                <div className="dot"></div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Order Details Modal */}
+                  {isOrderDetailsOpen && selectedOrder && (
+                    <motion.div 
+                      className="order-details-modal"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                    >
+                      <div className="modal-overlay" onClick={() => setIsOrderDetailsOpen(false)}></div>
+                      <motion.div 
+                        className="modal-content"
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.9, opacity: 0 }}
+                      >
+                        <div className="modal-header">
+                          <h4>Order Details</h4>
+                          <button 
+                            className="modal-close"
+                            onClick={() => setIsOrderDetailsOpen(false)}
+                          >
+                            <X size={20} />
+                          </button>
                         </div>
-
-                        {((order.bookingStatus || '').replace('_','-') === 'in-progress') && (
-                          <div className="order-progress">
-                            <div className="progress-steps">
-                              <div className="progress-step completed">
-                                <CheckCircle size={16} />
-                                <span>Order Confirmed</span>
+                        <div className="modal-body">
+                          <div className="order-detail-section">
+                            <h5>Order Information</h5>
+                            <div className="detail-grid">
+                              <div className="detail-item">
+                                <span className="detail-label">Service:</span>
+                                <span className="detail-value">{selectedOrder.name}</span>
                               </div>
-                              <div className="progress-step completed">
-                                <User size={16} />
-                                <span>Provider Assigned</span>
+                              <div className="detail-item">
+                                <span className="detail-label">Date:</span>
+                                <span className="detail-value">
+                                  {new Date(selectedOrder.date).toLocaleDateString('en-IN', { 
+                                    weekday: 'long',
+                                    year: 'numeric', 
+                                    month: 'long', 
+                                    day: 'numeric' 
+                                  })}
+                                </span>
                               </div>
-                              <div className="progress-step active">
-                                <Truck size={16} />
-                                <span>On the Way</span>
+                              <div className="detail-item">
+                                <span className="detail-label">Time:</span>
+                                <span className="detail-value">{selectedOrder.time}</span>
                               </div>
-                              <div className="progress-step">
-                                <CheckCircle size={16} />
-                                <span>Service Complete</span>
+                              <div className="detail-item">
+                                <span className="detail-label">Amount:</span>
+                                <span className="detail-value">₹{selectedOrder.total?.toLocaleString('en-IN') || '0'}</span>
                               </div>
-                            </div>
-                            <div className="estimated-arrival">
-                              <Clock size={16} />
-                              <span>Estimated arrival: 15-30 minutes</span>
+                              <div className="detail-item">
+                                <span className="detail-label">Status:</span>
+                                <span className="detail-value">{selectedOrder.bookingStatus || 'pending'}</span>
+                              </div>
+                              <div className="detail-item">
+                                <span className="detail-label">Payment:</span>
+                                <span className="detail-value">{selectedOrder.paymentStatus || 'pending'}</span>
+                              </div>
                             </div>
                           </div>
-                        )}
-                  </div>
-                ))}
-              </div>
-
-                  {/* Order Summary */}
-                  <div className="order-summary-section">
-                    <h2>Order Summary</h2>
-                    <div className="summary-stats">
-                      <div className="summary-stat">
-                        <span className="stat-label">Total Orders</span>
-                        <span className="stat-value">{services.length}</span>
-            </div>
-                      <div className="summary-stat">
-                        <span className="stat-label">Completed</span>
-                        <span className="stat-value">{services.filter(s => s.status === 'completed').length}</span>
-                      </div>
-                      <div className="summary-stat">
-                        <span className="stat-label">In Progress</span>
-                        <span className="stat-value">{services.filter(s => s.status === 'in-progress').length}</span>
-                      </div>
-                       <div className="summary-stat">
-                         <span className="stat-label">Total Spent</span>
-                         <span className="stat-value">₹{services.reduce((sum, s) => sum + s.price, 0)}</span>
-                       </div>
-                    </div>
-                  </div>
+                          {selectedOrder.address && (
+                            <div className="order-detail-section">
+                              <h5>Service Location</h5>
+                              <div className="address-details">
+                                <MapPin size={16} />
+                                <span>{selectedOrder.address}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="modal-footer">
+                          <button 
+                            className="btn-secondary"
+                            onClick={() => setIsOrderDetailsOpen(false)}
+                          >
+                            Close
+                          </button>
+                          {selectedOrder.bookingStatus === 'completed' && (
+                            <button 
+                              className="btn-primary"
+                              onClick={() => {
+                                setIsOrderDetailsOpen(false);
+                                handleProvideFeedback(selectedOrder);
+                              }}
+                            >
+                              Leave Feedback
+                            </button>
+                          )}
+                          {selectedOrder.paymentStatus === 'pending' && (
+                            <button 
+                              className="btn-primary"
+                              onClick={() => {
+                                setIsOrderDetailsOpen(false);
+                                handlePayBill(selectedOrder);
+                              }}
+                            >
+                              Make Payment
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
                 </motion.div>
               )}
 
@@ -3998,130 +4840,155 @@ const CustomerDashboard = () => {
                 </motion.div>
               )}
 
-              {activeTab === 'support' && (
+              {activeTab === 'ai-assistant' && (
                 <motion.div 
-                  className="feedback-tab"
+                  className="ai-assistant-tab"
                   initial="hidden"
                   animate="visible"
                   variants={containerVariants}
                 >
-                  <div className="feedback-header">
-                    <h3>Feedback & Support</h3>
-                    <p>Share your experience and get help</p>
+                  <div className="ai-assistant-header">
+                    <div className="ai-header-content">
+                      <div className="ai-title-section">
+                        <h3>Nexus AI Assistant</h3>
+                        <p>Your intelligent assistant for service-related inquiries and support</p>
+                      </div>
+                      <div className="ai-status-indicator">
+                        <div className={`status-dot ${aiStatus}`}></div>
+                        <span className="status-text">AI Online</span>
+                      </div>
                     </div>
-              
-                  <div className="content-grid">
-                    {/* Provide Feedback */}
-                    <div className="content-card">
-                      <h4>Provide Feedback</h4>
-                      <form className="feedback-form">
-                        <div className="form-group">
-                          <label htmlFor="bookingId">Booking ID</label>
-                          <select id="bookingId" name="bookingId" required>
-                            <option value="">Select a completed service</option>
-                            {services.filter(s => s.status === 'completed').map(service => (
-                              <option key={service.id} value={service.trackingId}>
-                                {service.trackingId} - {service.name}
-                              </option>
-                            ))}
-                          </select>
                   </div>
 
-                        <div className="form-group">
-                          <label>Rating</label>
-                          <div className="rating-input">
-                            {[1, 2, 3, 4, 5].map(star => (
-                              <button
-                                key={star}
-                                type="button"
-                                className="star-btn"
-                              >
-                                <Star size={24} />
-                              </button>
-                ))}
-              </div>
-            </div>
-
-                        <div className="form-group">
-                          <label htmlFor="feedback">Written Feedback</label>
-                          <textarea 
-                            id="feedback" 
-                            name="feedback" 
-                            rows="4" 
-                            placeholder="Share your experience with the service..."
-                          ></textarea>
-              </div>
-              
-                        <div className="form-group">
-                          <label className="checkbox-label">
-                            <input type="checkbox" name="recommend" />
-                            Would you recommend this service provider?
-                          </label>
-              </div>
-
-                        <div className="form-actions">
-                          <button type="submit" className="btn-primary">Submit Feedback</button>
-            </div>
-                      </form>
-                    </div>
-
-                    {/* Support & Help */}
-                    <div className="content-card">
-                      <h4>Support & Help</h4>
-                      <div className="support-options">
-                        <button className="support-btn">
-                          <MessageCircle size={20} />
-                          <span>Live Chat</span>
-                        </button>
-                        <button className="support-btn">
-                          <Phone size={20} />
-                          <span>Call Support</span>
-                        </button>
-                        <button className="support-btn">
-                          <Mail size={20} />
-                          <span>Email Support</span>
-                        </button>
-                        <button className="support-btn">
-                          <FileText size={20} />
-                          <span>FAQ</span>
-                        </button>
+                  <div className="ai-assistant-content">
+                    {/* Chat Interface */}
+                    <div className="ai-chat-container">
+                      <div className="ai-chat-messages" ref={chatMessagesRef}>
+                        {aiMessages.length === 0 ? (
+                          <div className="ai-welcome-message">
+                            <div className="welcome-icon">
+                              <MessageCircle size={48} />
+                            </div>
+                            <h4>Welcome to Nexus AI Assistant</h4>
+                            <p>I'm here to help you with your service needs. How can I assist you today?</p>
+                          </div>
+                        ) : (
+                          aiMessages.map((message, index) => (
+                            <div key={index} className={`ai-message ${message.role}`}>
+                              <div className="message-avatar">
+                                {message.role === 'user' ? (
+                                  <User size={20} />
+                                ) : (
+                                  <MessageCircle size={20} />
+                                )}
+                              </div>
+                              <div className="message-content">
+                                {message.content && (
+                                  <div className="message-text">
+                                    {message.content}
+                                  </div>
+                                )}
+                                {message.imageData && (
+                                  <div className="message-image">
+                                    <img 
+                                      src={message.imageData} 
+                                      alt="Uploaded image" 
+                                      className="chat-image"
+                                      onError={(e) => {
+                                        e.target.style.display = 'none';
+                                        e.target.nextSibling.style.display = 'block';
+                                      }}
+                                    />
+                                    <div className="image-error" style={{display: 'none'}}>
+                                      <span>Failed to load image</span>
+                                    </div>
+                                  </div>
+                                )}
+                                <div className="message-time">
+                                  {message.timestamp.toLocaleTimeString()}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        {aiLoading && (
+                          <div className="ai-message assistant">
+                            <div className="message-avatar">
+                              <MessageCircle size={20} />
+                            </div>
+                            <div className="message-content">
+                              <div className="typing-indicator">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="complaint-form">
-                        <h5>Raise a Complaint</h5>
-                        <form>
-                          <div className="form-group">
-                            <label htmlFor="complaintType">Issue Type</label>
-                            <select id="complaintType" name="complaintType" required>
-                              <option value="">Select issue type</option>
-                              <option value="service_quality">Service Quality</option>
-                              <option value="billing">Billing Issue</option>
-                              <option value="provider_behavior">Provider Behavior</option>
-                              <option value="technical">Technical Issue</option>
-                              <option value="other">Other</option>
-                            </select>
+                      <div className="ai-chat-input-container">
+                        {imagePreview && (
+                          <div className="image-preview-container">
+                            <div className="image-preview">
+                              <img src={imagePreview} alt="Preview" className="preview-image" />
+                              <button 
+                                type="button"
+                                className="remove-image-btn"
+                                onClick={removeImage}
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
                           </div>
-
-                          <div className="form-group">
-                            <label htmlFor="complaintDetails">Describe the Issue</label>
-                            <textarea 
-                              id="complaintDetails" 
-                              name="complaintDetails" 
-                              rows="3" 
-                              placeholder="Please provide details about your complaint..."
-                              required
-                            ></textarea>
-                          </div>
-
-                          <div className="form-actions">
-                            <button type="submit" className="btn-primary">Submit Complaint</button>
+                        )}
+                        <form onSubmit={handleAISubmit} className="ai-chat-form">
+                          <div className="ai-input-wrapper">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleImageUpload}
+                              className="ai-image-input"
+                              id="ai-image-upload"
+                              disabled={aiLoading}
+                            />
+                            <label htmlFor="ai-image-upload" className="ai-image-button">
+                              <Image size={20} />
+                            </label>
+                            <input
+                              type="text"
+                              value={aiInput}
+                              onChange={(e) => setAiInput(e.target.value)}
+                              placeholder="Ask me anything about our services..."
+                              className="ai-chat-input"
+                              disabled={aiLoading}
+                            />
+                            <button 
+                              type="submit" 
+                              className="ai-send-button"
+                              disabled={aiLoading || (!aiInput.trim() && !selectedImage)}
+                            >
+                              <Send size={20} />
+                            </button>
                           </div>
                         </form>
                       </div>
                     </div>
+
+                    {/* Chat Actions */}
+                    <div className="ai-chat-actions">
+                      <button 
+                        className="ai-action-button"
+                        onClick={clearAIConversation}
+                        disabled={aiMessages.length === 0}
+                      >
+                        <RotateCcw size={16} />
+                        Clear Conversation
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
-          )}
+              )}
 
           {activeTab === 'profile' && (
                 <motion.div 

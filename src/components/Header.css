@@ -97,12 +97,12 @@
 
 .nav-link:hover {
   color: #4f9cf9;
-  background: rgba(79, 156, 249, 0.1);
+  background: transparent; /* remove dark/filled hover */
 }
 
 .nav-link.active {
   color: #4f9cf9;
-  background: rgba(79, 156, 249, 0.1);
+  background: transparent; /* keep clean pill-free active state */
 }
 
 .active-indicator {
@@ -360,6 +360,12 @@
 .nav-link:hover::before,
 .nav-link.active::before {
   width: 100%;
+}
+
+/* Prevent dark shadow/raise on header nav links */
+.nav-link.hover-lift:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 /* Focus States for Accessibility */

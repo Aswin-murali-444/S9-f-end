@@ -23,26 +23,14 @@
 }
 
 .register-content {
-  display: grid;
-  grid-template-columns: 1fr 400px;
-  gap: 30px;
+  display: flex;
+  justify-content: center;
   width: 100%;
-  max-width: 1200px;
-  align-items: start;
+  max-width: 500px;
 }
 
-/* Compact Role Selection Section */
-.role-selection-section {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  padding: 25px;
-  border-radius: 20px;
-  box-shadow: 
-    0 15px 40px rgba(0, 0, 0, 0.1),
-    0 5px 15px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
+/* Role selection block hidden in simplified register */
+.role-selection-section { display: none; }
 
 .role-selection-header {
   text-align: center;
@@ -201,10 +189,7 @@
 }
 
 /* Register Form Section */
-.register-form-section {
-  position: sticky;
-  top: 20px;
-}
+.register-form-section { width: 100%; }
 
 .register-box {
   background: rgba(255, 255, 255, 0.98);
@@ -662,15 +647,6 @@ a:hover {
 
 /* Responsive Design */
 @media (max-width: 1200px) {
-  .register-content {
-    grid-template-columns: 1fr;
-    gap: 25px;
-  }
-  
-  .role-cards-grid {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-  }
 }
 
 @media (max-width: 768px) {
@@ -678,28 +654,10 @@ a:hover {
     padding-top: 20px;
   }
   
-  .register-content {
-    padding: 0;
-  }
-  
-  .role-selection-section,
+  .register-content { padding: 0; }
   .register-box {
     padding: 20px;
   }
-  
-  .role-cards-grid {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-  
-  .role-card {
-    padding: 16px;
-  }
-  
-  .role-selection-header h2 {
-    font-size: 1.3rem;
-  }
-  
   .form-header h3 {
     font-size: 1.3rem;
   }
@@ -711,21 +669,11 @@ a:hover {
     padding-top: 15px;
   }
   
-  .role-selection-section,
   .register-box {
     padding: 18px 15px;
     margin: 8px;
   }
-  
-  .role-selection-header h2 {
-    font-size: 1.2rem;
-  }
-  
   .form-header h3 {
     font-size: 1.2rem;
-  }
-  
-  .role-card {
-    padding: 14px;
   }
 } 

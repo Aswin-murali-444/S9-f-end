@@ -3,17 +3,67 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { apiService } from '../../services/api';
 import AdminLayout from '../../components/AdminLayout';
-import { Users, MapPin, Mail, Phone, User as UserIcon, ArrowLeft, Calendar, Clock, ShieldCheck, Navigation, Map } from 'lucide-react';
+import { Users, MapPin, Mail, Phone, User as UserIcon, ArrowLeft, Calendar, Clock, ShieldCheck, Navigation, Map, Briefcase, Award, DollarSign, Star, Target, Package, Globe, Home, Building, FileText, CheckCircle, XCircle, AlertCircle, Settings, Save, AlertTriangle } from 'lucide-react';
 import './AdminPages.css';
 
 const AdminUserProfile = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [providerProfile, setProviderProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [providerLoading, setProviderLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Verification management state
+  const [isEditingVerification, setIsEditingVerification] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState('');
+  const [verificationReason, setVerificationReason] = useState('');
+  const [isUpdatingVerification, setIsUpdatingVerification] = useState(false);
+  const [verificationError, setVerificationError] = useState('');
 
   const normalizeNumber = (val) => (val === null || val === undefined || val === '' ? null : Number(val));
+
+  // Helper function to format data and handle null values
+  const formatValue = (value, fallback = '') => {
+    if (value === null || value === undefined || value === '') {
+      return fallback;
+    }
+    return value;
+  };
+
+  const formatBoolean = (value, trueText = 'Yes', falseText = 'No') => {
+    if (value === null || value === undefined) return '';
+    return value ? trueText : falseText;
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    try {
+      return new Date(dateString).toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return '';
+    try {
+      return new Date(dateString).toLocaleString('en-IN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return '';
+    }
+  };
 
   const buildMapHref = (address, lat, lon) => {
     const hasCoords = lat !== null && lon !== null && !Number.isNaN(lat) && !Number.isNaN(lon);
@@ -23,7 +73,7 @@ const AdminUserProfile = () => {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
   };
 
-  const formatLocationData = (profile) => {
+  const formatLocationData = (profile, providerProfile = null) => {
     const locations = [];
     
     // Primary location from user_profiles table
@@ -48,7 +98,100 @@ const AdminUserProfile = () => {
       }
     }
     
+    // Provider location from provider_profiles table
+    if (providerProfile) {
+      const lat = normalizeNumber(providerProfile.location_latitude);
+      const lon = normalizeNumber(providerProfile.location_longitude);
+      
+      if (lat !== null && lon !== null) {
+        const address = [providerProfile.address, providerProfile.city, providerProfile.state, providerProfile.country]
+          .filter(Boolean)
+          .join(', ');
+        
+        locations.push({
+          label: 'Provider Location',
+          address: address || `${lat}, ${lon}`,
+          lat,
+          lon,
+          accuracy: null,
+          href: buildMapHref(address, lat, lon)
+        });
+      }
+    }
+    
     return locations;
+  };
+
+  // Function to fetch provider profile data
+  const fetchProviderProfile = async (providerId) => {
+    try {
+      const profileData = await apiService.getProviderProfile(providerId);
+      const providerData = profileData?.data || null;
+      setProviderProfile(providerData);
+      if (providerData) {
+        setVerificationStatus(providerData.status || 'pending_verification');
+      }
+      return providerData;
+    } catch (error) {
+      console.error('Failed to fetch provider profile:', error);
+      setProviderProfile(null);
+      return null;
+    }
+  };
+
+  // Function to update verification status
+  const updateVerificationStatus = async () => {
+    if (!providerProfile?.provider_id) {
+      setVerificationError('Provider ID not found');
+      return;
+    }
+
+    try {
+      setIsUpdatingVerification(true);
+      setVerificationError('');
+
+      const response = await apiService.updateProviderProfileStatus(
+        providerProfile.provider_id,
+        verificationStatus,
+        verificationReason
+      );
+
+      if (response.success) {
+        // Update local state
+        setProviderProfile(prev => ({
+          ...prev,
+          status: verificationStatus,
+          updated_at: new Date().toISOString()
+        }));
+        
+        setIsEditingVerification(false);
+        setVerificationReason('');
+        
+        // Show success message (you can add a toast notification here)
+        console.log('Verification status updated successfully');
+      } else {
+        setVerificationError(response.error || 'Failed to update verification status');
+      }
+    } catch (error) {
+      console.error('Failed to update verification status:', error);
+      setVerificationError(error.message || 'Failed to update verification status');
+    } finally {
+      setIsUpdatingVerification(false);
+    }
+  };
+
+  // Function to handle verification status change
+  const handleVerificationStatusChange = (newStatus) => {
+    setVerificationStatus(newStatus);
+    setVerificationError('');
+  };
+
+  // Function to cancel verification editing
+  const cancelVerificationEdit = () => {
+    setIsEditingVerification(false);
+    setVerificationStatus(providerProfile?.status || 'pending_verification');
+    setVerificationReason('');
+    setVerificationError('');
   };
 
   useEffect(() => {
@@ -74,7 +217,13 @@ const AdminUserProfile = () => {
           }
         }
         
-        const locations = formatLocationData(profile);
+        // If this is a service provider, fetch their provider profile data first
+        let providerProfileData = null;
+        if (userData.role === 'service_provider') {
+          providerProfileData = await fetchProviderProfile(userId);
+        }
+        
+        const locations = formatLocationData(profile, providerProfileData);
         
         setUser({ 
           ...userData, 
@@ -184,13 +333,9 @@ const AdminUserProfile = () => {
             <p>View and manage user details for {user.name || user.email}</p>
           </div>
           <div className="header-actions">
-            <button className="btn-secondary btn-animate" onClick={() => navigate('/dashboard/admin?tab=users')}>
-              <Users size={16} />
-              Back to Users
-            </button>
-            <button className="btn-primary btn-animate" onClick={() => navigate(-1)}>
+            <button className="btn-primary btn-animate" onClick={() => navigate('/dashboard/admin?tab=users')}>
               <ArrowLeft size={16} />
-              Back
+              Back to User Management
             </button>
           </div>
         </motion.div>
@@ -226,15 +371,17 @@ const AdminUserProfile = () => {
 
                 <div className="form-group">
                   <label>First Name</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                    {user.profile?.first_name || '—'}
+                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <UserIcon size={16} />
+                    {formatValue(user.profile?.first_name)}
                   </div>
                 </div>
 
                 <div className="form-group">
                   <label>Last Name</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                    {user.profile?.last_name || '—'}
+                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <UserIcon size={16} />
+                    {formatValue(user.profile?.last_name)}
                   </div>
                 </div>
 
@@ -242,7 +389,7 @@ const AdminUserProfile = () => {
                   <label>Email Address</label>
                   <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Mail size={16} />
-                    {user.email || '—'}
+                    {formatValue(user.email)}
                   </div>
                 </div>
 
@@ -250,31 +397,39 @@ const AdminUserProfile = () => {
                   <label>Phone Number</label>
                   <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Phone size={16} />
-                    {user.profile?.phone || '—'}
+                    {formatValue(user.profile?.phone)}
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label>Date of Birth</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Calendar size={16} />
-                    {user.profile?.date_of_birth ? new Date(user.profile.date_of_birth).toLocaleDateString() : '—'}
+                {user.profile?.date_of_birth && (
+                  <div className="form-group">
+                    <label>Date of Birth</label>
+                    <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Calendar size={16} />
+                      {formatDate(user.profile?.date_of_birth)}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div className="form-group">
-                  <label>Gender</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                    {user.profile?.gender || '—'}
+                {user.profile?.gender && (
+                  <div className="form-group">
+                    <label>Gender</label>
+                    <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <UserIcon size={16} />
+                      {formatValue(user.profile?.gender)}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div className="form-group full-width">
-                  <label>Bio</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', minHeight: '80px', lineHeight: '1.6' }}>
-                    {user.profile?.bio || '—'}
+                {user.profile?.bio && (
+                  <div className="form-group full-width">
+                    <label>Bio</label>
+                    <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', minHeight: '80px', lineHeight: '1.6', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                      <FileText size={16} style={{ marginTop: '2px' }} />
+                      {formatValue(user.profile?.bio)}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -282,40 +437,55 @@ const AdminUserProfile = () => {
             <div className="form-section">
               <h3>Address & Location</h3>
               <div className="form-grid">
-                <div className="form-group">
-                  <label>Postal Code</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                    {user.profile?.postal_code || '—'}
+                {user.profile?.postal_code && (
+                  <div className="form-group">
+                    <label>Postal Code</label>
+                    <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Building size={16} />
+                      {formatValue(user.profile?.postal_code)}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div className="form-group">
-                  <label>City</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                    {user.profile?.city || '—'}
+                {user.profile?.city && (
+                  <div className="form-group">
+                    <label>City</label>
+                    <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <MapPin size={16} />
+                      {formatValue(user.profile?.city)}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div className="form-group">
-                  <label>State</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                    {user.profile?.state || '—'}
+                {user.profile?.state && (
+                  <div className="form-group">
+                    <label>State</label>
+                    <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <MapPin size={16} />
+                      {formatValue(user.profile?.state)}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div className="form-group">
-                  <label>Country</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                    {user.profile?.country || '—'}
+                {user.profile?.country && (
+                  <div className="form-group">
+                    <label>Country</label>
+                    <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Globe size={16} />
+                      {formatValue(user.profile?.country)}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div className="form-group full-width">
-                  <label>Full Address</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', lineHeight: '1.6' }}>
-                    {user.profile?.address || '—'}
+                {user.profile?.address && (
+                  <div className="form-group full-width">
+                    <label>Full Address</label>
+                    <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', lineHeight: '1.6', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                      <Home size={16} style={{ marginTop: '2px' }} />
+                      {formatValue(user.profile?.address)}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Location Coordinates */}
                 {user.locations && user.locations.length > 0 && (
@@ -377,15 +547,20 @@ const AdminUserProfile = () => {
                   <label>User Role</label>
                   <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <ShieldCheck size={16} />
-                    {user.role || '—'}
+                    {formatValue(user.role)}
                   </div>
                 </div>
 
                 <div className="form-group">
                   <label>Account Status</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {user.status === 'active' ? (
+                      <CheckCircle size={16} style={{ color: '#10b981' }} />
+                    ) : (
+                      <XCircle size={16} style={{ color: '#ef4444' }} />
+                    )}
                     <span className={`status-badge ${user.status || 'active'}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
-                      {user.status || 'active'}
+                      {formatValue(user.status, 'active')}
                     </span>
                   </div>
                 </div>
@@ -394,7 +569,7 @@ const AdminUserProfile = () => {
                   <label>Account Created</label>
                   <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Clock size={16} />
-                    {user.created_at ? new Date(user.created_at).toLocaleDateString() : '—'}
+                    {formatDate(user.created_at)}
                   </div>
                 </div>
 
@@ -402,29 +577,572 @@ const AdminUserProfile = () => {
                   <label>Last Updated</label>
                   <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Clock size={16} />
-                    {user.updated_at ? new Date(user.updated_at).toLocaleDateString() : '—'}
+                    {formatDateTime(user.updated_at)}
                   </div>
                 </div>
 
                 <div className="form-group">
                   <label>Email Verified</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {user.email_verified ? (
+                      <CheckCircle size={16} style={{ color: '#10b981' }} />
+                    ) : (
+                      <XCircle size={16} style={{ color: '#ef4444' }} />
+                    )}
                     <span className={`status-badge ${user.email_verified ? 'active' : 'inactive'}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
-                      {user.email_verified ? 'Verified' : 'Not Verified'}
+                      {formatBoolean(user.email_verified, 'Verified', 'Not Verified')}
                     </span>
                   </div>
                 </div>
 
                 <div className="form-group">
                   <label>Phone Verified</label>
-                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                  <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {user.phone_verified ? (
+                      <CheckCircle size={16} style={{ color: '#10b981' }} />
+                    ) : (
+                      <XCircle size={16} style={{ color: '#ef4444' }} />
+                    )}
                     <span className={`status-badge ${user.phone_verified ? 'active' : 'inactive'}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
-                      {user.phone_verified ? 'Verified' : 'Not Verified'}
+                      {formatBoolean(user.phone_verified, 'Verified', 'Not Verified')}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Service Provider Profile Section - Only show for service providers */}
+            {user?.role === 'service_provider' && (
+              <div className="form-section">
+                <h3>Service Provider Profile</h3>
+                {providerProfile ? (
+                  <div className="form-grid">
+                    {/* Provider Profile Picture */}
+                    <div className="form-group">
+                      <label>Provider Profile Picture</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '20px', padding: '20px', backgroundColor: '#f8fafc', borderRadius: '12px' }}>
+                        <div className="user-avatar" style={{ width: '80px', height: '80px', borderWidth: 3, margin: 0 }}>
+                          {providerProfile.profile_photo_url ? (
+                            <img src={providerProfile.profile_photo_url} alt="Provider Profile" />
+                          ) : (
+                            (providerProfile.first_name || providerProfile.last_name || 'Provider').split(' ').filter(Boolean).map(p => p[0]).slice(0,2).join('').toUpperCase()
+                          )}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                            <h4 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>
+                              {formatValue(`${providerProfile.first_name} ${providerProfile.last_name}`.trim(), 'Provider Profile')}
+                            </h4>
+                            <span className={`status-badge ${providerProfile.status || 'active'}`} style={{ fontSize: '0.75rem', padding: '4px 8px' }}>
+                              {formatValue(providerProfile.status, 'active')}
+                            </span>
+                          </div>
+                          <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+                            Service Provider ID: {formatValue(providerProfile.provider_id)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Personal Information */}
+                    <div className="form-group">
+                      <label>First Name</label>
+                      <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <UserIcon size={16} />
+                        {formatValue(providerProfile.first_name)}
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Last Name</label>
+                      <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <UserIcon size={16} />
+                        {formatValue(providerProfile.last_name)}
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Provider Phone</label>
+                      <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Phone size={16} />
+                        {formatValue(providerProfile.phone)}
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Provider Email</label>
+                      <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Mail size={16} />
+                        {formatValue(providerProfile.email)}
+                      </div>
+                    </div>
+
+                    {/* Address Information */}
+                    {providerProfile.pincode && (
+                      <div className="form-group">
+                        <label>Postal Code</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Building size={16} />
+                          {formatValue(providerProfile.pincode)}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.city && (
+                      <div className="form-group">
+                        <label>City</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <MapPin size={16} />
+                          {formatValue(providerProfile.city)}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.state && (
+                      <div className="form-group">
+                        <label>State</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <MapPin size={16} />
+                          {formatValue(providerProfile.state)}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.country && (
+                      <div className="form-group">
+                        <label>Country</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Globe size={16} />
+                          {formatValue(providerProfile.country)}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.address && (
+                      <div className="form-group full-width">
+                        <label>Full Address</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', lineHeight: '1.6', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                          <Home size={16} style={{ marginTop: '2px' }} />
+                          {formatValue(providerProfile.address)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Professional Information */}
+                    {(providerProfile.years_of_experience || providerProfile.years_of_experience === 0) && (
+                      <div className="form-group">
+                        <label>Years of Experience</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Award size={16} />
+                          {formatValue(providerProfile.years_of_experience, '0')} years
+                        </div>
+                      </div>
+                    )}
+
+                    {(providerProfile.hourly_rate || providerProfile.hourly_rate === 0) && (
+                      <div className="form-group">
+                        <label>Hourly Rate</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <DollarSign size={16} />
+                          ₹{formatValue(providerProfile.hourly_rate, '0')}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.service_category_name && (
+                      <div className="form-group">
+                        <label>Service Category</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Package size={16} />
+                          {formatValue(providerProfile.service_category_name)}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.service_name && (
+                      <div className="form-group">
+                        <label>Service Type</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Target size={16} />
+                          {formatValue(providerProfile.service_name)}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.specialization && (
+                      <div className="form-group">
+                        <label>Specialization</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Briefcase size={16} />
+                          {formatValue(providerProfile.specialization)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Profile Status */}
+                    <div className="form-group">
+                      <label>Profile Status</label>
+                      <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {providerProfile.profile_status === 'verified' ? (
+                          <CheckCircle size={16} style={{ color: '#10b981' }} />
+                        ) : providerProfile.profile_status === 'rejected' ? (
+                          <XCircle size={16} style={{ color: '#ef4444' }} />
+                        ) : (
+                          <AlertCircle size={16} style={{ color: '#f59e0b' }} />
+                        )}
+                        <span className={`status-badge ${providerProfile.profile_status || 'active'}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
+                          {formatValue(providerProfile.profile_status, 'active')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Admin Verification Management */}
+                    <div className="form-group full-width">
+                      <label>Admin Verification Management</label>
+                      <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                        {!isEditingVerification ? (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {providerProfile.status === 'verified' ? (
+                                  <CheckCircle size={20} style={{ color: '#10b981' }} />
+                                ) : providerProfile.status === 'rejected' ? (
+                                  <XCircle size={20} style={{ color: '#ef4444' }} />
+                                ) : providerProfile.status === 'suspended' ? (
+                                  <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
+                                ) : (
+                                  <AlertCircle size={20} style={{ color: '#6b7280' }} />
+                                )}
+                                <span style={{ fontWeight: '500', fontSize: '1rem' }}>
+                                  Current Status: 
+                                </span>
+                                <span className={`status-badge ${providerProfile.status || 'pending_verification'}`} style={{ fontSize: '0.875rem', padding: '6px 12px' }}>
+                                  {formatValue(providerProfile.status, 'pending_verification').replace('_', ' ').toUpperCase()}
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setIsEditingVerification(true)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '8px 16px',
+                                backgroundColor: '#3b82f6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseOver={(e) => e.target.style.backgroundColor = '#2563eb'}
+                              onMouseOut={(e) => e.target.style.backgroundColor = '#3b82f6'}
+                            >
+                              <Settings size={16} />
+                              Manage Verification
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <Settings size={20} style={{ color: '#3b82f6' }} />
+                              <span style={{ fontWeight: '500', fontSize: '1rem' }}>Update Verification Status</span>
+                            </div>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              <div>
+                                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>
+                                  New Status
+                                </label>
+                                <select
+                                  value={verificationStatus}
+                                  onChange={(e) => handleVerificationStatusChange(e.target.value)}
+                                  style={{
+                                    width: '100%',
+                                    padding: '10px 12px',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '6px',
+                                    fontSize: '0.875rem',
+                                    backgroundColor: 'white'
+                                  }}
+                                >
+                                  <option value="pending_verification">Pending Verification</option>
+                                  <option value="verified">Verified</option>
+                                  <option value="rejected">Rejected</option>
+                                  <option value="suspended">Suspended</option>
+                                  <option value="active">Active</option>
+                                </select>
+                              </div>
+                              
+                              <div>
+                                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>
+                                  Reason (Optional)
+                                </label>
+                                <textarea
+                                  value={verificationReason}
+                                  onChange={(e) => setVerificationReason(e.target.value)}
+                                  placeholder="Enter reason for status change..."
+                                  rows={3}
+                                  style={{
+                                    width: '100%',
+                                    padding: '10px 12px',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '6px',
+                                    fontSize: '0.875rem',
+                                    backgroundColor: 'white',
+                                    resize: 'vertical'
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            
+                            {verificationError && (
+                              <div style={{
+                                padding: '12px',
+                                backgroundColor: '#fef2f2',
+                                border: '1px solid #fecaca',
+                                borderRadius: '6px',
+                                color: '#dc2626',
+                                fontSize: '0.875rem'
+                              }}>
+                                {verificationError}
+                              </div>
+                            )}
+                            
+                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                              <button
+                                onClick={cancelVerificationEdit}
+                                disabled={isUpdatingVerification}
+                                style={{
+                                  padding: '10px 20px',
+                                  backgroundColor: '#6b7280',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontSize: '0.875rem',
+                                  fontWeight: '500',
+                                  cursor: isUpdatingVerification ? 'not-allowed' : 'pointer',
+                                  opacity: isUpdatingVerification ? 0.6 : 1,
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onMouseOver={(e) => !isUpdatingVerification && (e.target.style.backgroundColor = '#4b5563')}
+                                onMouseOut={(e) => !isUpdatingVerification && (e.target.style.backgroundColor = '#6b7280')}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={updateVerificationStatus}
+                                disabled={isUpdatingVerification}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '10px 20px',
+                                  backgroundColor: '#10b981',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontSize: '0.875rem',
+                                  fontWeight: '500',
+                                  cursor: isUpdatingVerification ? 'not-allowed' : 'pointer',
+                                  opacity: isUpdatingVerification ? 0.6 : 1,
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onMouseOver={(e) => !isUpdatingVerification && (e.target.style.backgroundColor = '#059669')}
+                                onMouseOut={(e) => !isUpdatingVerification && (e.target.style.backgroundColor = '#10b981')}
+                              >
+                                {isUpdatingVerification ? (
+                                  <>
+                                    <div style={{ width: '16px', height: '16px', border: '2px solid transparent', borderTop: '2px solid white', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                                    Updating...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Save size={16} />
+                                    Update Status
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Verification Status</label>
+                      <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {providerProfile.is_verified ? (
+                          <CheckCircle size={16} style={{ color: '#10b981' }} />
+                        ) : (
+                          <XCircle size={16} style={{ color: '#ef4444' }} />
+                        )}
+                        <span className={`status-badge ${providerProfile.is_verified ? 'active' : 'inactive'}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
+                          {formatBoolean(providerProfile.is_verified, 'Verified', 'Not Verified')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Timestamps */}
+                    {providerProfile.created_at && (
+                      <div className="form-group">
+                        <label>Profile Created</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Calendar size={16} />
+                          {formatDate(providerProfile.created_at)}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.updated_at && (
+                      <div className="form-group">
+                        <label>Profile Last Updated</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Clock size={16} />
+                          {formatDateTime(providerProfile.updated_at)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Additional Provider Information */}
+                    {providerProfile.bio && (
+                      <div className="form-group full-width">
+                        <label>Provider Bio</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', minHeight: '80px', lineHeight: '1.6', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                          <FileText size={16} style={{ marginTop: '2px' }} />
+                          {formatValue(providerProfile.bio)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Aadhaar Information */}
+                    {providerProfile.aadhaar_number && (
+                      <div className="form-group">
+                        <label>Aadhaar Number</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <ShieldCheck size={16} />
+                          {formatValue(providerProfile.aadhaar_number)}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.aadhaar_name && (
+                      <div className="form-group">
+                        <label>Aadhaar Name</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <UserIcon size={16} />
+                          {formatValue(providerProfile.aadhaar_name)}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.aadhaar_dob && (
+                      <div className="form-group">
+                        <label>Aadhaar Date of Birth</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Calendar size={16} />
+                          {formatDate(providerProfile.aadhaar_dob)}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.aadhaar_gender && (
+                      <div className="form-group">
+                        <label>Aadhaar Gender</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <UserIcon size={16} />
+                          {formatValue(providerProfile.aadhaar_gender)}
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.aadhaar_address && (
+                      <div className="form-group full-width">
+                        <label>Aadhaar Address</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', lineHeight: '1.6', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                          <Home size={16} style={{ marginTop: '2px' }} />
+                          {formatValue(providerProfile.aadhaar_address)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Skills and Qualifications */}
+                    {providerProfile.qualifications && providerProfile.qualifications.length > 0 && (
+                      <div className="form-group full-width">
+                        <label>Qualifications</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {providerProfile.qualifications.map((qualification, index) => (
+                              <span key={index} style={{ 
+                                padding: '4px 8px', 
+                                backgroundColor: '#e2e8f0', 
+                                borderRadius: '6px', 
+                                fontSize: '0.875rem',
+                                color: '#475569'
+                              }}>
+                                {qualification}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.certifications && providerProfile.certifications.length > 0 && (
+                      <div className="form-group full-width">
+                        <label>Certifications</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {providerProfile.certifications.map((certification, index) => (
+                              <span key={index} style={{ 
+                                padding: '4px 8px', 
+                                backgroundColor: '#dbeafe', 
+                                borderRadius: '6px', 
+                                fontSize: '0.875rem',
+                                color: '#1e40af'
+                              }}>
+                                {certification}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {providerProfile.languages && providerProfile.languages.length > 0 && (
+                      <div className="form-group full-width">
+                        <label>Languages</label>
+                        <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {providerProfile.languages.map((language, index) => (
+                              <span key={index} style={{ 
+                                padding: '4px 8px', 
+                                backgroundColor: '#f0fdf4', 
+                                borderRadius: '6px', 
+                                fontSize: '0.875rem',
+                                color: '#166534'
+                              }}>
+                                {language}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px 0', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                    <Briefcase size={48} style={{ color: '#94a3b8', marginBottom: '16px' }} />
+                    <h4 style={{ color: '#64748b', marginBottom: '8px' }}>No Provider Profile Found</h4>
+                    <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+                      This service provider hasn't completed their professional profile yet.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
           </div>
         </motion.div>

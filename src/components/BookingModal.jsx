@@ -583,37 +583,136 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
               /* Success State */
               <motion.div 
                 className="booking-success"
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.8, opacity: 0 }}
+                initial={{ scale: 0.8, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.8, opacity: 0, y: -20 }}
+                transition={{ 
+                  type: "spring", 
+                  stiffness: 300, 
+                  damping: 30,
+                  duration: 0.6 
+                }}
               >
-                <div className="success-icon">
-                  <CheckCircle size={64} />
+                {/* Animated Background Elements */}
+                <div className="success-background">
+                  <div className="floating-circle circle-1"></div>
+                  <div className="floating-circle circle-2"></div>
+                  <div className="floating-circle circle-3"></div>
                 </div>
-                <h2>Booking Confirmed!</h2>
-                <p>Your service booking has been successfully confirmed.</p>
-                <div className="booking-details">
-                  <div className="detail-item">
-                    <span>Service:</span>
-                    <span>{service.name}</span>
+
+                {/* Success Icon with Enhanced Animation */}
+                <motion.div 
+                  className="success-icon"
+                  initial={{ scale: 0, rotate: -180 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ 
+                    delay: 0.2, 
+                    type: "spring", 
+                    stiffness: 200, 
+                    damping: 15 
+                  }}
+                >
+                  <div className="icon-container">
+                    <CheckCircle size={72} />
+                    <div className="icon-ring"></div>
                   </div>
-                  <div className="detail-item">
-                    <span>Date:</span>
-                    <span>{formatDisplayDate(selectedDate)}</span>
+                </motion.div>
+
+                {/* Success Content */}
+                <motion.div 
+                  className="success-content"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4, duration: 0.6 }}
+                >
+                  <h2>🎉 Booking Confirmed!</h2>
+                  <p className="success-subtitle">Your service booking has been successfully confirmed and payment processed.</p>
+                  
+                  {/* Enhanced Booking Details Card */}
+                  <div className="booking-details-card">
+                    <div className="details-header">
+                      <h3>Booking Summary</h3>
+                      <div className="booking-id">#BK{Date.now().toString().slice(-6)}</div>
+                    </div>
+                    
+                    <div className="details-grid">
+                      <div className="detail-item">
+                        <div className="detail-icon">
+                          <Star size={20} />
+                        </div>
+                        <div className="detail-content">
+                          <span className="detail-label">Service</span>
+                          <span className="detail-value">{service.name}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="detail-item">
+                        <div className="detail-icon">
+                          <Calendar size={20} />
+                        </div>
+                        <div className="detail-content">
+                          <span className="detail-label">Date</span>
+                          <span className="detail-value">{formatDisplayDate(selectedDate)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="detail-item">
+                        <div className="detail-icon">
+                          <Clock size={20} />
+                        </div>
+                        <div className="detail-content">
+                          <span className="detail-label">Time</span>
+                          <span className="detail-value">{selectedTime}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="detail-item">
+                        <div className="detail-icon">
+                          <CreditCard size={20} />
+                        </div>
+                        <div className="detail-content">
+                          <span className="detail-label">Amount Paid</span>
+                          <span className="detail-value amount">₹{total}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="detail-item">
-                    <span>Time:</span>
-                    <span>{selectedTime}</span>
+
+                  {/* Next Steps */}
+                  <div className="next-steps">
+                    <h4>What happens next?</h4>
+                    <div className="steps-list">
+                      <div className="step-item">
+                        <div className="step-number">1</div>
+                        <div className="step-text">You'll receive confirmation SMS & email</div>
+                      </div>
+                      <div className="step-item">
+                        <div className="step-number">2</div>
+                        <div className="step-text">Service provider will contact you 30 minutes before</div>
+                      </div>
+                      <div className="step-item">
+                        <div className="step-number">3</div>
+                        <div className="step-text">Enjoy your professional service!</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="detail-item">
-                    <span>Amount:</span>
-                    <span>₹{total}</span>
-      </div>
-    </div>
-                <p className="success-message">
-                  You will receive a confirmation SMS and email shortly. 
-                  Our service provider will contact you before the scheduled time.
-                </p>
+
+                  {/* Action Buttons */}
+                  <div className="success-actions">
+                    <motion.button 
+                      className="btn-primary"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        setBookingSuccess(false);
+                        onClose();
+                      }}
+                    >
+                      <Shield size={18} />
+                      View Booking Details
+                    </motion.button>
+                  </div>
+                </motion.div>
               </motion.div>
             )}
           </motion.div>

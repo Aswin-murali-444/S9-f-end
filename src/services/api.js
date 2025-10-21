@@ -124,6 +124,10 @@ class ApiService {
     return this.request('/categories');
   }
 
+  async getServiceCategories() {
+    return this.request('/categories');
+  }
+
   async createCategory({ name, description = null, active = true, iconUrl = null, settings = null, status }) {
     return this.request('/categories', {
       method: 'POST',
@@ -360,6 +364,45 @@ class ApiService {
     });
   }
 
+  // Get bookings for a specific service provider
+  async getProviderBookings(providerId, filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.status) params.append('status', filters.status);
+    if (filters.limit) params.append('limit', filters.limit);
+    if (filters.offset) params.append('offset', filters.offset);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/bookings/provider/${providerId}?${queryString}` : `/bookings/provider/${providerId}`;
+    return this.request(endpoint);
+  }
+
+  // Get bookings matching service provider's specialization
+  async getMatchingBookings(providerId, filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.limit) params.append('limit', filters.limit);
+    if (filters.offset) params.append('offset', filters.offset);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/bookings/matching/${providerId}?${queryString}` : `/bookings/matching/${providerId}`;
+    return this.request(endpoint);
+  }
+
+  // Update booking status
+  async updateBookingStatus(bookingId, status, notes = null) {
+    return this.request(`/bookings/${bookingId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, notes })
+    });
+  }
+
+  // Assign booking to service provider
+  async assignBooking(bookingId, providerId) {
+    return this.request(`/bookings/${bookingId}/assign`, {
+      method: 'PUT',
+      body: JSON.stringify({ providerId })
+    });
+  }
+
   // Payments (Razorpay)
   async createRazorpayOrder({ amount, currency = 'INR', receipt, notes }) {
     return this.request('/payments/create-order', {
@@ -379,6 +422,214 @@ class ApiService {
     return this.request('/payments/confirm-booking', {
       method: 'POST',
       body: JSON.stringify(payload)
+    });
+  }
+
+  // Team management endpoints
+  async createTeam(teamData) {
+    return this.request('/teams', {
+      method: 'POST',
+      body: JSON.stringify(teamData)
+    });
+  }
+
+  async getTeams(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.category_id) params.append('category_id', filters.category_id);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.include_inactive) params.append('include_inactive', filters.include_inactive);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/teams?${queryString}` : '/teams';
+    return this.request(endpoint);
+  }
+
+  async getTeamById(teamId) {
+    return this.request(`/teams/${encodeURIComponent(teamId)}`);
+  }
+
+  async updateTeam(teamId, updates) {
+    return this.request(`/teams/${encodeURIComponent(teamId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates)
+    });
+  }
+
+  async deleteTeam(teamId) {
+    return this.request(`/teams/${encodeURIComponent(teamId)}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async addTeamMember(teamId, memberData) {
+    return this.request(`/teams/${encodeURIComponent(teamId)}/members`, {
+      method: 'POST',
+      body: JSON.stringify(memberData)
+    });
+  }
+
+  async removeTeamMember(teamId, memberId) {
+    return this.request(`/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(memberId)}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async getAvailableProviders(excludeTeamId = null) {
+    const params = new URLSearchParams();
+    if (excludeTeamId) params.append('exclude_team_id', excludeTeamId);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/teams/available-providers?${queryString}` : '/teams/available-providers';
+    return this.request(endpoint);
+  }
+
+  // Team booking management endpoints
+  async assignTeamToBooking(assignmentData) {
+    return this.request('/team-bookings/assign', {
+      method: 'POST',
+      body: JSON.stringify(assignmentData)
+    });
+  }
+
+  async getBookingTeamAssignments(bookingId) {
+    return this.request(`/team-bookings/booking/${encodeURIComponent(bookingId)}`);
+  }
+
+  async updateTeamAssignmentStatus(assignmentId, status, notes = null) {
+    return this.request(`/team-bookings/assignment/${encodeURIComponent(assignmentId)}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ assignment_status: status, notes })
+    });
+  }
+
+  async getAvailableTeamsForService(serviceId = null, categoryId = null) {
+    const params = new URLSearchParams();
+    if (serviceId) params.append('serviceId', serviceId);
+    if (categoryId) params.append('categoryId', categoryId);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/team-bookings/available?${queryString}` : '/team-bookings/available';
+    return this.request(endpoint);
+  }
+
+  async getTeamAssignmentStats(teamId, period = '30') {
+    const params = new URLSearchParams();
+    params.append('period', period);
+    
+    const queryString = params.toString();
+    return this.request(`/team-bookings/stats/${encodeURIComponent(teamId)}?${queryString}`);
+  }
+
+  // Profile completion (NEW - for provider_profiles table)
+  async completeServiceProviderProfile(profileData) {
+    return this.request('/users/profile/complete-provider', {
+      method: 'POST',
+      body: JSON.stringify(profileData)
+    });
+  }
+
+  // Upload provider profile picture
+  async uploadProviderProfilePicture(file, providerId) {
+    const toBase64 = (f) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result || '';
+        const base64 = String(result).split(',').pop();
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(f);
+    });
+
+    const base64 = await toBase64(file);
+    return this.request('/users/provider/profile-picture-upload', {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: file.name,
+        fileType: file.type || 'image/png',
+        base64,
+        providerId
+      })
+    });
+  }
+
+  // Get provider profile
+  async getProviderProfile(providerId) {
+    return this.request(`/users/profile/provider/${providerId}`);
+  }
+
+  // Update provider profile
+  async updateProviderProfile(providerId, profileData) {
+    try {
+      console.log('📡 API: Updating provider profile:', providerId, profileData);
+      const result = await this.request(`/users/profile/provider/${providerId}`, {
+        method: 'PUT',
+        body: JSON.stringify(profileData)
+      });
+      console.log('📡 API: Update profile response:', result);
+      return result;
+    } catch (error) {
+      console.error('📡 API: Update profile failed:', error);
+      throw error;
+    }
+  }
+
+  // Update provider profile status (Admin function)
+  async updateProviderProfileStatus(providerId, status, reason = null) {
+    return this.request(`/users/profile/${providerId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, reason })
+    });
+  }
+
+  // Get provider profile status
+  async getProviderProfileStatus(providerId) {
+    return this.request(`/users/profile/${providerId}/status`);
+  }
+
+  // Notification methods
+  async getNotifications(page = 1, limit = 20, type = null, status = null) {
+    const params = new URLSearchParams({ page, limit });
+    if (type) params.append('type', type);
+    if (status) params.append('status', status);
+    return this.request(`/notifications?${params}`);
+  }
+
+  async getUnreadNotificationsCount() {
+    return this.request('/notifications/unread-count');
+  }
+
+  async markNotificationAsRead(notificationId, adminUserId) {
+    return this.request(`/notifications/${notificationId}/read`, {
+      method: 'PUT',
+      body: JSON.stringify({ adminUserId })
+    });
+  }
+
+  async markAllNotificationsAsRead(adminUserId) {
+    return this.request('/notifications/mark-all-read', {
+      method: 'PUT',
+      body: JSON.stringify({ adminUserId })
+    });
+  }
+
+  async dismissNotification(notificationId, adminUserId) {
+    return this.request(`/notifications/${notificationId}/dismiss`, {
+      method: 'PUT',
+      body: JSON.stringify({ adminUserId })
+    });
+  }
+
+  async getProviderNotifications(providerId, page = 1, limit = 20) {
+    const params = new URLSearchParams({ page, limit });
+    return this.request(`/notifications/provider/${providerId}?${params}`);
+  }
+
+  // Change password
+  async changePassword(passwordData) {
+    return this.request('/users/change-password', {
+      method: 'POST',
+      body: JSON.stringify(passwordData)
     });
   }
 }

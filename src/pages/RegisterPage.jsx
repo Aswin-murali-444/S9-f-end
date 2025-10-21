@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { UserPlus, Home, Wrench, Heart, Truck, UserCheck, AlertCircle, CheckCircle, Shield, Users, Star, Zap } from 'lucide-react';
+import { UserPlus, AlertCircle, CheckCircle, Shield } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
@@ -48,7 +48,7 @@ const registerSchema = yup.object({
 });
 
 const RegisterPage = () => {
-  const [selectedRole, setSelectedRole] = useState(null);
+  const [selectedRole, setSelectedRole] = useState('customer');
   const [emailValidation, setEmailValidation] = useState({
     checking: false,
     exists: false,
@@ -165,76 +165,7 @@ const RegisterPage = () => {
     return () => clearTimeout(timeoutId);
   }, [watchedFields.email, emailValidation.lastChecked, setError, clearErrors, errors.email]);
 
-  // Enhanced role definitions with more detailed information
-  const userRoles = [
-    {
-      id: 'customer',
-      title: 'Customer (Resident)',
-      description: 'Smart home management and service booking',
-      icon: Home,
-      features: [
-        'Book home repairs, elder care, delivery services',
-        'Real-time home monitoring via smart cameras',
-        'Track service progress and manage billing',
-        'Provide feedback and rate service quality',
-        'Schedule recurring maintenance tasks',
-        'Access emergency support 24/7'
-      ],
-      benefits: ['Convenience', 'Peace of Mind', 'Cost Control'],
-      color: '#3b82f6',
-      highlights: ['Easy Booking', 'Live Monitoring', '24/7 Support']
-    },
-    {
-      id: 'service-provider',
-      title: 'Service Provider',
-      description: 'Professional maintenance, repair, and delivery services',
-      icon: Wrench,
-      features: [
-        'Perform plumbing, electrical, and general repairs',
-        'Deliver groceries, medicines, and packages',
-        'AI route optimization and live delivery status updates',
-        'Accept and manage service requests efficiently',
-        'Update job status with detailed notes and photos',
-        'Earn ratings and build reputation'
-      ],
-      benefits: ['Flexible Work', 'Good Pay', 'Growth Opportunities'],
-      color: '#10b981',
-      highlights: ['Flexible Hours', 'Good Pay', 'Build Reputation']
-    },
-    {
-      id: 'supervisor',
-      title: 'Supervisor',
-      description: 'Professional supervision and management services',
-      icon: Heart,
-      features: [
-        'Oversee daily operations and team management',
-        'Provide leadership and guidance to staff',
-        'Monitor performance and quality standards',
-        'Maintain detailed reports and documentation',
-        'Coordinate with stakeholders and clients',
-        'Access management tools and resources'
-      ],
-      benefits: ['Leadership Role', 'Management Experience', 'Career Growth'],
-      color: '#ef4444',
-      highlights: ['Leadership Role', 'Management Experience', 'Career Growth']
-    },
-    {
-      id: 'driver',
-      title: 'Driver',
-      description: 'Safe and reliable transportation',
-      icon: Truck,
-      features: [
-        'Transport elderly to medical appointments safely',
-        'Provide real-time trip status updates',
-        'Handle multiple trip routes efficiently',
-        'Maintain vehicle safety standards',
-        'Build customer relationships'
-      ],
-      benefits: ['Flexible Schedule', 'Good Earnings', 'Independent Work'],
-      color: '#f59e0b',
-      highlights: ['Flexible Hours', 'Good Earnings', 'Independent Work']
-    }
-  ];
+  // Role selection UI removed for initial simplicity; defaulting to 'customer'.
 
   // Clear form on component mount and prevent autofill
   useEffect(() => {
@@ -255,11 +186,6 @@ const RegisterPage = () => {
   }, [reset]);
 
   const onSubmit = async (data) => {
-    if (!selectedRole) {
-      toast.error('Please select a user role');
-      return;
-    }
-
     const result = await registerUser({
       email: data.email,
       password: data.password,
@@ -314,53 +240,7 @@ const RegisterPage = () => {
   return (
     <div className="register-container">
       <div className="register-content">
-        {/* Compact Role Selection Section */}
-        <div className="role-selection-section">
-          <div className="role-selection-header">
-            <div className="role-header-icon">
-              <Users size={24} />
-            </div>
-            <h2>Select Your Role</h2>
-            <p>Choose how you'll use our platform</p>
-          </div>
-          
-          <div className="role-cards-grid">
-            {userRoles.map((role) => {
-              const IconComponent = role.icon;
-              return (
-                <div
-                  key={role.id}
-                  className={`role-card ${selectedRole === role.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedRole(role.id)}
-                  style={{ '--role-color': role.color }}
-                >
-                  <div className="role-card-header">
-                    <div className="role-icon" style={{ backgroundColor: role.color }}>
-                      <IconComponent size={20} />
-                    </div>
-                    <div className="role-check">
-                      {selectedRole === role.id && <CheckCircle size={18} />}
-                    </div>
-                  </div>
-                  
-                  <div className="role-content">
-                    <h4>{role.title}</h4>
-                    <p className="role-description">{role.description}</p>
-                    
-                    <div className="role-features-compact">
-                      {role.features.slice(0, 3).map((feature, index) => (
-                        <div key={index} className="feature-item">
-                          <CheckCircle size={14} />
-                          <span>{feature}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {/* Role selection removed; using default role */}
 
         {/* Enhanced Form Section */}
         <div className="register-form-section">
@@ -533,19 +413,12 @@ const RegisterPage = () => {
               <div className="form-actions">
                 <button 
                   type="submit" 
-                  disabled={loading || isSubmitting || Object.keys(errors).length > 0 || !selectedRole}
-                  className={`submit-btn ${Object.keys(errors).length > 0 || !selectedRole ? 'disabled' : ''}`}
+                  disabled={loading || isSubmitting || Object.keys(errors).length > 0}
+                  className={`submit-btn ${Object.keys(errors).length > 0 ? 'disabled' : ''}`}
                 >
                   <UserPlus size={18} />
                   {(loading || isSubmitting) ? 'Creating Account...' : 'Create Account'}
                 </button>
-                
-                {!selectedRole && (
-                  <div className="role-reminder">
-                    <AlertCircle size={16} />
-                    <span>Please select a user role from the side panel</span>
-                  </div>
-                )}
               </div>
             </form>
 

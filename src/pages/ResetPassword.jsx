@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
+import { useNavigate } from 'react-router-dom';
 import { Lock, AlertCircle, CheckCircle, Shield, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import Logo from '../components/Logo';
@@ -21,9 +22,10 @@ const schema = yup.object({
 
 const ResetPassword = () => {
   const { updatePassword, loading } = useAuth();
+  const navigate = useNavigate();
   const [submitState, setSubmitState] = useState({ status: 'idle', message: '' });
 
-  const { register, handleSubmit, formState: { errors, isSubmitting, touchedFields }, watch } = useForm({
+  const { register, handleSubmit, formState: { errors, isSubmitting, touchedFields }, watch, reset } = useForm({
     resolver: yupResolver(schema),
     mode: 'onChange',
     defaultValues: { password: '', confirmPassword: '' }
@@ -33,15 +35,20 @@ const ResetPassword = () => {
 
   const onSubmit = async (data) => {
     setSubmitState({ status: 'submitting', message: '' });
-    const result = await updatePassword(data.password);
-    if (result.success) {
-      setSubmitState({ status: 'success', message: 'Password updated successfully. You can now sign in with your new password.' });
-      // Optionally redirect after a short delay
-      setTimeout(() => {
-        window.location.href = '/login';
-      }, 1200);
-    } else {
-      setSubmitState({ status: 'error', message: result.error || 'Failed to update password. Please try again.' });
+    try {
+      const result = await updatePassword(data.password);
+      if (result.success) {
+        setSubmitState({ status: 'success', message: 'Password updated successfully! Redirecting to login...' });
+        // Reset form and redirect to login page after a short delay
+        reset();
+        setTimeout(() => {
+          navigate('/login', { replace: true });
+        }, 1500);
+      } else {
+        setSubmitState({ status: 'error', message: result.error || 'Failed to update password. Please try again.' });
+      }
+    } catch (error) {
+      setSubmitState({ status: 'error', message: 'An unexpected error occurred. Please try again.' });
     }
   };
 
@@ -105,7 +112,7 @@ const ResetPassword = () => {
                 id="password"
                 type="password"
                 placeholder="New password"
-                disabled={loading || isSubmitting}
+                disabled={loading || isSubmitting || submitState.status === 'success'}
                 {...register('password')}
               />
               {errors.password && (
@@ -123,7 +130,7 @@ const ResetPassword = () => {
                 id="confirmPassword"
                 type="password"
                 placeholder="Confirm password"
-                disabled={loading || isSubmitting}
+                disabled={loading || isSubmitting || submitState.status === 'success'}
                 {...register('confirmPassword')}
               />
               {errors.confirmPassword && (
@@ -143,10 +150,22 @@ const ResetPassword = () => {
             <div className="form-actions">
               <button
                 type="submit"
-                className={`submit-btn ${Object.keys(errors).length > 0 ? 'disabled' : ''}`}
-                disabled={loading || isSubmitting || Object.keys(errors).length > 0}
+                className={`submit-btn ${Object.keys(errors).length > 0 ? 'disabled' : ''} ${(loading || isSubmitting) ? 'loading' : ''}`}
+                disabled={loading || isSubmitting || Object.keys(errors).length > 0 || submitState.status === 'success'}
               >
-                {(loading || isSubmitting) ? 'Updating...' : 'Update Password'}
+                {(loading || isSubmitting) ? (
+                  <>
+                    <div className="spinner" />
+                    Updating Password...
+                  </>
+                ) : submitState.status === 'success' ? (
+                  <>
+                    <CheckCircle size={16} />
+                    Password Updated!
+                  </>
+                ) : (
+                  'Update Password'
+                )}
               </button>
             </div>
           </form>

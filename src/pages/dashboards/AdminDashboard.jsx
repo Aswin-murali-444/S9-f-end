@@ -50,10 +50,12 @@ import {
   Menu,
   X,
   Sun,
-  Moon
+  Moon,
+  Briefcase
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
 import Logo from '../../components/Logo';
+import NotificationBell from '../../components/NotificationBell';
 import { useAuth, supabase } from '../../hooks/useAuth';
 import { apiService } from '../../services/api';
 import { toast } from 'react-hot-toast';
@@ -475,18 +477,31 @@ const AdminDashboard = () => {
     { key: 'analytics', label: 'Analytics', icon: PieChart }
   ];
 
-  // Sync initial tab from URL query parameter (?tab=...)
+  // Sync tab from URL query parameter (?tab=...) - watch for changes
   useEffect(() => {
     try {
       const params = new URLSearchParams(location.search);
       const tab = params.get('tab');
       if (tab && navItems.some(n => n.key === tab)) {
         setActiveTab(tab);
+      } else if (!tab) {
+        // If no tab parameter, default to overview
+        setActiveTab('overview');
       }
     } catch (_) {
       // ignore bad query strings
     }
-  }, [location.search]);
+  }, [location.search, location.pathname]);
+
+  // Reset search and filter states when switching to users tab
+  useEffect(() => {
+    if (activeTab === 'users') {
+      // Reset search and filter states to ensure clean state
+      setSearchQuery('');
+      setSortKey('name_asc');
+      setSelectedRole('');
+    }
+  }, [activeTab]);
 
   const handleUserAction = async (userId, action) => {
     try {
@@ -724,47 +739,7 @@ const AdminDashboard = () => {
               </div>
             </button>
             
-            <div className="notifications-wrapper">
-              <button 
-                className="notification-btn"
-                onClick={() => setIsNotificationsOpen(v => !v)}
-                aria-haspopup="true"
-                aria-expanded={isNotificationsOpen}
-              >
-                <div className="bell-icon-text">🔔</div>
-                <span className="notification-badge">3</span>
-              </button>
-              {isNotificationsOpen && (
-                <div className="notifications-dropdown">
-                  <div className="dropdown-header">
-                    <span>Notifications</span>
-                    <button className="link-button" onClick={() => setAlerts(prev => prev.map(a => ({...a, status: 'reviewed'})))}>Mark all read</button>
-                  </div>
-                  <div className="dropdown-list">
-                    {alerts.slice(0,6).map(item => (
-                      <div key={item.id} className={`notification-item ${item.severity}`}>
-                        <div className="notification-icon">
-                          {item.type === 'security' && <Shield size={16} />}
-                          {item.type === 'performance' && <Activity size={16} />}
-                          {item.type === 'system' && <Server size={16} />}
-                        </div>
-                        <div className="notification-content">
-                          <div className="notification-title">{item.title}</div>
-                          <div className="notification-message">{item.message}</div>
-                          <div className="notification-meta">
-                            <span className={`severity ${item.severity}`}>{item.severity}</span>
-                            <span className="timestamp">{item.timestamp}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="dropdown-footer">
-                    <button className="btn-secondary" onClick={() => setIsNotificationsOpen(false)}>Close</button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <NotificationBell adminUserId={user?.id} />
             
             <button className="btn-primary" onClick={() => navigate('/admin/add-service-provider')}>
               <Plus size={20} />
@@ -1090,14 +1065,24 @@ const AdminDashboard = () => {
                     <div className="header-cell">Actions</div>
                   </div>
                   <div className="table-body">
-                    {managedUsersFilteredSorted.length === 0 && (
+                    {managedUsersFilteredSorted.length === 0 ? (
                       <div className="table-row">
-                        <div className="table-cell" style={{ gridColumn: '1 / -1' }}>
-                          No users found.
+                        <div className="table-cell" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{ fontSize: '3rem', opacity: 0.3 }}>👥</div>
+                            <div style={{ fontSize: '1.1rem', color: '#64748b', fontWeight: 500 }}>
+                              {users.length === 0 ? 'Loading users...' : 'No users found matching your criteria.'}
+                            </div>
+                            {users.length > 0 && (
+                              <div style={{ fontSize: '0.9rem', color: '#94a3b8' }}>
+                                Try adjusting your search or filter settings
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    )}
-                    {managedUsersFilteredSorted.map(user => (
+                    ) : (
+                      managedUsersFilteredSorted.map(user => (
                       <div key={user.id} className="table-row">
                         <div className="table-cell user-info" onClick={() => navigate(`/admin/users/${user.id}`)} style={{ cursor: 'pointer' }}>
                           <div className="user-avatar">
@@ -1174,7 +1159,8 @@ const AdminDashboard = () => {
                           
                         </div>
                       </div>
-                    ))}
+                    ))
+                    )}
                   </div>
                 </div>
               </motion.div>

@@ -1176,10 +1176,17 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       const { data, error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) {
+        toast.error(error.message || 'Failed to update password');
         return { success: false, error: error.message || 'Failed to update password' };
       }
+      
+      // After successful password update, sign out the user to force re-authentication
+      await supabase.auth.signOut();
+      
+      toast.success('Password updated successfully! Please sign in with your new password.');
       return { success: true };
     } catch (error) {
+      toast.error('Failed to update password');
       return { success: false, error: error.message || 'Failed to update password' };
     } finally {
       setLoading(false);

@@ -3,11 +3,13 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, User, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useAnimations } from '../hooks/useAnimations';
+import { apiService } from '../services/api';
 import './Header.css';
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [providerProfile, setProviderProfile] = useState(null);
   const { user, logout } = useAuth();
   const location = useLocation();
   
@@ -33,6 +35,23 @@ const Header = () => {
       triggerAnimation('animate-fade-in');
     }
   }, [navRef, triggerAnimation]);
+
+  // Fetch provider profile for authenticated users
+  useEffect(() => {
+    const fetchProviderProfile = async () => {
+      if (user?.id && shouldShowUserInfo) {
+        try {
+          const response = await apiService.getProviderProfile(user.id);
+          setProviderProfile(response?.data || null);
+        } catch (error) {
+          console.log('No provider profile found or error fetching:', error);
+          setProviderProfile(null);
+        }
+      }
+    };
+
+    fetchProviderProfile();
+  }, [user?.id, shouldShowUserInfo]);
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -101,14 +120,33 @@ const Header = () => {
                 <div className="user-menu">
                 <div className="user-info hover-scale">
                   {(() => {
-                    const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.photoURL;
+                    // Priority: Provider profile photo > User metadata avatar
+                    const avatar = providerProfile?.profile_photo_url || 
+                                 user?.user_metadata?.avatar_url || 
+                                 user?.user_metadata?.picture || 
+                                 user?.user_metadata?.photoURL;
                     return avatar ? (
-                      <img src={avatar} alt="Profile" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                      <img 
+                        src={avatar} 
+                        alt="Profile" 
+                        style={{ 
+                          width: 24, 
+                          height: 24, 
+                          borderRadius: '50%', 
+                          objectFit: 'cover',
+                          border: '2px solid rgba(255, 255, 255, 0.2)'
+                        }} 
+                      />
                     ) : (
                       <User size={20} className="user-icon animate-rotate-in" />
                     );
                   })()}
-                  <span className="user-name animate-fade-in">{user?.user_metadata?.full_name || user?.email || 'User'}</span>
+                  <span className="user-name animate-fade-in">
+                    {providerProfile?.first_name && providerProfile?.last_name 
+                      ? `${providerProfile.first_name} ${providerProfile.last_name}`
+                      : user?.user_metadata?.full_name || user?.email || 'User'
+                    }
+                  </span>
                 </div>
                   <div className="dropdown-menu">
                     <Link to="/profile" className="dropdown-item hover-lift">
