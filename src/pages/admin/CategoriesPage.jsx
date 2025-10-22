@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/AdminLayout';
 import { apiService } from '../../services/api';
-import { supabase } from '../../hooks/useAuth';
+import { supabase } from '../../lib/supabase';
 import { useSearch } from '../../contexts/SearchContext';
 import './AdminPages.css';
 

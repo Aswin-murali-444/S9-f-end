@@ -1,4 +1,4 @@
-import { supabase } from '../hooks/useAuth';
+import { supabase } from '../lib/supabase';
 
 class CartWishlistService {
   constructor() {
@@ -48,7 +48,8 @@ class CartWishlistService {
           quantity: item.quantity,
           addedAt: item.added_at,
           category_name: item.services?.service_categories?.name || 'Uncategorized',
-          category: item.services?.service_categories?.name || 'Uncategorized'
+          category: item.services?.service_categories?.name || 'Uncategorized',
+          category_id: item.services?.category_id || item.services?.service_categories?.id
         };
       }).filter(item => item !== null); // Remove null items
     } catch (error) {

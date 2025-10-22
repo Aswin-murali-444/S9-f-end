@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import LoadingSpinner from './LoadingSpinner';
@@ -6,6 +6,24 @@ import LoadingSpinner from './LoadingSpinner';
 const PublicOnlyRoute = ({ children }) => {
   const { isAuthenticated, isInitialized, user } = useAuth();
   const location = useLocation();
+  const [hasRedirected, setHasRedirected] = useState(false);
+  const redirectTimeoutRef = useRef(null);
+  const lastRedirectRef = useRef(null);
+
+  // Reset redirect state when location changes
+  useEffect(() => {
+    setHasRedirected(false);
+    lastRedirectRef.current = null;
+  }, [location.pathname]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Show loading while checking authentication
   if (!isInitialized) {
@@ -25,8 +43,13 @@ const PublicOnlyRoute = ({ children }) => {
   if (location.pathname === '/login' && !isAuthenticated && !isAuthFromStorage) {
     return children;
   }
-  
+
+  // Prevent redirect loops by checking if we've already redirected
   if ((isAuthenticated && user) || (isAuthFromStorage && userFromStorage)) {
+    if (hasRedirected) {
+      return children; // Prevent infinite redirects
+    }
+
     const currentUser = user || (userFromStorage ? JSON.parse(userFromStorage) : null);
     const authState = isAuthenticated || isAuthFromStorage;
 
@@ -52,11 +75,23 @@ const PublicOnlyRoute = ({ children }) => {
         );
       }
 
+      // Debounce redirects to prevent rapid navigation
+      const now = Date.now();
+      if (lastRedirectRef.current && (now - lastRedirectRef.current) < 1000) {
+        console.log('🚀 PublicOnlyRoute: Debouncing redirect to prevent rapid navigation');
+        return children;
+      }
+      lastRedirectRef.current = now;
+
       console.log('🚀 PublicOnlyRoute(AuthPage): Redirecting to:', targetPath, {
         user: currentUser?.email,
         isAuthenticated: authState,
         location: location.pathname
       });
+      
+      // Set redirect flag to prevent loops
+      setHasRedirected(true);
+      
       return <Navigate to={targetPath} replace state={{ from: location }} />;
     }
 
@@ -72,11 +107,23 @@ const PublicOnlyRoute = ({ children }) => {
       else targetPath = '/dashboard/customer'; // Default to customer dashboard instead of home page
     }
 
+    // Debounce redirects to prevent rapid navigation
+    const now = Date.now();
+    if (lastRedirectRef.current && (now - lastRedirectRef.current) < 1000) {
+      console.log('🚀 PublicOnlyRoute: Debouncing redirect to prevent rapid navigation');
+      return children;
+    }
+    lastRedirectRef.current = now;
+
     console.log('🚀 PublicOnlyRoute: Redirecting to:', targetPath, {
       user: currentUser?.email,
       isAuthenticated: authState,
       location: location.pathname
     });
+    
+    // Set redirect flag to prevent loops
+    setHasRedirected(true);
+    
     return <Navigate to={targetPath} replace state={{ from: location }} />;
   }
 

@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
+import { useNotifications } from '../../hooks/useNotifications';
 import EditableProfileSections from '../../components/EditableProfileSections';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
 import { 
@@ -175,7 +176,6 @@ const ServiceProviderDashboard = () => {
 
   // Loading states for different data sections
   const [jobsLoading, setJobsLoading] = useState(false);
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [earningsLoading, setEarningsLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -232,7 +232,6 @@ const ServiceProviderDashboard = () => {
         setRefreshing(true);
       } else {
         setJobsLoading(true);
-        setNotificationsLoading(true);
         setEarningsLoading(true);
         setProfileLoading(true);
       }
@@ -385,40 +384,17 @@ const ServiceProviderDashboard = () => {
   const [matchingJobs, setMatchingJobs] = useState([]);
   const [jobsError, setJobsError] = useState(null);
 
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: "New Job Request",
-      message: "House Cleaning job requested by John Smith",
-      type: "job_request",
-      time: "5 minutes ago",
-      unread: true
-    },
-    {
-      id: 2,
-      title: "Schedule Change",
-      message: "Your 2:00 PM appointment has been moved to 3:00 PM",
-      type: "schedule_change",
-      time: "1 hour ago",
-      unread: true
-    },
-    {
-      id: 3,
-      title: "Payment Received",
-      message: "Payment of ₹120 received for Plumbing Repair job",
-      type: "payment",
-      time: "2 hours ago",
-      unread: false
-    },
-    {
-      id: 4,
-      title: "Customer Review",
-      message: "New 5-star review from Sarah Johnson",
-      type: "review",
-      time: "1 day ago",
-      unread: false
-    }
-  ]);
+  // Use the real notifications system
+  const { 
+    notifications, 
+    unreadCount, 
+    loading: notificationsLoading,
+    markAsRead, 
+    markAllAsRead,
+    dismissNotification,
+    getNotificationIcon,
+    getNotificationColor 
+  } = useNotifications();
 
   const [earnings, setEarnings] = useState([
     { id: 1, customer: "Emma Davis", service: "Garden Maintenance", amount: 60, date: "2024-01-13", status: "completed" },
@@ -756,8 +732,6 @@ const ServiceProviderDashboard = () => {
     );
   });
 
-  const unreadNotifications = notifications.filter(n => n.unread).length;
-
   // Prefer provider profile experience when available
   const mergedExperienceYears = (
     providerProfile?.years_of_experience ?? providerDetails?.experience_years ?? 0
@@ -929,37 +903,76 @@ const ServiceProviderDashboard = () => {
                 onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
               >
                 <Bell size={18} />
-                {unreadNotifications > 0 && (
-                  <span className="notification-badge">{unreadNotifications}</span>
+                {unreadCount > 0 && (
+                  <span className="notification-badge">{unreadCount}</span>
                 )}
               </button>
               {isNotificationsOpen && (
                 <div className="notifications-dropdown">
                   <div className="notifications-header">
                     <h3>Notifications</h3>
-                    <button 
-                      className="mark-all-read"
-                      onClick={() => setNotifications(prev => prev.map(n => ({ ...n, unread: false })))}
-                    >
-                      Mark all read
-                    </button>
+                    {unreadCount > 0 && (
+                      <button 
+                        className="mark-all-read"
+                        onClick={markAllAsRead}
+                        disabled={notificationsLoading}
+                      >
+                        Mark all read
+                      </button>
+                    )}
                   </div>
                   <div className="notifications-list">
-                    {notifications.slice(0, 6).map(item => (
-                      <div key={item.id} className={`notification-item ${item.unread ? 'unread' : ''}`}>
-                        <div className="notification-icon">
-                          {item.type === 'job_request' && <Briefcase size={16} />}
-                          {item.type === 'schedule_change' && <Clock size={16} />}
-                          {item.type === 'payment' && <DollarSign size={16} />}
-                          {item.type === 'review' && <Star size={16} />}
-                        </div>
-                        <div className="notification-content">
-                          <h4>{item.title}</h4>
-                          <p>{item.message}</p>
-                          <span className="notification-time">{item.time}</span>
-                        </div>
+                    {notifications.length === 0 ? (
+                      <div className="empty-notifications">
+                        <Bell size={32} />
+                        <p>No new notifications</p>
+                        <span>You're all caught up!</span>
                       </div>
-                    ))}
+                    ) : (
+                      notifications.slice(0, 6).map(item => (
+                        <div 
+                          key={item.id} 
+                          className={`notification-item ${item.type} ${item.status === 'unread' ? 'unread' : ''}`}
+                        >
+                          <div 
+                            className="notification-content-wrapper"
+                            onClick={() => {
+                              if (item.status === 'unread') {
+                                markAsRead(item.id);
+                              }
+                            }}
+                            style={{ cursor: item.status === 'unread' ? 'pointer' : 'default' }}
+                          >
+                            <div className="notification-icon-wrapper">
+                              <span className="notification-emoji">
+                                {getNotificationIcon(item.type)}
+                              </span>
+                            </div>
+                            <div className="notification-content">
+                              <div className="notification-title">{item.title}</div>
+                              <div className="notification-message">{item.message}</div>
+                              <div className="notification-time">{item.time}</div>
+                            </div>
+                            {item.status === 'unread' && (
+                              <div 
+                                className="unread-indicator"
+                                style={{ backgroundColor: getNotificationColor(item.priority) }}
+                              />
+                            )}
+                          </div>
+                          <button 
+                            className="notification-dismiss-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              dismissNotification(item.id);
+                            }}
+                            title="Dismiss notification"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               )}
@@ -1728,7 +1741,7 @@ const ServiceProviderDashboard = () => {
                 <h1>Schedule & Availability</h1>
                 <div className="header-actions">
                   <button className="btn-primary" onClick={() => setIsAvailabilityModalOpen(true)} disabled={profileLoading}>
-                    {profileLoading ? <LoadingSpinner size="small" /> : <CalendarPlus size={16} />}
+                    <CalendarPlus size={16} />
                     Set Availability
                   </button>
                 </div>
@@ -1807,7 +1820,7 @@ const ServiceProviderDashboard = () => {
                 <div className="header-actions">
                   {isProfileComplete ? (
                   <button className="btn-primary" disabled={profileLoading}>
-                    {profileLoading ? <LoadingSpinner size="small" /> : <Save size={16} />}
+                    <Save size={16} />
                     Save Changes
                   </button>
                   ) : (

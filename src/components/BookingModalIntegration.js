@@ -1,7 +1,7 @@
 // BookingModal Integration with Database
 // This file shows how to integrate the BookingModal with the new bookings table
 
-import { supabase } from '../hooks/useAuth';
+import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
 // Function to create a new booking

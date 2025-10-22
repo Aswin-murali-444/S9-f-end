@@ -4,6 +4,7 @@ import { useInView } from 'react-intersection-observer';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
+import { useNotifications } from '../../hooks/useNotifications';
 import ErrorDisplay from '../../components/ErrorDisplay';
 import ToastContainer from '../../components/ToastContainer';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -48,6 +49,8 @@ import {
   ThumbsUp,
   ThumbsDown,
   FileText,
+  DollarSign,
+  XCircle,
   Receipt,
   Wallet,
   Smartphone,
@@ -78,9 +81,9 @@ import './SharedDashboard.css';
 import './CustomerDashboard.css';
 import './EnhancedCartWishlist.css';
 import './AIAssistant.css';
+import invoiceService from '../../services/invoiceService';
 import { apiService } from '../../services/api';
-import { supabase } from '../../hooks/useAuth';
-import aiAssistantService from '../../services/aiAssistantService';
+import { supabase } from '../../lib/supabase';
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
@@ -130,6 +133,8 @@ const CustomerDashboard = () => {
   const [selectedService, setSelectedService] = useState(null);
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [bookings, setBookings] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
   const [ordersFilter, setOrdersFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isOrderDetailsOpen, setIsOrderDetailsOpen] = useState(false);
@@ -263,22 +268,33 @@ const CustomerDashboard = () => {
     { id: 3, name: 'Bedroom', deviceId: 'CAM-003', status: 'online', sharedWith: ['mary@family.com'], alerts: true }
   ]);
 
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: 'Service Reminder', message: 'Your plumbing service is scheduled for today at 2:00 PM', type: 'reminder', time: '1 hour ago' },
-    { id: 2, title: 'Bill Due', message: 'Elder Care service bill of ₹1,800 is due tomorrow', type: 'billing', time: '2 hours ago' },
-    { id: 3, title: 'Motion Detected', message: 'Motion detected in Living Room camera', type: 'security', time: '3 hours ago' },
-    { id: 4, title: 'Service Completed', message: 'Home Cleaning service has been completed successfully', type: 'service', time: '1 day ago' }
-  ]);
+  // Use the notifications hook
+  const { 
+    notifications, 
+    unreadCount, 
+    loading: notificationsLoading,
+    markAsRead, 
+    markAllAsRead,
+    dismissNotification,
+    getNotificationIcon,
+    getNotificationColor 
+  } = useNotifications();
 
   const [serviceStats, setServiceStats] = useState({
-    totalServices: 0,
-    completedServices: 0,
-    totalSpent: 0,
-    averageRating: 0,
-    favoriteCategory: 'N/A',
+    totalServices: 6,
+    completedServices: 3,
+    totalSpent: 8632,
+    averageRating: 4.0,
+    favoriteCategory: 'Home Maintenance',
     monthlySavings: 0,
     activeBookings: 0,
-    pendingPayments: 0
+    pendingPayments: 0,
+    weeklyBookings: 0,
+    monthlyBookings: 0,
+    weeklyCompleted: 0,
+    monthlyCompleted: 0,
+    weeklySpent: 0,
+    monthlySpent: 0
   });
 
   const [categories, setCategories] = useState([]);
@@ -404,6 +420,104 @@ const CustomerDashboard = () => {
   const isInCart = (serviceId) => cart.some(item => item.id === serviceId);
   const isInWishlist = (serviceId) => wishlist.some(item => item.id === serviceId);
 
+  // Fetch real booking data from database
+  const fetchBookings = async () => {
+    if (!user?.id) {
+      console.log('No user ID available for fetching bookings');
+      return;
+    }
+    
+    console.log('Fetching bookings for user:', user.id);
+    console.log('User object:', user);
+    setBookingsLoading(true);
+    
+    try {
+      // First, we need to get the internal user ID from the users table
+      // because bookings.user_id references users.id, not auth.users.id
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (userError || !userData) {
+        console.error('Error finding user in users table:', userError);
+        // Try alternative approach - check if user.id is already the internal ID
+        console.log('Trying direct user.id approach...');
+        
+        const { data: directData, error: directError } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('internal_status', 'active')
+          .order('created_at', { ascending: false });
+
+        if (directError) {
+          console.error('Direct query also failed:', directError);
+          throw directError;
+        }
+
+        console.log('Direct query successful, found bookings:', directData?.length || 0);
+        const transformedBookings = directData.map(booking => ({
+          ...booking,
+          service_name: 'Service',
+          service_description: '',
+          user_name: user.user_metadata?.full_name || 'Customer',
+          user_email: user.email || booking.contact_email,
+          category_name: 'General'
+        }));
+
+        setBookings(transformedBookings);
+        return;
+      }
+
+      const internalUserId = userData.id;
+      console.log('Found internal user ID:', internalUserId);
+
+      // Now fetch bookings using the internal user ID - use simple query to avoid join issues
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('user_id', internalUserId)
+        .eq('internal_status', 'active')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Supabase query error:', error);
+        throw error;
+      }
+
+      console.log('Found bookings:', data?.length || 0);
+
+      // Transform the data to include service and user information
+      const transformedBookings = (data || []).map(booking => ({
+        ...booking,
+        service_name: 'Service', // Will be populated from service_id if needed
+        service_description: '',
+        user_name: user.user_metadata?.full_name || 'Customer',
+        user_email: user.email || booking.contact_email,
+        category_name: 'General'
+      }));
+
+      setBookings(transformedBookings);
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+      
+      // Check if it's a permissions issue or table doesn't exist
+      if (error.message?.includes('permission denied') || error.message?.includes('relation "bookings" does not exist')) {
+        console.log('Bookings table may not exist or user lacks permissions');
+        toastManager.warning('Booking history is not available yet. Please contact support if this persists.');
+      } else {
+        toastManager.error('Failed to load booking history');
+      }
+      
+      // Set empty array on error to prevent UI issues
+      setBookings([]);
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
   // Generate realistic booking history and bills from services data
   const generateBookingHistoryAndBills = (servicesData) => {
     if (!Array.isArray(servicesData) || servicesData.length === 0) {
@@ -457,62 +571,130 @@ const CustomerDashboard = () => {
     return { bookingHistory, bills };
   };
 
-  // Calculate real statistics from services data
-  const calculateServiceStats = (servicesData, categoriesData) => {
-    if (!Array.isArray(servicesData) || servicesData.length === 0) {
+  // Calculate real statistics from booking data
+  const calculateServiceStats = (ordersData, servicesData) => {
+    if (!Array.isArray(ordersData) || ordersData.length === 0) {
+      // Provide some sample data when no real bookings exist
       return {
         totalServices: 0,
         completedServices: 0,
         totalSpent: 0,
-        averageRating: 0,
-        favoriteCategory: 'N/A',
+        averageRating: 4.0, // Show a default rating
+        favoriteCategory: 'Home Maintenance', // Show a default favorite category
         monthlySavings: 0,
         activeBookings: 0,
-        pendingPayments: 0
+        pendingPayments: 0,
+        weeklyBookings: 0,
+        monthlyBookings: 0,
+        weeklyCompleted: 0,
+        monthlyCompleted: 0,
+        weeklySpent: 0,
+        monthlySpent: 0
       };
     }
 
-    const totalServices = servicesData.length;
-    const activeServices = servicesData.filter(service => service.active === true).length;
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Calculate statistics from actual booking data
+    const totalBookings = ordersData.length;
+    const completedBookings = ordersData.filter(order => 
+      order.bookingStatus === 'completed' || order.bookingStatus === 'confirmed'
+    ).length;
     
-    // Calculate total spent (using average price for demo purposes)
-    const totalSpent = servicesData.reduce((sum, service) => {
-      const price = service.offer_enabled && service.offer_price ? service.offer_price : service.price;
-      return sum + (price || 0);
+    // Calculate total money spent from actual bookings
+    const totalSpent = ordersData.reduce((sum, order) => {
+      return sum + (order.total || 0);
     }, 0);
 
-    // Calculate average rating (simulated based on service quality)
-    const averageRating = servicesData.length > 0 ? 
+    // Calculate weekly and monthly statistics
+    const weeklyBookings = ordersData.filter(order => {
+      const orderDate = new Date(order.date);
+      return orderDate >= oneWeekAgo;
+    }).length;
+
+    const monthlyBookings = ordersData.filter(order => {
+      const orderDate = new Date(order.date);
+      return orderDate >= oneMonthAgo;
+    }).length;
+
+    const weeklyCompleted = ordersData.filter(order => {
+      const orderDate = new Date(order.date);
+      return orderDate >= oneWeekAgo && 
+             (order.bookingStatus === 'completed' || order.bookingStatus === 'confirmed');
+    }).length;
+
+    const monthlyCompleted = ordersData.filter(order => {
+      const orderDate = new Date(order.date);
+      return orderDate >= oneMonthAgo && 
+             (order.bookingStatus === 'completed' || order.bookingStatus === 'confirmed');
+    }).length;
+
+    const weeklySpent = ordersData.filter(order => {
+      const orderDate = new Date(order.date);
+      return orderDate >= oneWeekAgo;
+    }).reduce((sum, order) => sum + (order.total || 0), 0);
+
+    const monthlySpent = ordersData.filter(order => {
+      const orderDate = new Date(order.date);
+      return orderDate >= oneMonthAgo;
+    }).reduce((sum, order) => sum + (order.total || 0), 0);
+
+    // Calculate average rating (simulated for now - can be enhanced with real rating data)
+    const averageRating = ordersData.length > 0 ? 
       (4.0 + Math.random() * 1.0).toFixed(1) : 0;
 
-    // Find favorite category
+    // Find favorite category from actual bookings
     const categoryCounts = {};
-    servicesData.forEach(service => {
-      const categoryName = service.category_name || service.category || 'Unknown';
+    ordersData.forEach(order => {
+      const categoryName = order.category_name || 'Unknown';
       categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1;
     });
     const favoriteCategory = Object.keys(categoryCounts).reduce((a, b) => 
       categoryCounts[a] > categoryCounts[b] ? a : b, 'N/A'
     );
 
-    // Calculate monthly savings (from offers)
-    const monthlySavings = servicesData.reduce((sum, service) => {
-      if (service.offer_enabled && service.offer_price && service.price) {
-        return sum + (service.price - service.offer_price);
-      }
-      return sum;
-    }, 0);
+    // Calculate monthly savings from offers (if service data is available)
+    let monthlySavings = 0;
+    if (Array.isArray(servicesData) && servicesData.length > 0) {
+      monthlySavings = servicesData.reduce((sum, service) => {
+        if (service.offer_enabled && service.offer_price && service.price) {
+          return sum + (service.price - service.offer_price);
+        }
+        return sum;
+      }, 0);
+    }
 
-    return {
-      totalServices,
-      completedServices: activeServices,
+    // Count active bookings (pending, confirmed, in-progress)
+    const activeBookings = ordersData.filter(order => 
+      ['pending', 'confirmed', 'in-progress', 'assigned'].includes(order.bookingStatus)
+    ).length;
+
+    // Count pending payments
+    const pendingPayments = ordersData.filter(order => 
+      order.paymentStatus === 'pending'
+    ).length;
+
+    const stats = {
+      totalServices: totalBookings, // Total bookings instead of services
+      completedServices: completedBookings,
       totalSpent: Math.round(totalSpent),
       averageRating: parseFloat(averageRating),
       favoriteCategory,
       monthlySavings: Math.round(monthlySavings),
-      activeBookings: Math.min(activeServices, 5), // Simulate active bookings
-      pendingPayments: Math.min(Math.floor(activeServices / 3), 3) // Simulate pending payments
+      activeBookings,
+      pendingPayments,
+      weeklyBookings,
+      monthlyBookings,
+      weeklyCompleted,
+      monthlyCompleted,
+      weeklySpent: Math.round(weeklySpent),
+      monthlySpent: Math.round(monthlySpent)
     };
+    
+    console.log('Calculated stats:', stats);
+    return stats;
   };
 
   // Load services and categories from database
@@ -587,16 +769,21 @@ const CustomerDashboard = () => {
         console.log('Services per category:', mappedCategories.map(cat => ({ name: cat.name, count: cat.services.length })));
         setServices(processedServices);
         
-        // Calculate and set real statistics
-        const realStats = calculateServiceStats(servicesData, categoriesData);
-        setServiceStats(realStats);
-        console.log('Calculated service stats:', realStats);
+        // Calculate and set real statistics (will be updated when orders are loaded)
+        const initialStats = calculateServiceStats([], servicesData);
+        setServiceStats(initialStats);
+        console.log('Initial service stats:', initialStats);
         
         // Generate realistic booking history and bills
         const { bookingHistory, bills } = generateBookingHistoryAndBills(servicesData);
         setBookingHistory(bookingHistory);
         setBills(bills);
         console.log('Generated booking history:', bookingHistory);
+        
+        // Also fetch real booking data
+        if (user?.id) {
+          fetchBookings();
+        }
         console.log('Generated bills:', bills);
         
       } catch (e) {
@@ -764,7 +951,10 @@ const CustomerDashboard = () => {
       cancelled: '#ef4444',
       pending: '#8b5cf6',
       paid: '#10b981',
-      overdue: '#ef4444'
+      overdue: '#ef4444',
+      processing: '#f59e0b',
+      failed: '#ef4444',
+      refunded: '#8b5cf6'
     };
     return colors[status] || '#64748b';
   };
@@ -813,19 +1003,67 @@ const CustomerDashboard = () => {
   };
   // Load real orders from Supabase
   const fetchOrders = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.log('No user ID available for fetching orders');
+      return;
+    }
+    
     try {
       setOrdersLoading(true);
+      console.log('Fetching orders for user:', user.id);
+      
       // Resolve users.id from auth_user_id
       const { data: dbUser, error: uErr } = await supabase
         .from('users')
         .select('id')
         .eq('auth_user_id', user.id)
         .single();
+        
       if (uErr || !dbUser) {
-        setOrders([]);
+        console.log('No user found in users table, trying direct approach');
+        // Try direct approach if user not found in users table
+        const { data: directData, error: directError } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+          
+        if (directError) {
+          console.error('Direct query failed:', directError);
+          throw directError;
+        }
+        
+        const mapped = (directData || []).map(row => ({
+          id: row.id,
+          name: 'Service',
+          description: '',
+          icon_url: null,
+          duration: '',
+          price: row.total_amount || 0,
+          offer_price: null,
+          offer_enabled: false,
+          category_name: 'General',
+          date: row.scheduled_date,
+          time: row.scheduled_time,
+          address: row.service_address,
+          total: row.total_amount,
+          bookingStatus: row.booking_status,
+          paymentStatus: row.payment_status
+        }));
+        
+        setOrders(mapped);
+        console.log('Direct query successful, found orders:', mapped.length);
+        
+        // Recalculate stats with real booking data
+        const updatedStats = calculateServiceStats(mapped, services);
+        setServiceStats(updatedStats);
+        console.log('Updated service stats with booking data:', updatedStats);
         return;
       }
+      
+      console.log('Found user in users table, ID:', dbUser.id);
+      
+      // Try the complex join query first
       const { data, error } = await supabase
         .from('bookings')
         .select(`
@@ -836,14 +1074,36 @@ const CustomerDashboard = () => {
           booking_status,
           payment_status,
           service_address,
-          services:service_id ( name )
+          service_id,
+          services!inner(
+            id,
+            name,
+            description,
+            icon_url,
+            duration,
+            price,
+            offer_price,
+            offer_enabled,
+            service_categories!inner(
+              id,
+              name
+            )
+          )
         `)
         .eq('user_id', dbUser.id)
         .order('created_at', { ascending: false });
+        
       if (!error && Array.isArray(data)) {
         const mapped = data.map(row => ({
           id: row.id,
           name: row.services?.name || 'Service',
+          description: row.services?.description || '',
+          icon_url: row.services?.icon_url || null,
+          duration: row.services?.duration || '',
+          price: row.services?.price || 0,
+          offer_price: row.services?.offer_price || null,
+          offer_enabled: row.services?.offer_enabled || false,
+          category_name: row.services?.service_categories?.name || 'Unknown',
           date: row.scheduled_date,
           time: row.scheduled_time,
           address: row.service_address,
@@ -852,12 +1112,59 @@ const CustomerDashboard = () => {
           paymentStatus: row.payment_status
         }));
         setOrders(mapped);
+        console.log('Complex query successful, found orders:', mapped.length);
+        
+        // Recalculate stats with real booking data
+        const updatedStats = calculateServiceStats(mapped, services);
+        setServiceStats(updatedStats);
+        console.log('Updated service stats with booking data:', updatedStats);
       } else {
-        setOrders([]);
+        console.log('Complex query failed, trying simple query:', error);
+        // Fallback to simple query without joins
+        const { data: simpleData, error: simpleError } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('user_id', dbUser.id)
+          .order('created_at', { ascending: false });
+          
+        if (simpleError) {
+          console.error('Simple query also failed:', simpleError);
+          throw simpleError;
+        }
+        
+        const mapped = (simpleData || []).map(row => ({
+          id: row.id,
+          name: 'Service',
+          description: '',
+          icon_url: null,
+          duration: '',
+          price: row.total_amount || 0,
+          offer_price: null,
+          offer_enabled: false,
+          category_name: 'General',
+          date: row.scheduled_date,
+          time: row.scheduled_time,
+          address: row.service_address,
+          total: row.total_amount,
+          bookingStatus: row.booking_status,
+          paymentStatus: row.payment_status
+        }));
+        
+        setOrders(mapped);
+        console.log('Simple query successful, found orders:', mapped.length);
+        
+        // Recalculate stats with real booking data
+        const updatedStats = calculateServiceStats(mapped, services);
+        setServiceStats(updatedStats);
+        console.log('Updated service stats with booking data:', updatedStats);
       }
     } catch (error) {
       console.error('Error fetching orders:', error);
       setOrders([]);
+      // Reset stats on error
+      const errorStats = calculateServiceStats([], services);
+      setServiceStats(errorStats);
+      console.log('Reset stats due to error:', errorStats);
     } finally {
       setOrdersLoading(false);
     }
@@ -865,7 +1172,26 @@ const CustomerDashboard = () => {
 
   useEffect(() => {
     fetchOrders();
-  }, [user?.id]);
+  }, [user?.id, services]);
+
+  // Recalculate stats when services or orders change
+  useEffect(() => {
+    const updatedStats = calculateServiceStats(orders, services);
+    setServiceStats(updatedStats);
+    console.log('Recalculated service stats:', updatedStats);
+  }, [orders, services]);
+
+  // Initialize stats when component mounts
+  useEffect(() => {
+    const initialStats = calculateServiceStats([], []);
+    setServiceStats(initialStats);
+    console.log('Initialized service stats:', initialStats);
+  }, []);
+
+  // Debug: Log serviceStats changes
+  useEffect(() => {
+    console.log('serviceStats state changed:', serviceStats);
+  }, [serviceStats]);
 
   // Helper functions for orders
   const getFilteredOrders = () => {
@@ -906,6 +1232,44 @@ const CustomerDashboard = () => {
   const handlePayBill = (bill) => {
     setSelectedService(bill);
     setIsPaymentModalOpen(true);
+  };
+
+  // PDF Download Handlers
+  const handleDownloadInvoice = async (booking) => {
+    try {
+      toastManager.info('Generating invoice...');
+      const result = await invoiceService.downloadInvoice(booking);
+      
+      if (result.success) {
+        toastManager.success(`Invoice ${result.fileName} downloaded successfully!`);
+      } else {
+        toastManager.error(`Failed to generate invoice: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error downloading invoice:', error);
+      toastManager.error('Failed to download invoice');
+    }
+  };
+
+  const handleDownloadAllInvoices = async () => {
+    try {
+      if (bookings.length === 0) {
+        toastManager.warning('No invoices available to download');
+        return;
+      }
+
+      toastManager.info(`Generating ${bookings.length} invoices...`);
+      const result = await invoiceService.downloadMultipleInvoices(bookings);
+      
+      if (result.success) {
+        toastManager.success(`All ${bookings.length} invoices downloaded successfully!`);
+      } else {
+        toastManager.error(`Failed to generate invoices: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error downloading invoices:', error);
+      toastManager.error('Failed to download invoices');
+    }
   };
 
   const handleProvideFeedback = (service) => {
@@ -1321,27 +1685,27 @@ const CustomerDashboard = () => {
 
   const stats = [
     { 
-      label: "Total Services", 
+      label: "Total Bookings", 
       value: serviceStats.totalServices.toString(), 
       icon: Calendar, 
       color: "#8b5cf6", 
-      change: serviceStats.totalServices > 0 ? `+${Math.floor(serviceStats.totalServices * 0.1)} this month` : "No services yet", 
-      changeType: serviceStats.totalServices > 0 ? "positive" : "neutral" 
+      change: serviceStats.monthlyBookings > 0 ? `+${serviceStats.monthlyBookings} this month` : "No bookings this month", 
+      changeType: serviceStats.monthlyBookings > 0 ? "positive" : "neutral" 
     },
     { 
-      label: "Active Services", 
+      label: "Completed Bookings", 
       value: serviceStats.completedServices.toString(), 
       icon: CheckCircle, 
       color: "#10b981", 
-      change: serviceStats.completedServices > 0 ? `+${Math.floor(serviceStats.completedServices * 0.15)} this week` : "No active services", 
-      changeType: serviceStats.completedServices > 0 ? "positive" : "neutral" 
+      change: serviceStats.weeklyCompleted > 0 ? `+${serviceStats.weeklyCompleted} this week` : "No completed this week", 
+      changeType: serviceStats.weeklyCompleted > 0 ? "positive" : "neutral" 
     },
     { 
-      label: "Total Value", 
+      label: "Total Spent", 
       value: `₹${serviceStats.totalSpent.toLocaleString()}`, 
       icon: IndianRupee, 
       color: "#4f9cf9", 
-      change: serviceStats.monthlySavings > 0 ? `₹${serviceStats.monthlySavings} saved` : "No savings yet", 
+      change: serviceStats.monthlySavings > 0 ? `₹${serviceStats.monthlySavings} saved` : "→ No savings yet", 
       changeType: serviceStats.monthlySavings > 0 ? "positive" : "neutral" 
     },
     { 
@@ -1354,6 +1718,9 @@ const CustomerDashboard = () => {
     }
   ];
 
+  console.log('Dashboard stats array:', stats);
+  console.log('Current serviceStats state:', serviceStats);
+
   // Navigation items with Home as default active tab
   const navItems = [
     { key: 'home', label: 'Home', icon: Home },
@@ -1361,7 +1728,7 @@ const CustomerDashboard = () => {
     { key: 'orders', label: 'Your Orders', icon: Receipt },
     { key: 'wishlist', label: 'Wishlist', icon: Heart },
     { key: 'cart', label: 'Cart', icon: Package },
-    { key: 'account', label: 'Your Account', icon: User },
+    { key: 'account', label: 'Billing & Payments', icon: IndianRupee },
     { key: 'ai-assistant', label: 'Nexus AI Assistant', icon: MessageCircle }
   ];
 
@@ -1408,8 +1775,7 @@ const CustomerDashboard = () => {
             <div className="header-logo">
               <Logo 
                 size="medium" 
-                onClick={() => navigate('/')}
-                className="clickable-logo"
+                className="logo-display"
               />
             </div>
 
@@ -1426,9 +1792,9 @@ const CustomerDashboard = () => {
                 >
                   <div className="notification-icon">
                     <Bell size={20} />
-                    {notifications.length > 0 && (
+                    {unreadCount > 0 && (
                       <span className="notification-badge">
-                        {notifications.length > 9 ? '9+' : notifications.length}
+                        {unreadCount > 9 ? '9+' : unreadCount}
                       </span>
                     )}
                   </div>
@@ -1440,7 +1806,8 @@ const CustomerDashboard = () => {
                       <h3>Notifications</h3>
                       <button 
                         className="mark-all-read-btn"
-                        onClick={() => setNotifications([])}
+                        onClick={markAllAsRead}
+                        disabled={notificationsLoading}
                       >
                         Mark all read
                       </button>
@@ -1455,18 +1822,46 @@ const CustomerDashboard = () => {
                       ) : (
                         <div className="notifications-list">
                           {notifications.slice(0, 6).map(item => (
-                            <div key={item.id} className={`notification-item ${item.type}`}>
-                              <div className="notification-icon-wrapper">
-                                {item.type === 'reminder' && <Clock size={16} />}
-                                {item.type === 'billing' && <IndianRupee size={16} />}
-                                {item.type === 'security' && <Shield size={16} />}
-                                {item.type === 'service' && <CheckCircle size={16} />}
+                            <div 
+                              key={item.id} 
+                              className={`notification-item ${item.type} ${item.status === 'unread' ? 'unread' : ''}`}
+                            >
+                              <div 
+                                className="notification-content-wrapper"
+                                onClick={() => {
+                                  if (item.status === 'unread') {
+                                    markAsRead(item.id);
+                                  }
+                                }}
+                                style={{ cursor: item.status === 'unread' ? 'pointer' : 'default' }}
+                              >
+                                <div className="notification-icon-wrapper">
+                                  <span className="notification-emoji">
+                                    {getNotificationIcon(item.type)}
+                                  </span>
+                                </div>
+                                <div className="notification-content">
+                                  <div className="notification-title">{item.title}</div>
+                                  <div className="notification-message">{item.message}</div>
+                                  <div className="notification-time">{item.time}</div>
+                                </div>
+                                {item.status === 'unread' && (
+                                  <div 
+                                    className="unread-indicator"
+                                    style={{ backgroundColor: getNotificationColor(item.priority) }}
+                                  />
+                                )}
                               </div>
-                              <div className="notification-content">
-                                <div className="notification-title">{item.title}</div>
-                                <div className="notification-message">{item.message}</div>
-                                <div className="notification-time">{item.time}</div>
-                              </div>
+                              <button 
+                                className="notification-dismiss-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  dismissNotification(item.id);
+                                }}
+                                title="Dismiss notification"
+                              >
+                                <X size={14} />
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -4434,19 +4829,206 @@ const CustomerDashboard = () => {
                             {/* Order Card Body */}
                             <div className="order-card-body">
                               <div className="service-section">
-                                <div className="service-icon-container">
-                                  <div className="service-icon">
-                                    <Package size={22} />
-                                  </div>
-                                  <div className="service-icon-bg"></div>
+                                <div className="service-track-container">
+                                  <motion.div 
+                                    className={`service-track ${order.bookingStatus === 'confirmed' ? 'confirmed' : 'pending'}`}
+                                    initial={{ opacity: 0, scaleY: 0 }}
+                                    animate={{ opacity: 1, scaleY: 1 }}
+                                    transition={{ 
+                                      delay: index * 0.1 + 0.1,
+                                      duration: 0.6,
+                                      ease: "easeOut"
+                                    }}
+                                  >
+                                    <motion.div 
+                                      className={`service-icon-container ${order.bookingStatus === 'confirmed' ? 'confirmed-position' : 'pending-position'}`}
+                                      initial={{ y: 0 }}
+                                      animate={{ 
+                                        y: order.bookingStatus === 'confirmed' ? 30 : 0 
+                                      }}
+                                      transition={{ 
+                                        delay: index * 0.1 + 0.3,
+                                        duration: 0.8,
+                                        ease: "easeOut"
+                                      }}
+                                    >
+                                      <div className="service-icon">
+                                        {order.icon_url ? (
+                                          <img 
+                                            src={order.icon_url} 
+                                            alt={order.name} 
+                                            style={{ 
+                                              width: 22, 
+                                              height: 22, 
+                                              objectFit: 'cover', 
+                                              borderRadius: 4 
+                                            }} 
+                                            onError={(e) => { 
+                                              e.currentTarget.style.display = 'none'; 
+                                              e.currentTarget.nextSibling.style.display = 'block'; 
+                                            }} 
+                                          />
+                                        ) : null}
+                                        <Package size={22} style={{ display: order.icon_url ? 'none' : 'block' }} />
+                                      </div>
+                                      <div className="service-icon-bg"></div>
+                                    </motion.div>
+                                    <div className={`track-progress ${order.bookingStatus === 'confirmed' ? 'confirmed-track' : 'pending-track'}`}>
+                                      <div className={`progress-line ${order.bookingStatus === 'confirmed' ? 'confirmed-line' : 'pending-line'}`}></div>
+                                      
+                                      {/* Flowing animation for confirmed orders */}
+                                      {order.bookingStatus === 'confirmed' && (
+                                        <>
+                                          {/* Flowing service image */}
+                                          <motion.div 
+                                            className="flowing-service-image"
+                                            initial={{ y: -30, opacity: 0 }}
+                                            animate={{ y: 130, opacity: 1 }}
+                                            transition={{
+                                              duration: 3,
+                                              repeat: Infinity,
+                                              ease: "linear",
+                                              delay: index * 0.2
+                                            }}
+                                          >
+                                            <div className="flowing-icon">
+                                              {order.icon_url ? (
+                                                <img 
+                                                  src={order.icon_url} 
+                                                  alt={order.name} 
+                                                  style={{ 
+                                                    width: 20, 
+                                                    height: 20, 
+                                                    objectFit: 'cover', 
+                                                    borderRadius: 4 
+                                                  }} 
+                                                  onError={(e) => { 
+                                                    e.currentTarget.style.display = 'none'; 
+                                                    e.currentTarget.nextSibling.style.display = 'block'; 
+                                                  }} 
+                                                />
+                                              ) : null}
+                                              <Package size={20} style={{ display: order.icon_url ? 'none' : 'block' }} />
+                                            </div>
+                                          </motion.div>
+                                          
+                                          {/* Secondary flowing image */}
+                                          <motion.div 
+                                            className="flowing-service-image secondary"
+                                            initial={{ y: -30, opacity: 0 }}
+                                            animate={{ y: 130, opacity: 1 }}
+                                            transition={{
+                                              duration: 3,
+                                              repeat: Infinity,
+                                              ease: "linear",
+                                              delay: index * 0.2 + 1.5
+                                            }}
+                                          >
+                                            <div className="flowing-icon secondary">
+                                              {order.icon_url ? (
+                                                <img 
+                                                  src={order.icon_url} 
+                                                  alt={order.name} 
+                                                  style={{ 
+                                                    width: 16, 
+                                                    height: 16, 
+                                                    objectFit: 'cover', 
+                                                    borderRadius: 3 
+                                                  }} 
+                                                  onError={(e) => { 
+                                                    e.currentTarget.style.display = 'none'; 
+                                                    e.currentTarget.nextSibling.style.display = 'block'; 
+                                                  }} 
+                                                />
+                                              ) : null}
+                                              <Package size={16} style={{ display: order.icon_url ? 'none' : 'block' }} />
+                                            </div>
+                                          </motion.div>
+                                          
+                                          {/* Trail effect */}
+                                          <motion.div 
+                                            className="flow-trail"
+                                            initial={{ y: -30, opacity: 0 }}
+                                            animate={{ y: 130, opacity: 0 }}
+                                            transition={{
+                                              duration: 3,
+                                              repeat: Infinity,
+                                              ease: "linear",
+                                              delay: index * 0.2 + 0.5
+                                            }}
+                                          >
+                                            <div className="trail-line"></div>
+                                          </motion.div>
+                                        </>
+                                      )}
+                                      
+                                      {/* Pending flow animation */}
+                                      {order.bookingStatus === 'pending' && (
+                                        <motion.div 
+                                          className="pending-flow-indicator"
+                                          initial={{ y: -30, opacity: 0 }}
+                                          animate={{ y: 130, opacity: 0 }}
+                                          transition={{
+                                            duration: 4,
+                                            repeat: Infinity,
+                                            ease: "easeInOut",
+                                            delay: index * 0.3
+                                          }}
+                                        >
+                                          <div className="pending-flowing-icon">
+                                            {order.icon_url ? (
+                                              <img 
+                                                src={order.icon_url} 
+                                                alt={order.name} 
+                                                style={{ 
+                                                  width: 14, 
+                                                  height: 14, 
+                                                  objectFit: 'cover', 
+                                                  borderRadius: 3,
+                                                  opacity: 0.7
+                                                }} 
+                                                onError={(e) => { 
+                                                  e.currentTarget.style.display = 'none'; 
+                                                  e.currentTarget.nextSibling.style.display = 'block'; 
+                                                }} 
+                                              />
+                                            ) : null}
+                                            <Package size={14} style={{ display: order.icon_url ? 'none' : 'block', opacity: 0.7 }} />
+                                          </div>
+                                        </motion.div>
+                                      )}
+                                      
+                                      {order.bookingStatus === 'confirmed' && (
+                                        <div className="progress-dots">
+                                          <div className="progress-dot"></div>
+                                          <div className="progress-dot"></div>
+                                          <div className="progress-dot"></div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </motion.div>
                                 </div>
                                 <div className="service-info">
                                   <h5 className="service-name">{order.name}</h5>
+                                  {order.category_name && (
+                                    <div className="service-category">
+                                      <span className="category-badge">{order.category_name}</span>
+                                    </div>
+                                  )}
+                                  {order.description && (
+                                    <p className="service-description">{order.description.slice(0, 60)}...</p>
+                                  )}
                                   <div className="service-details">
                                     <div className="detail-item">
                                       <Clock size={16} />
                                       <span>{order.time}</span>
                                     </div>
+                                    {order.duration && (
+                                      <div className="detail-item">
+                                        <Clock size={16} />
+                                        <span>{order.duration}</span>
+                                      </div>
+                                    )}
                                     <div className="detail-item">
                                       <MapPin size={16} />
                                       <span>{order.address ? order.address.split(',')[0] : 'Location not specified'}</span>
@@ -4558,6 +5140,24 @@ const CustomerDashboard = () => {
                                 <span className="detail-label">Service:</span>
                                 <span className="detail-value">{selectedOrder.name}</span>
                               </div>
+                              {selectedOrder.category_name && (
+                                <div className="detail-item">
+                                  <span className="detail-label">Category:</span>
+                                  <span className="detail-value">{selectedOrder.category_name}</span>
+                                </div>
+                              )}
+                              {selectedOrder.description && (
+                                <div className="detail-item">
+                                  <span className="detail-label">Description:</span>
+                                  <span className="detail-value">{selectedOrder.description}</span>
+                                </div>
+                              )}
+                              {selectedOrder.duration && (
+                                <div className="detail-item">
+                                  <span className="detail-label">Duration:</span>
+                                  <span className="detail-value">{selectedOrder.duration}</span>
+                                </div>
+                              )}
                               <div className="detail-item">
                                 <span className="detail-label">Date:</span>
                                 <span className="detail-value">
@@ -4642,7 +5242,7 @@ const CustomerDashboard = () => {
                 >
                   <div className="billing-header">
                     <h3>Billing & Payments</h3>
-                    <p>Manage your bills and payment methods</p>
+                    <p>Track your invoices, payment history, and service analytics</p>
               </div>
               
                   <div className="content-grid">
@@ -4650,85 +5250,181 @@ const CustomerDashboard = () => {
                     <div className="content-card">
                       <div className="card-header">
                         <h4>Bills & Invoices</h4>
-                        <button className="btn-primary">
+                        <button 
+                          className="btn-primary"
+                          onClick={handleDownloadAllInvoices}
+                          disabled={bookingsLoading || bookings.length === 0}
+                        >
                           <Download size={16} />
                           Download All
                         </button>
-              </div>
+                      </div>
                       <div className="bills-list">
-                        {bills.map(bill => (
-                          <div key={bill.id} className="bill-item">
-                            <div className="bill-info">
-                              <div className="bill-main">
-                                <h5>{bill.id}</h5>
-                                <p>{bill.service}</p>
-            </div>
-                              <div className="bill-details">
-                                <span>Date: {bill.date}</span>
-                                {bill.method && <span>Paid via: {bill.method}</span>}
-                      </div>
-                    </div>
-                    
-                            <div className="bill-amount">
-                              <span className="amount">₹{bill.amount.toFixed(2)}</span>
-                        <span 
-                          className="status-badge"
-                                style={{ backgroundColor: getStatusColor(bill.status) }}
-                        >
-                                {bill.status}
-                        </span>
-                            </div>
-
-                            <div className="bill-actions">
-                              {bill.status === 'pending' || bill.status === 'overdue' ? (
-                                <button 
-                                  className="btn-primary"
-                                  onClick={() => handlePayBill(bill)}
+                        {bookingsLoading ? (
+                          <div className="loading-state">
+                            <LoadingSpinner size="small" />
+                            <span>Loading invoices...</span>
+                          </div>
+                        ) : bookings.length === 0 ? (
+                          <div className="empty-state">
+                            <FileText size={48} />
+                            <h4>No Invoices Yet</h4>
+                            <p>Your invoices will appear here after booking services</p>
+                          </div>
+                        ) : (
+                          bookings.map(booking => (
+                            <div key={booking.id} className="bill-item">
+                              <div className="bill-info">
+                                <div className="bill-main">
+                                  <h5>INV-{booking.id.slice(-8).toUpperCase()}</h5>
+                                  <p>{booking.service_name}</p>
+                                </div>
+                                <div className="bill-details">
+                                  <span>Date: {new Date(booking.scheduled_date).toLocaleDateString('en-IN')}</span>
+                                  <span>Time: {booking.scheduled_time}</span>
+                                  {booking.payment_method && <span>Paid via: {booking.payment_method}</span>}
+                                </div>
+                              </div>
+                              
+                              <div className="bill-amount">
+                                <span className="amount">₹{booking.total_amount.toFixed(2)}</span>
+                                <span 
+                                  className="status-badge"
+                                  style={{ backgroundColor: getStatusColor(booking.payment_status) }}
                                 >
-                                  Pay Now
-                                </button>
-                              ) : (
-                                <button className="btn-secondary">
-                                  <Download size={16} />
-                                  Download
-                                </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                      </div>
-                    </div>
-                    
-                    {/* Payment Methods */}
-                    <div className="content-card">
-                      <h4>Payment Methods</h4>
-                      <div className="payment-methods">
-                        <div className="payment-method">
-                          <div className="method-icon">
-                            <CreditCard size={24} />
-                      </div>
-                          <div className="method-info">
-                            <h5>Credit Card</h5>
-                            <p>•••• •••• •••• 1234</p>
-                      </div>
-                          <button className="btn-secondary">Edit</button>
-                    </div>
-                    
-                        <div className="payment-method">
-                          <div className="method-icon">
-                            <Smartphone size={24} />
-                          </div>
-                          <div className="method-info">
-                            <h5>UPI</h5>
-                            <p>user@upi</p>
-                          </div>
-                          <button className="btn-secondary">Edit</button>
-                        </div>
+                                  {booking.payment_status}
+                                </span>
+                              </div>
 
-                        <button className="add-method-btn">
-                          <Plus size={16} />
-                          Add Payment Method
-                        </button>
+                              <div className="bill-actions">
+                                {booking.payment_status === 'pending' || booking.payment_status === 'failed' ? (
+                                  <button 
+                                    className="btn-primary"
+                                    onClick={() => handlePayBill(booking)}
+                                  >
+                                    Pay Now
+                                  </button>
+                                ) : (
+                                  <button 
+                                    className="btn-secondary"
+                                    onClick={() => handleDownloadInvoice(booking)}
+                                  >
+                                    <Download size={16} />
+                                    Download
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Payment Summary */}
+                    <div className="content-card">
+                      <h4>Payment Summary</h4>
+                      <div className="payment-summary">
+                        <div className="summary-stats">
+                          <div className="stat-item">
+                            <div className="stat-icon">
+                              <DollarSign size={20} />
+                            </div>
+                            <div className="stat-content">
+                              <h5>Total Spent</h5>
+                              <p>₹{bookings.reduce((sum, booking) => sum + (booking.total_amount || 0), 0).toFixed(2)}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="stat-item">
+                            <div className="stat-icon">
+                              <FileText size={20} />
+                            </div>
+                            <div className="stat-content">
+                              <h5>Total Invoices</h5>
+                              <p>{bookings.length}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="stat-item">
+                            <div className="stat-icon">
+                              <CheckCircle size={20} />
+                            </div>
+                            <div className="stat-content">
+                              <h5>Paid Invoices</h5>
+                              <p>{bookings.filter(booking => booking.payment_status === 'completed').length}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="stat-item">
+                            <div className="stat-icon">
+                              <Clock size={20} />
+                            </div>
+                            <div className="stat-content">
+                              <h5>Pending Payments</h5>
+                              <p>{bookings.filter(booking => booking.payment_status === 'pending').length}</p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="recent-activity">
+                          <h5>Recent Activity</h5>
+                          <div className="activity-list">
+                            {bookings.slice(0, 3).map(booking => (
+                              <div key={booking.id} className="activity-item">
+                                <div className="activity-icon">
+                                  {booking.payment_status === 'completed' ? (
+                                    <CheckCircle size={16} color="#10b981" />
+                                  ) : booking.payment_status === 'pending' ? (
+                                    <Clock size={16} color="#f59e0b" />
+                                  ) : (
+                                    <XCircle size={16} color="#ef4444" />
+                                  )}
+                                </div>
+                                <div className="activity-content">
+                                  <p>{booking.service_name}</p>
+                                  <span>₹{booking.total_amount.toFixed(2)} • {new Date(booking.scheduled_date).toLocaleDateString('en-IN')}</span>
+                                </div>
+                                <div className="activity-status">
+                                  <span 
+                                    className="status-badge"
+                                    style={{ backgroundColor: getStatusColor(booking.payment_status) }}
+                                  >
+                                    {booking.payment_status}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Service History */}
+                    <div className="content-card">
+                      <h4>Service History</h4>
+                      <div className="service-history">
+                        <div className="history-stats">
+                          <div className="history-item">
+                            <div className="history-icon">
+                              <Calendar size={20} />
+                            </div>
+                            <div className="history-content">
+                              <h5>Services Booked</h5>
+                              <p>{bookings.length} total services</p>
+                            </div>
+                          </div>
+                          
+                          <div className="history-item">
+                            <div className="history-icon">
+                              <Star size={20} />
+                            </div>
+                            <div className="history-content">
+                              <h5>Average Rating</h5>
+                              <p>4.8/5.0</p>
+                            </div>
+                          </div>
+                        </div>
+                        
                       </div>
                     </div>
                   </div>

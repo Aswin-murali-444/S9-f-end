@@ -4,12 +4,14 @@ import { useInView } from 'react-intersection-observer';
 import { 
   ArrowLeft, Calendar, Clock, MapPin, User, Phone, MessageSquare, 
   CreditCard, Shield, CheckCircle, AlertCircle, Star, 
-  ArrowRight, Bell, LogOut, ChevronDown, IndianRupee, Navigation
+  ArrowRight, Bell, LogOut, ChevronDown, IndianRupee, Navigation,
+  X, Plus, Minus
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '../hooks/useAuth';
+import { supabase } from '../lib/supabase';
 import { apiService } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
+import { useNotifications } from '../hooks/useNotifications';
 import ToastContainer from '../components/ToastContainer';
 import LocationMap from '../components/LocationMap';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -32,6 +34,10 @@ const BookingPage = () => {
   const location = useLocation();
   const { service, user, cartItems = [], isMultiService = false } = location.state || {};
   const { logout } = useAuth();
+  // Workers and duration controls
+  const [workersCount, setWorkersCount] = useState(1);
+  const defaultDurationMins = (typeof (service?.duration) === 'number' && service.duration > 0) ? service.duration : 60;
+  const [durationHours, setDurationHours] = useState(Math.max(0.5, Math.round((defaultDurationMins / 60) * 10) / 10));
   
   // Header refs and state - Same as Customer Dashboard
   const notificationsRef = useRef(null);
@@ -62,23 +68,17 @@ const BookingPage = () => {
     }
   };
 
-  // Notifications - Same as Customer Dashboard
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      type: 'service',
-      title: 'Booking Confirmed',
-      message: 'Your service booking has been confirmed',
-      time: '2 hours ago'
-    },
-    {
-      id: 2,
-      type: 'reminder',
-      title: 'Upcoming Service',
-      message: 'You have a service scheduled for tomorrow',
-      time: '1 day ago'
-    }
-  ]);
+  // Use the notifications hook
+  const { 
+    notifications, 
+    unreadCount, 
+    loading: notificationsLoading,
+    markAsRead, 
+    markAllAsRead,
+    dismissNotification,
+    getNotificationIcon,
+    getNotificationColor 
+  } = useNotifications();
   
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState('');
@@ -360,7 +360,8 @@ const BookingPage = () => {
   };
 
   const handleBooking = async () => {
-    if (!service || !user) return;
+    const hasMulti = Array.isArray(cartItems) && cartItems.length > 0;
+    if ((!service && !hasMulti) || !user) return;
     if (!userProfile?.id) {
       toastManager.error('Loading your profile. Please try again in a moment.');
       return;
@@ -369,8 +370,9 @@ const BookingPage = () => {
 
     try {
       const total = calculateTotal();
+      const chosenDurationMinutes = Math.round(Math.max(0.5, durationHours) * 60);
 
-      const bookingData = {
+      const singleBookingData = service ? {
         user_id: userProfile.id,
         service_id: service.id,
         category_id: service.category || service.category_id || service.categoryId,
@@ -386,21 +388,23 @@ const BookingPage = () => {
         contact_phone: phone,
         contact_email: userProfile?.email || null,
         special_instructions: notes || null,
-        base_price: service.offer_enabled && service.offer_price ? service.offer_price : service.price,
-        service_fee: Math.round((service.offer_enabled && service.offer_price ? service.offer_price : service.price) * 0.1),
-        tax_amount: Math.round(((service.offer_enabled && service.offer_price ? service.offer_price : service.price) + Math.round((service.offer_enabled && service.offer_price ? service.offer_price : service.price) * 0.1)) * 0.18),
+        workers_count: Math.max(1, workersCount),
+        duration_minutes: chosenDurationMinutes,
+        base_price: (service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * Math.max(1, workersCount),
+        service_fee: Math.round(((service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * Math.max(1, workersCount)) * 0.1),
+        tax_amount: Math.round((((service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * Math.max(1, workersCount)) + Math.round(((service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * Math.max(1, workersCount)) * 0.1)) * 0.18),
         total_amount: total,
         payment_method: paymentMethod,
         payment_status: 'pending',
         booking_status: 'pending'
-      };
+      } : null;
 
       // 1) Create Razorpay order first (no DB insert yet)
       const { order } = await apiService.createRazorpayOrder({
         amount: total,
         currency: 'INR',
         receipt: `bk_${Date.now()}`,
-        notes: { service_id: bookingData.service_id }
+        notes: { multi: Boolean(isMultiService && cartItems?.length > 0) }
       });
 
       // 3) Open Razorpay Checkout
@@ -409,7 +413,7 @@ const BookingPage = () => {
         amount: order.amount,
         currency: order.currency,
         name: 'Nexus Services',
-        description: service.name || 'Service Booking',
+        description: (isMultiService && cartItems?.length > 0) ? 'Multiple Services Booking' : (service.name || 'Service Booking'),
         order_id: order.id,
         prefill: {
           email: userProfile?.email || '',
@@ -418,16 +422,70 @@ const BookingPage = () => {
         notes: {},
         handler: async function (response) {
           try {
-            // Confirm on server and insert booking only after valid payment
-            const result = await apiService.confirmBookingAfterPayment({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              booking: bookingData
-            });
+            // Confirm on server and insert booking(s) only after valid payment
+            if (isMultiService && Array.isArray(cartItems) && cartItems.length > 0) {
+              const bookingsPayload = cartItems.map((item) => {
+                const base = item.offer_enabled && item.offer_price ? item.offer_price : item.price;
+                const qty = item.quantity || 1;
+                const serviceFee = 50 / cartItems.length; // proportionally distribute the flat service fee
+                const baseDuration = (typeof item.duration === 'number' && item.duration > 0) ? item.duration : 60;
+                const taxBase = Math.round((base * qty * (chosenDurationMinutes / baseDuration)) + serviceFee);
+                const taxAmount = Math.round(taxBase * 0.18);
+                return {
+                  user_id: userProfile.id,
+                  service_id: item.id || item.service_id,
+                  category_id: item.category_id || item.category || item.categoryId,
+                  scheduled_date: selectedDate,
+                  scheduled_time: selectedTime,
+                  service_address: address,
+                  service_city: userProfile?.user_profiles?.city || null,
+                  service_state: userProfile?.user_profiles?.state || null,
+                  service_country: userProfile?.user_profiles?.country || null,
+                  service_postal_code: userProfile?.user_profiles?.postal_code || null,
+                  service_location_latitude: userProfile?.user_profiles?.location_latitude || null,
+                  service_location_longitude: userProfile?.user_profiles?.location_longitude || null,
+                  contact_phone: phone,
+                  contact_email: userProfile?.email || null,
+                  special_instructions: notes || null,
+                  workers_count: qty,
+                  duration_minutes: chosenDurationMinutes,
+                  base_price: Math.round(base * qty * (chosenDurationMinutes / baseDuration)),
+                  service_fee: Math.round(serviceFee),
+                  tax_amount: taxAmount,
+                  total_amount: Math.round((base * qty * (chosenDurationMinutes / baseDuration)) + serviceFee + taxAmount),
+                  payment_method: paymentMethod,
+                  payment_status: 'pending',
+                  booking_status: 'pending'
+                };
+              });
 
-            if (result?.booking?.id) {
-              setBookingSuccess(true);
+              const result = await apiService.confirmMultipleBookingsAfterPayment({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                bookings: bookingsPayload
+              });
+
+              if (Array.isArray(result?.bookings) && result.bookings.length > 0) {
+                setBookingSuccess(true);
+                // Clear cart after successful multi-service booking
+                try {
+                  await apiService.clearCart();
+                } catch (clearError) {
+                  console.warn('Failed to clear cart after booking:', clearError);
+                }
+              }
+            } else {
+              const result = await apiService.confirmBookingAfterPayment({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                booking: singleBookingData
+              });
+
+              if (result?.booking?.id) {
+                setBookingSuccess(true);
+              }
             }
             toastManager.success('Payment successful and booking confirmed!');
             setTimeout(() => navigate('/dashboard'), 2000);
@@ -495,23 +553,31 @@ const BookingPage = () => {
   };
 
   const calculateTotal = () => {
-    // Multi-service cart uses the same breakdown as cart summary on dashboard: flat fee + GST
+    // Multi-service totals with workers and duration
     if (isMultiService && Array.isArray(cartItems) && cartItems.length > 0) {
+      const chosenDurationMinutes = Math.round(Math.max(0.5, durationHours) * 60);
       const subtotal = cartItems.reduce((sum, item) => {
         const hasOffer = item.offer_enabled && item.offer_price;
-        const price = hasOffer ? item.offer_price : item.price;
-        const qty = item.quantity || 1;
-        return sum + price * qty;
+        const unit = hasOffer ? item.offer_price : item.price;
+        const qty = item.quantity || 1; // workers
+        const itemBaseDuration = (typeof item.duration === 'number' && item.duration > 0) ? item.duration : 60;
+        const durationMultiplier = Math.max(0.5, chosenDurationMinutes) / itemBaseDuration;
+        return sum + unit * qty * durationMultiplier;
       }, 0);
       const serviceFee = 50; // keep consistent with CustomerDashboard cart summary
       const tax = Math.round((subtotal + serviceFee) * 0.18);
       return Math.round(subtotal + serviceFee + tax);
     }
+    // Single-service totals with workers and duration
     if (!service) return 0;
-    const basePrice = service.offer_enabled && service.offer_price ? service.offer_price : service.price;
-    const serviceFee = Math.round(basePrice * 0.1); // 10% service fee
-    const tax = Math.round((basePrice + serviceFee) * 0.18); // 18% GST
-    return basePrice + serviceFee + tax;
+    const unit = service.offer_enabled && service.offer_price ? service.offer_price : service.price;
+    const chosenDurationMinutes = Math.round(Math.max(0.5, durationHours) * 60);
+    const baseDuration = (typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60;
+    const durationMultiplier = Math.max(0.5, chosenDurationMinutes) / baseDuration;
+    const baseSubtotal = unit * Math.max(1, workersCount) * durationMultiplier;
+    const serviceFee = Math.round(baseSubtotal * 0.1);
+    const tax = Math.round((baseSubtotal + serviceFee) * 0.18);
+    return Math.round(baseSubtotal + serviceFee + tax);
   };
 
   useEffect(() => {
@@ -561,8 +627,7 @@ const BookingPage = () => {
             <div className="header-logo">
               <Logo 
                 size="medium" 
-                onClick={() => navigate('/')}
-                className="clickable-logo"
+                className="logo-display"
               />
             </div>
 
@@ -579,9 +644,9 @@ const BookingPage = () => {
                 >
                   <div className="notification-icon">
                     <Bell size={20} />
-                    {notifications.length > 0 && (
+                    {unreadCount > 0 && (
                       <span className="notification-badge">
-                        {notifications.length > 9 ? '9+' : notifications.length}
+                        {unreadCount > 9 ? '9+' : unreadCount}
                       </span>
                     )}
                   </div>
@@ -593,7 +658,8 @@ const BookingPage = () => {
                       <h3>Notifications</h3>
                       <button 
                         className="mark-all-read-btn"
-                        onClick={() => setNotifications([])}
+                        onClick={markAllAsRead}
+                        disabled={notificationsLoading}
                       >
                         Mark all read
                       </button>
@@ -608,18 +674,46 @@ const BookingPage = () => {
                       ) : (
                         <div className="notifications-list">
                           {notifications.slice(0, 6).map(item => (
-                            <div key={item.id} className={`notification-item ${item.type}`}>
-                              <div className="notification-icon-wrapper">
-                                {item.type === 'reminder' && <Clock size={16} />}
-                                {item.type === 'billing' && <IndianRupee size={16} />}
-                                {item.type === 'security' && <Shield size={16} />}
-                                {item.type === 'service' && <CheckCircle size={16} />}
+                            <div 
+                              key={item.id} 
+                              className={`notification-item ${item.type} ${item.status === 'unread' ? 'unread' : ''}`}
+                            >
+                              <div 
+                                className="notification-content-wrapper"
+                                onClick={() => {
+                                  if (item.status === 'unread') {
+                                    markAsRead(item.id);
+                                  }
+                                }}
+                                style={{ cursor: item.status === 'unread' ? 'pointer' : 'default' }}
+                              >
+                                <div className="notification-icon-wrapper">
+                                  <span className="notification-emoji">
+                                    {getNotificationIcon(item.type)}
+                                  </span>
+                                </div>
+                                <div className="notification-content">
+                                  <div className="notification-title">{item.title}</div>
+                                  <div className="notification-message">{item.message}</div>
+                                  <div className="notification-time">{item.time}</div>
+                                </div>
+                                {item.status === 'unread' && (
+                                  <div 
+                                    className="unread-indicator"
+                                    style={{ backgroundColor: getNotificationColor(item.priority) }}
+                                  />
+                                )}
                               </div>
-                              <div className="notification-content">
-                                <div className="notification-title">{item.title}</div>
-                                <div className="notification-message">{item.message}</div>
-                                <div className="notification-time">{item.time}</div>
-                              </div>
+                              <button 
+                                className="notification-dismiss-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  dismissNotification(item.id);
+                                }}
+                                title="Dismiss notification"
+                              >
+                                <X size={14} />
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -1220,65 +1314,159 @@ const BookingPage = () => {
                     <h3>Select Date & Time</h3>
                   </div>
                   <div className="scheduling-form">
+                    {/* Enhanced Date Selection */}
                     <div className="form-group">
-                      <label>Select Date</label>
-                      <div className="date-picker">
+                      <label className="enhanced-label">
+                        <Calendar size={20} />
+                        Select Date
+                      </label>
+                      <div className="enhanced-date-picker">
                         {getAvailableDates().slice(0, 7).map(date => (
                           <button
                             key={date.toISOString()}
-                            className={`date-option ${selectedDate === formatDate(date) ? 'selected' : ''}`}
+                            className={`enhanced-date-option ${selectedDate === formatDate(date) ? 'selected' : ''}`}
                             onClick={() => setSelectedDate(formatDate(date))}
                           >
-                            <span className="day">{date.getDate()}</span>
-                            <span className="month">{date.toLocaleDateString('en-US', { month: 'short' })}</span>
+                            <div className="date-content">
+                              <span className="day-number">{date.getDate()}</span>
+                              <span className="day-name">{date.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                              <span className="month-name">{date.toLocaleDateString('en-US', { month: 'short' })}</span>
+                            </div>
+                            {selectedDate === formatDate(date) && (
+                              <div className="selection-indicator">
+                                <CheckCircle size={16} />
+                              </div>
+                            )}
                           </button>
                         ))}
                       </div>
                       {selectedDate && (
-                        <p className="selected-date-info">
-                          Selected: {formatDisplayDate(selectedDate)}
-                        </p>
-                      )}
-                    </div>
-                    <div className="form-group">
-                      <label>Select Time Slot</label>
-                      {selectedDate && (
-                        <div className="business-hours-info">
-                          <p className="hours-text">
-                            <Clock size={16} />
-                            Business Hours: {BUSINESS_HOURS.start}:00 AM - {BUSINESS_HOURS.end}:00 PM
-                            {isToday(selectedDate) && (
-                              <span className="buffer-notice">
-                                (2-hour advance notice required for today)
-                              </span>
-                            )}
-                          </p>
+                        <div className="selected-date-display">
+                          <div className="selected-info">
+                            <Calendar size={18} />
+                            <div className="selected-details">
+                              <span className="selected-label">Selected Date</span>
+                              <span className="selected-value">{formatDisplayDate(selectedDate)}</span>
+                            </div>
+                          </div>
                         </div>
                       )}
-                      <div className="time-slots">
+                    </div>
+
+                    {/* Enhanced Time Selection */}
+                    <div className="form-group">
+                      <label className="enhanced-label">
+                        <Clock size={20} />
+                        Select Time Slot
+                      </label>
+                      {selectedDate && (
+                        <div className="business-hours-card">
+                          <div className="hours-header">
+                            <Clock size={18} />
+                            <span className="hours-title">Available Hours</span>
+                          </div>
+                          <div className="hours-content">
+                            <span className="hours-range">{BUSINESS_HOURS.start}:00 AM - {BUSINESS_HOURS.end}:00 PM</span>
+                            {isToday(selectedDate) && (
+                              <span className="advance-notice">
+                                <AlertCircle size={14} />
+                                2-hour advance notice required for today
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <div className="enhanced-time-slots">
                         {timeSlots.map(time => {
                           const disabled = isPastTimeForSelectedDate(time);
                           const isLunchTime = time >= '12:00' && time < '13:00';
+                          const isEvening = time >= '17:00';
                           return (
                             <button
                               key={time}
-                              className={`time-option ${selectedTime === time ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
+                              className={`enhanced-time-option ${selectedTime === time ? 'selected' : ''} ${disabled ? 'disabled' : ''} ${isLunchTime ? 'lunch' : ''} ${isEvening ? 'evening' : ''}`}
                               onClick={() => !disabled && setSelectedTime(time)}
                               disabled={disabled}
                               title={disabled ? 'Not available' : 'Available'}
                             >
-                              {time}
-                              {isLunchTime && <span className="lunch-label">Lunch</span>}
+                              <div className="time-content">
+                                <span className="time-value">{time}</span>
+                                {isLunchTime && <span className="time-label lunch">Lunch</span>}
+                                {isEvening && <span className="time-label evening">Evening</span>}
+                              </div>
+                              {selectedTime === time && (
+                                <div className="time-selection-indicator">
+                                  <CheckCircle size={16} />
+                                </div>
+                              )}
+                              {disabled && (
+                                <div className="time-disabled-overlay">
+                                  <X size={16} />
+                                </div>
+                              )}
                             </button>
                           );
                         })}
                       </div>
                       {selectedDate && isToday(selectedDate) && (
-                        <p className="availability-notice">
-                          <AlertCircle size={16} />
-                          Same-day bookings require at least 2 hours advance notice
-                        </p>
+                        <div className="availability-warning">
+                          <AlertCircle size={18} />
+                          <div className="warning-content">
+                            <span className="warning-title">Same-day Booking Notice</span>
+                            <span className="warning-text">Please allow at least 2 hours advance notice for today's bookings</span>
+                          </div>
+                        </div>
                       )}
+                    </div>
+
+                    {/* Enhanced Worker Count Selection */}
+                    <div className="form-group">
+                      <label className="enhanced-label">
+                        <User size={20} />
+                        Number of Workers Required
+                      </label>
+                      <div className="worker-selection-card">
+                        <div className="worker-info">
+                          <div className="worker-icon">
+                            <User size={24} />
+                          </div>
+                          <div className="worker-details">
+                            <span className="worker-title">Service Workers</span>
+                            <span className="worker-description">Select how many professionals you need</span>
+                          </div>
+                        </div>
+                        <div className="worker-controls">
+                          <button 
+                            type="button" 
+                            className="worker-decrease-btn"
+                            onClick={() => setWorkersCount(Math.max(1, workersCount - 1))}
+                            disabled={workersCount <= 1}
+                          >
+                            <Minus size={20} />
+                          </button>
+                          <div className="worker-count-display">
+                            <span className="worker-count">{workersCount}</span>
+                            <span className="worker-unit">{workersCount === 1 ? 'Worker' : 'Workers'}</span>
+                          </div>
+                          <button 
+                            type="button" 
+                            className="worker-increase-btn"
+                            onClick={() => setWorkersCount(workersCount + 1)}
+                          >
+                            <Plus size={20} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="worker-recommendations">
+                        <div className="recommendation-item">
+                          <CheckCircle size={16} />
+                          <span>1 worker: Standard service (cleaning, maintenance)</span>
+                        </div>
+                        <div className="recommendation-item">
+                          <CheckCircle size={16} />
+                          <span>2+ workers: Large spaces or complex tasks</span>
+                        </div>
+                      </div>
                     </div>
                     
                     {/* Additional Information Sections */}
@@ -1410,6 +1598,100 @@ const BookingPage = () => {
                             placeholder="Your contact number"
                           />
                         </div>
+
+
+                        <div className="form-group">
+                          <label>Service Duration (Hours)</label>
+                          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'center' }}>
+                            <button 
+                              type="button" 
+                              onClick={() => setDurationHours(Math.max(0.5, Math.round((durationHours - 0.5) * 10) / 10))} 
+                              className="btn-secondary"
+                              style={{ 
+                                width: '40px', 
+                                height: '40px', 
+                                borderRadius: '8px',
+                                border: '2px solid #e2e8f0',
+                                background: '#f8fafc',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '18px',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseOver={(e) => {
+                                e.target.style.borderColor = '#3b82f6';
+                                e.target.style.background = '#eff6ff';
+                              }}
+                              onMouseOut={(e) => {
+                                e.target.style.borderColor = '#e2e8f0';
+                                e.target.style.background = '#f8fafc';
+                              }}
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              step="0.5"
+                              min="0.5"
+                              value={durationHours}
+                              onChange={(e) => setDurationHours(Math.max(0.5, parseFloat(e.target.value || '0.5')))}
+                              style={{ 
+                                width: '100px', 
+                                textAlign: 'center',
+                                padding: '8px 12px',
+                                border: '2px solid #e2e8f0',
+                                borderRadius: '8px',
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                background: '#ffffff'
+                              }}
+                            />
+                            <button 
+                              type="button" 
+                              onClick={() => setDurationHours(Math.round((durationHours + 0.5) * 10) / 10)} 
+                              className="btn-secondary"
+                              style={{ 
+                                width: '40px', 
+                                height: '40px', 
+                                borderRadius: '8px',
+                                border: '2px solid #e2e8f0',
+                                background: '#f8fafc',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '18px',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseOver={(e) => {
+                                e.target.style.borderColor = '#3b82f6';
+                                e.target.style.background = '#eff6ff';
+                              }}
+                              onMouseOut={(e) => {
+                                e.target.style.borderColor = '#e2e8f0';
+                                e.target.style.background = '#f8fafc';
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                          <div style={{ 
+                            fontSize: '14px', 
+                            color: '#64748b', 
+                            textAlign: 'center', 
+                            marginTop: '8px',
+                            fontStyle: 'italic'
+                          }}>
+                            {service?.duration && (
+                              <>Default: {Math.round(service.duration / 60 * 10) / 10} hours</>
+                            )}
+                          </div>
+                        </div>
+
                         <div className="form-group">
                           <label>Additional Notes (Optional)</label>
                           <textarea
@@ -1880,7 +2162,7 @@ const BookingPage = () => {
               ) : (
                 <button 
                   className="btn-primary btn-confirm"
-                  onClick={isMulti ? () => toastManager.error('Multi-service booking not yet supported. Please book services individually.') : handleBooking}
+                  onClick={handleBooking}
                   disabled={!canProceedToNext() || isLoading}
                 >
                   {isLoading ? (

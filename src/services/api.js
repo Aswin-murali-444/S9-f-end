@@ -236,10 +236,10 @@ class ApiService {
     return this.request('/services');
   }
 
-  async createService({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, active = true }) {
+  async createService({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, serviceType = 'individual', active = true }) {
     return this.request('/services', {
       method: 'POST',
-      body: JSON.stringify({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, active })
+      body: JSON.stringify({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, serviceType, active })
     });
   }
 
@@ -255,10 +255,10 @@ class ApiService {
   }
 
   async updateService(id, updates) {
-    const { categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, active } = updates;
+    const { categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, serviceType, active } = updates;
     return this.request(`/services/${encodeURIComponent(id)}`, {
       method: 'PUT',
-      body: JSON.stringify({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, active })
+      body: JSON.stringify({ categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, serviceType, active })
     });
   }
 
@@ -425,6 +425,14 @@ class ApiService {
     });
   }
 
+  // Multi-service booking confirmation helper
+  async confirmMultipleBookingsAfterPayment({ razorpay_order_id, razorpay_payment_id, razorpay_signature, bookings }) {
+    return this.request('/payments/confirm-booking', {
+      method: 'POST',
+      body: JSON.stringify({ razorpay_order_id, razorpay_payment_id, razorpay_signature, bookings })
+    });
+  }
+
   // Team management endpoints
   async createTeam(teamData) {
     return this.request('/teams', {
@@ -576,7 +584,7 @@ class ApiService {
 
   // Update provider profile status (Admin function)
   async updateProviderProfileStatus(providerId, status, reason = null) {
-    return this.request(`/users/profile/${providerId}/status`, {
+    return this.request(`/users/admin/profile/${providerId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status, reason })
     });
@@ -585,6 +593,16 @@ class ApiService {
   // Get provider profile status
   async getProviderProfileStatus(providerId) {
     return this.request(`/users/profile/${providerId}/status`);
+  }
+
+  // Get service provider details from service_provider_details table
+  async getServiceProviderDetails(providerId) {
+    return this.request(`/users/service-provider-details/${providerId}`);
+  }
+
+  // Get live activity feed for admin dashboard
+  async getAdminActivityFeed(limit = 50) {
+    return this.request(`/admin/activity-feed?limit=${limit}`);
   }
 
   // Notification methods
@@ -599,6 +617,18 @@ class ApiService {
     return this.request('/notifications/unread-count');
   }
 
+  // User-specific notification methods
+  async getUserNotifications(userId, page = 1, limit = 20, status = null) {
+    const params = new URLSearchParams({ page, limit });
+    if (status) params.append('status', status);
+    return this.request(`/notifications/user/${userId}?${params}`);
+  }
+
+  async getUserUnreadCount(userId) {
+    return this.request(`/notifications/user/${userId}/unread-count`);
+  }
+
+  // Admin notification methods
   async markNotificationAsRead(notificationId, adminUserId) {
     return this.request(`/notifications/${notificationId}/read`, {
       method: 'PUT',
@@ -620,6 +650,25 @@ class ApiService {
     });
   }
 
+  // User notification methods
+  async markUserNotificationAsRead(userId, notificationId) {
+    return this.request(`/notifications/user/${userId}/${notificationId}/read`, {
+      method: 'PUT'
+    });
+  }
+
+  async markAllUserNotificationsAsRead(userId) {
+    return this.request(`/notifications/user/${userId}/mark-all-read`, {
+      method: 'PUT'
+    });
+  }
+
+  async dismissUserNotification(userId, notificationId) {
+    return this.request(`/notifications/user/${userId}/${notificationId}/dismiss`, {
+      method: 'PUT'
+    });
+  }
+
   async getProviderNotifications(providerId, page = 1, limit = 20) {
     const params = new URLSearchParams({ page, limit });
     return this.request(`/notifications/provider/${providerId}?${params}`);
@@ -630,6 +679,13 @@ class ApiService {
     return this.request('/users/change-password', {
       method: 'POST',
       body: JSON.stringify(passwordData)
+    });
+  }
+
+  // Cart operations
+  async clearCart() {
+    return this.request('/cart-wishlist/cart/clear', {
+      method: 'DELETE'
     });
   }
 }

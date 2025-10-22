@@ -69,6 +69,12 @@
   background: #f9fafb;
 }
 
+.notification-header .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .notification-header h3 {
   margin: 0;
   font-size: 1.125rem;
@@ -90,6 +96,21 @@
 
 .mark-all-read-btn:hover {
   background: #2563eb;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
 }
 
 .notification-list {
@@ -130,6 +151,13 @@
   background: #f3f4f6;
   border-radius: 8px;
   flex-shrink: 0;
+  color: #6b7280;
+}
+
+.notification-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
 
 .notification-details {
@@ -150,7 +178,8 @@
   line-height: 1.4;
 }
 
-.provider-info {
+.provider-info,
+.sender-info {
   font-size: 0.75rem !important;
   color: #9ca3af !important;
   font-style: italic;
@@ -184,6 +213,21 @@
 .mark-read-btn:hover {
   background: #e5e7eb;
   color: #374151;
+}
+
+.mark-read-btn:disabled,
+.dismiss-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mini-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #e5e7eb;
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
 .dismiss-btn:hover {

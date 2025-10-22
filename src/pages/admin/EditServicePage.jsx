@@ -20,6 +20,7 @@ const EditServicePage = () => {
     offerPrice: '',
     offerPercentage: '',
     offerEnabled: false,
+    serviceType: 'individual',
     active: true
   });
   const [categories, setCategories] = useState([]);
@@ -73,6 +74,7 @@ const EditServicePage = () => {
           offerPrice: serviceData.offer_price ? serviceData.offer_price.toString() : '',
           offerPercentage: serviceData.offer_percentage ? serviceData.offer_percentage.toString() : '',
           offerEnabled: serviceData.offer_enabled || false,
+          serviceType: serviceData.service_type || 'individual',
           active: serviceData.active !== undefined ? serviceData.active : true
         });
         
@@ -215,6 +217,13 @@ const EditServicePage = () => {
           }
         } else {
           delete newErrors.offerPercentage;
+        }
+        break;
+      case 'serviceType':
+        if (!value || !['individual', 'group'].includes(value)) {
+          newErrors.serviceType = 'Please select a valid service type';
+        } else {
+          delete newErrors.serviceType;
         }
         break;
       default:
@@ -416,7 +425,8 @@ const EditServicePage = () => {
       customDuration: true,
       price: true,
       offerPrice: true,
-      offerPercentage: true
+      offerPercentage: true,
+      serviceType: true
     };
     setTouched(allTouched);
     
@@ -445,6 +455,7 @@ const EditServicePage = () => {
         offerPrice: formData.offerPrice && formData.offerPrice.trim() !== '' ? parseFloat(formData.offerPrice) : null,
         offerPercentage: formData.offerPercentage && formData.offerPercentage.trim() !== '' ? parseFloat(formData.offerPercentage) : null,
         offerEnabled: formData.offerEnabled,
+        serviceType: formData.serviceType,
         active: formData.active,
         iconBase64: iconFile ? iconPreview.split(',')[1] : null, // Remove data:image/...;base64, prefix
         iconFileName: iconFile?.name || null,
@@ -456,11 +467,14 @@ const EditServicePage = () => {
         throw new Error('Duration cannot be empty');
       }
 
+      console.log('Updating service with data:', serviceData);
       await apiService.updateService(id, serviceData);
       toast.success('Service updated successfully!');
       
-      // Navigate back to services tab
-      navigate('/dashboard/admin?tab=services');
+      // Navigate back to services tab with a slight delay to ensure the toast is visible
+      setTimeout(() => {
+        navigate('/dashboard/admin?tab=services');
+      }, 1000);
     } catch (error) {
       console.error('Error updating service:', error);
       toast.error('Failed to update service');
@@ -707,6 +721,28 @@ const EditServicePage = () => {
                     <span className="error-message">{errors.description}</span>
                   )}
                 </div>
+
+                <div className="form-group">
+                  <label htmlFor="serviceType">Service Type *</label>
+                  <select
+                    id="serviceType"
+                    name="serviceType"
+                    value={formData.serviceType}
+                    onChange={handleInputChange}
+                    onBlur={handleBlur}
+                    className={touched.serviceType && errors.serviceType ? 'error' : ''}
+                    required
+                  >
+                    <option value="individual">Individual Service</option>
+                    <option value="group">Group Service</option>
+                  </select>
+                  {touched.serviceType && errors.serviceType && (
+                    <span className="error-message">{errors.serviceType}</span>
+                  )}
+                  <small style={{ color: '#64748b', marginTop: '0.5rem' }}>
+                    Choose whether this service is for individual customers or group bookings
+                  </small>
+                </div>
               </div>
             </div>
 
@@ -888,13 +924,25 @@ const EditServicePage = () => {
               className="btn-secondary"
               onClick={() => navigate('/dashboard/admin?tab=services')}
               disabled={isSubmitting}
+              style={{ 
+                opacity: isSubmitting ? 0.7 : 1,
+                color: '#374151',
+                backgroundColor: '#f3f4f6',
+                border: '1px solid #d1d5db'
+              }}
             >
               Cancel
             </button>
             <button
               type="submit"
               className="btn-primary"
-              disabled={isSubmitting || !formData.name.trim() || !formData.categoryId}
+              disabled={isSubmitting || !formData.name.trim() || !formData.categoryId || !formData.serviceType}
+              style={{ 
+                opacity: (isSubmitting || !formData.name.trim() || !formData.categoryId || !formData.serviceType) ? 0.7 : 1,
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                border: '1px solid #3b82f6'
+              }}
             >
               {isSubmitting ? (
                 <>

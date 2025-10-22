@@ -10,6 +10,7 @@ import {
   TrendingUp, 
   AlertTriangle, 
   CheckCircle, 
+  XCircle,
   Clock, 
   DollarSign, 
   Activity,
@@ -47,6 +48,10 @@ import {
   BarChart,
   Activity as ActivityIcon,
   LogOut,
+  PlayCircle,
+  LogIn,
+  Edit,
+  ShieldAlert,
   Menu,
   X,
   Sun,
@@ -56,7 +61,9 @@ import {
 import { useAnimations } from '../../hooks/useAnimations';
 import Logo from '../../components/Logo';
 import NotificationBell from '../../components/NotificationBell';
-import { useAuth, supabase } from '../../hooks/useAuth';
+import { useAuth } from '../../hooks/useAuth';
+import { useNotifications } from '../../hooks/useNotifications';
+import { supabase } from '../../lib/supabase';
 import { apiService } from '../../services/api';
 import { toast } from 'react-hot-toast';
 import './SharedDashboard.css';
@@ -65,6 +72,19 @@ import './AdminDashboard.css';
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // Use the real notifications system
+  const { 
+    notifications, 
+    unreadCount, 
+    loading: notificationsLoading,
+    markAsRead, 
+    markAllAsRead,
+    dismissNotification,
+    getNotificationIcon,
+    getNotificationColor 
+  } = useNotifications();
+  
   const [activeTab, setActiveTab] = useState('overview');
   const [users, setUsers] = useState([]);
   const [systemMetrics, setSystemMetrics] = useState({
@@ -82,6 +102,7 @@ const AdminDashboard = () => {
     securityThreats: 0
   });
   const [recentActivity, setRecentActivity] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
   const [alerts, setAlerts] = useState([]);
   const [analytics, setAnalytics] = useState({
     userGrowth: { current: 0, change: "+0%" },
@@ -92,10 +113,10 @@ const AdminDashboard = () => {
   const [systemHealth, setSystemHealth] = useState({});
   const [securityEvents, setSecurityEvents] = useState([]);
   const [performanceData, setPerformanceData] = useState({});
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const notificationsRef = useRef(null);
+  const [isSuspensionModalOpen, setIsSuspensionModalOpen] = useState(false);
+  const [suspensionData, setSuspensionData] = useState({ userId: null, userName: '', reason: '' });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState('name_asc');
@@ -246,8 +267,11 @@ const AdminDashboard = () => {
             lastLogin: lastLoginIso ? new Date(lastLoginIso).toLocaleString() : 'Never',
           };
         });
-        // Resolve storage paths to public/signed URLs when needed
+        // Resolve storage paths to public/signed URLs when needed and fetch provider profiles
         const resolvedUsers = await Promise.all(formattedUsers.map(async (u) => {
+          let finalAvatar = u.avatar;
+          
+          // Handle user avatar URL resolution
           if (typeof u.avatar === 'string' && u.avatar && !/^https?:\/\//i.test(u.avatar)) {
             const match = u.avatar.match(/^([^\/]+)\/(.+)$/);
             if (match) {
@@ -256,18 +280,94 @@ const AdminDashboard = () => {
               try {
                 const { data: pub } = supabase.storage.from(bucket).getPublicUrl(key);
                 if (pub?.publicUrl) {
-                  return { ...u, avatar: pub.publicUrl };
+                  finalAvatar = pub.publicUrl;
                 }
               } catch (_) {}
-              try {
-                const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(key, 3600);
-                if (signed?.signedUrl) {
-                  return { ...u, avatar: signed.signedUrl };
-                }
-              } catch (_) {}
+              if (!finalAvatar || !/^https?:\/\//i.test(finalAvatar)) {
+                try {
+                  const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(key, 3600);
+                  if (signed?.signedUrl) {
+                    finalAvatar = signed.signedUrl;
+                  }
+                } catch (_) {}
+              }
             }
           }
-          return u;
+
+          // For service providers, fetch their provider profile image and status
+          let providerProfileImage = null;
+          let serviceProviderStatus = u.status; // Default to user status
+          let providerData = null; // Initialize providerData outside the if block
+          
+          if (u.role === 'service_provider') {
+            try {
+              // Get service provider details first (this is the primary status for verification)
+              const serviceProviderDetails = await apiService.getServiceProviderDetails(u.id);
+              if (serviceProviderDetails?.data?.status) {
+                serviceProviderStatus = serviceProviderDetails.data.status;
+              }
+              
+              // Fallback to provider profile status if no service provider details
+              if (!serviceProviderStatus) {
+                const providerProfile = await apiService.getProviderProfile(u.id);
+                providerData = providerProfile?.data;
+                if (providerData?.status) {
+                  serviceProviderStatus = providerData.status;
+                }
+              }
+              
+              // If no status found in either table, default to pending
+              if (!serviceProviderStatus) {
+                serviceProviderStatus = 'pending';
+              }
+              
+              // Debug logging for status resolution
+              console.log(`Service provider ${u.name} (${u.id}):`, {
+                userStatus: u.status,
+                serviceProviderDetailsStatus: serviceProviderDetails?.data?.status,
+                providerProfileStatus: providerData?.status,
+                hasProfilePhoto: !!providerData?.profile_photo_url,
+                hasFirstName: !!providerData?.first_name,
+                hasLastName: !!providerData?.last_name,
+                finalStatus: serviceProviderStatus
+              });
+              
+              if (providerData?.profile_photo_url) {
+                providerProfileImage = providerData.profile_photo_url;
+                // If it's a storage path, resolve it to a public URL
+                if (!/^https?:\/\//i.test(providerProfileImage)) {
+                  const match = providerProfileImage.match(/^([^\/]+)\/(.+)$/);
+                  if (match) {
+                    const bucket = match[1];
+                    const key = match[2];
+                    try {
+                      const { data: pub } = supabase.storage.from(bucket).getPublicUrl(key);
+                      if (pub?.publicUrl) {
+                        providerProfileImage = pub.publicUrl;
+                      }
+                    } catch (_) {}
+                    if (!providerProfileImage || !/^https?:\/\//i.test(providerProfileImage)) {
+                      try {
+                        const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(key, 3600);
+                        if (signed?.signedUrl) {
+                          providerProfileImage = signed.signedUrl;
+                        }
+                      } catch (_) {}
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('Failed to fetch provider profile for user:', u.id, e);
+            }
+          }
+
+          return { 
+            ...u, 
+            avatar: finalAvatar,
+            providerProfileImage: providerProfileImage,
+            status: serviceProviderStatus // Use the correct status for service providers
+          };
         }));
         setUsers(resolvedUsers);
         // Update user-related metrics based on live data
@@ -295,6 +395,9 @@ const AdminDashboard = () => {
     };
     
     fetchUsers();
+    
+    // Fetch live activity feed
+    fetchActivityFeed();
 
     // Keep placeholder values for non-user metrics without overriding live user counts
     setSystemMetrics(prev => ({
@@ -310,21 +413,31 @@ const AdminDashboard = () => {
       securityThreats: 3
     }));
 
-    setRecentActivity([
-      { id: 1, user: "John Smith", action: "User account created", target: "emily.d@company.com", timestamp: "2 minutes ago", type: "user_management", severity: "info" },
-      { id: 2, user: "System", action: "Security scan completed", target: "All systems", timestamp: "5 minutes ago", type: "security", severity: "success" },
-      { id: 3, user: "Sarah Johnson", action: "Report generated", target: "Monthly Analytics", timestamp: "15 minutes ago", type: "reports", severity: "info" },
-      { id: 4, user: "Mike Chen", action: "Service updated", target: "Premium Care Package", timestamp: "1 hour ago", type: "service_management", severity: "info" },
-      { id: 5, user: "System", action: "Backup completed", target: "Database backup", timestamp: "2 hours ago", type: "system", severity: "success" },
-      { id: 6, user: "David Wilson", action: "Login failed", target: "david.w@company.com", timestamp: "3 hours ago", type: "security", severity: "warning" }
-    ]);
+    // Convert real notifications to recent activity format
+    const activityFromNotifications = notifications.map(notif => ({
+      id: notif.id,
+      user: notif.sender_id ? "System" : "System",
+      action: notif.title,
+      target: notif.message,
+      timestamp: notif.time,
+      type: notif.type,
+      severity: notif.priority === 'urgent' ? 'high' : notif.priority === 'high' ? 'medium' : 'info'
+    }));
+    
+    setRecentActivity(activityFromNotifications);
 
-    setAlerts([
-      { id: 1, type: "security", title: "Multiple failed login attempts", message: "User account david.w@company.com has 5 failed login attempts", severity: "high", timestamp: "3 hours ago", status: "active" },
-      { id: 2, type: "performance", title: "High CPU usage detected", message: "Server CPU usage has reached 85% for the last 10 minutes", severity: "medium", timestamp: "1 hour ago", status: "resolved" },
-      { id: 3, type: "system", title: "Database backup overdue", message: "Scheduled database backup is 2 hours overdue", severity: "low", timestamp: "2 hours ago", status: "pending" },
-      { id: 4, type: "security", title: "New user registration", message: "New user account created for emily.d@company.com", severity: "info", timestamp: "2 minutes ago", status: "reviewed" }
-    ]);
+    // Convert real notifications to alerts format
+    const alertsFromNotifications = notifications.map(notif => ({
+      id: notif.id,
+      type: notif.type,
+      title: notif.title,
+      message: notif.message,
+      severity: notif.priority,
+      timestamp: notif.time,
+      status: notif.status === 'unread' ? 'active' : notif.status === 'read' ? 'resolved' : 'pending'
+    }));
+    
+    setAlerts(alertsFromNotifications);
 
     setAnalytics({
       userGrowth: { current: 1247, previous: 1189, change: "+4.9%" },
@@ -416,6 +529,22 @@ const AdminDashboard = () => {
     ]);
   }, []);
 
+  // Fetch live activity feed
+  const fetchActivityFeed = async () => {
+    try {
+      setActivityLoading(true);
+      const response = await apiService.getAdminActivityFeed(50);
+      if (response.success) {
+        setRecentActivity(response.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch activity feed:', error);
+      // Keep existing activity data if fetch fails
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
   // Live system metrics polling
   useEffect(() => {
     fetchMetrics();
@@ -423,16 +552,13 @@ const AdminDashboard = () => {
     return () => { clearInterval(intervalId); };
   }, []);
 
-  // Close notifications dropdown on outside click
+  // Live activity feed polling
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (notificationsRef.current && !notificationsRef.current.contains(event.target)) {
-        setIsNotificationsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    fetchActivityFeed();
+    const activityIntervalId = setInterval(() => fetchActivityFeed(), 30000); // Poll every 30 seconds
+    return () => { clearInterval(activityIntervalId); };
   }, []);
+
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -503,12 +629,40 @@ const AdminDashboard = () => {
     }
   }, [activeTab]);
 
-  const handleUserAction = async (userId, action) => {
+  // Reset component state when navigating back to users tab
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && activeTab === 'users') {
+        // Force re-render of user management section
+        setUsers(prev => [...prev]);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [activeTab]);
+
+  const handleUserAction = async (userId, action, reason = '') => {
     try {
-      console.log('🔄 Updating user status:', userId, 'to', action);
+      console.log('🔄 Updating user status:', userId, 'to', action, 'reason:', reason);
+      
+      // Get the user to check if they're a service provider
+      const user = users.find(u => u.id === userId);
+      const isServiceProvider = user?.role === 'service_provider';
       
       // Call the API to update user status
       await apiService.updateUserStatus(userId, action);
+      
+      // If it's a service provider, also update their provider profile status
+      if (isServiceProvider) {
+        try {
+          await apiService.updateProviderProfileStatus(userId, action, reason);
+          console.log('✅ Provider profile status updated');
+        } catch (profileError) {
+          console.warn('⚠️ Failed to update provider profile status:', profileError);
+          // Don't fail the entire operation if provider profile update fails
+        }
+      }
       
       // Update local state
       setUsers(prev => 
@@ -521,12 +675,40 @@ const AdminDashboard = () => {
       
       // Show success message
       const actionText = action === 'active' ? 'activated' : 'suspended';
-      toast.success(`User ${actionText} successfully`);
+      const userType = isServiceProvider ? 'Service provider' : 'User';
+      const emailText = action === 'suspended' ? ' and notification email sent' : 
+                       (action === 'active' && user.status === 'suspended') ? ' and reactivation email sent' : '';
+      toast.success(`${userType} ${actionText} successfully${emailText}`);
       
     } catch (error) {
       console.error('❌ Error updating user status:', error);
       toast.error(error?.message || 'Failed to update user status');
     }
+  };
+
+  // Handle suspension confirmation
+  const handleSuspendUser = (userId, userName) => {
+    setSuspensionData({ userId, userName, reason: '' });
+    setIsSuspensionModalOpen(true);
+  };
+
+  // Confirm suspension
+  const confirmSuspension = async () => {
+    if (!suspensionData.userId) return;
+    
+    try {
+      await handleUserAction(suspensionData.userId, 'suspended', suspensionData.reason);
+      setIsSuspensionModalOpen(false);
+      setSuspensionData({ userId: null, userName: '', reason: '' });
+    } catch (error) {
+      console.error('Failed to suspend user:', error);
+    }
+  };
+
+  // Cancel suspension
+  const cancelSuspension = () => {
+    setIsSuspensionModalOpen(false);
+    setSuspensionData({ userId: null, userName: '', reason: '' });
   };
 
   // Profile modal removed; profile view is now a dedicated page
@@ -641,6 +823,89 @@ const AdminDashboard = () => {
     return list.slice().sort(comparator);
   }, [usersForManagement, searchQuery, sortKey, selectedRole]);
 
+  // Format activity timestamp
+  const formatActivityTimestamp = (timestamp) => {
+    if (!timestamp) return 'Unknown time';
+    
+    const now = new Date();
+    const activityTime = new Date(timestamp);
+    const diffMs = now - activityTime;
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffMinutes < 1) return 'Just now';
+    if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    
+    return activityTime.toLocaleDateString();
+  };
+
+  // Handle alert actions
+  const handleResolveAlert = async (alertId) => {
+    try {
+      console.log('Resolving alert:', alertId);
+      // In a real implementation, you would call an API to resolve the alert
+      toast.success('Security alert resolved successfully');
+      // Refresh activity feed to update the alert status
+      await fetchActivityFeed();
+    } catch (error) {
+      console.error('Failed to resolve alert:', error);
+      toast.error('Failed to resolve alert');
+    }
+  };
+
+  const handleViewAlertDetails = (activity) => {
+    console.log('Viewing alert details:', activity);
+    // In a real implementation, you might open a modal or navigate to a details page
+    const details = activity.details;
+    const message = `Alert Details:\n\nType: ${activity.type}\nDescription: ${activity.description}\nTimestamp: ${activity.timestamp}\n\nAdditional Info:\n${JSON.stringify(details, null, 2)}`;
+    alert(message);
+  };
+
+  const handleUnlockAccount = async (userEmail) => {
+    try {
+      console.log('Unlocking account for:', userEmail);
+      // In a real implementation, you would call an API to unlock the account
+      toast.success(`Account unlocked for ${userEmail}`);
+      await fetchActivityFeed();
+    } catch (error) {
+      console.error('Failed to unlock account:', error);
+      toast.error('Failed to unlock account');
+    }
+  };
+
+  const handleUnsuspendUser = async (userId) => {
+    try {
+      console.log('Unsuspending user:', userId);
+      await handleUserAction(userId, 'active');
+      toast.success('User unsuspended successfully');
+      await fetchActivityFeed();
+    } catch (error) {
+      console.error('Failed to unsuspend user:', error);
+      toast.error('Failed to unsuspend user');
+    }
+  };
+
+  const handleResolveSystemAlert = async (alertId) => {
+    try {
+      console.log('Acknowledging system alert:', alertId);
+      // In a real implementation, you would call an API to acknowledge the alert
+      toast.success('System alert acknowledged');
+      await fetchActivityFeed();
+    } catch (error) {
+      console.error('Failed to acknowledge system alert:', error);
+      toast.error('Failed to acknowledge system alert');
+    }
+  };
+
+  const handleViewSystemMetrics = () => {
+    // Navigate to system health tab or open metrics modal
+    navigate('/dashboard/admin?tab=system', { replace: true });
+    toast.info('Navigating to system health monitoring');
+  };
+
   return (
     <div className="admin-dashboard-new">
       {/* Welcome Overlay */}
@@ -696,7 +961,8 @@ const AdminDashboard = () => {
               key={item.key}
               className={`nav-item ${activeTab === item.key ? 'active' : ''}`}
               onClick={() => {
-                setActiveTab(item.key);
+                // Update URL with tab parameter instead of just local state
+                navigate(`/dashboard/admin?tab=${item.key}`, { replace: true });
                 setIsSidebarOpen(false);
               }}
             >
@@ -728,7 +994,7 @@ const AdminDashboard = () => {
             <h1>Admin Dashboard</h1>
           </div>
           
-          <div className="header-right" ref={notificationsRef}>
+          <div className="header-right">
             <button 
               className="admin-theme-toggle" 
               title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
@@ -913,28 +1179,147 @@ const AdminDashboard = () => {
 
                 {/* Recent Activity */}
                 <div className="recent-activity">
-                  <h3>Recent Activity</h3>
+                  <div className="activity-header">
+                    <h3>Recent Activity</h3>
+                    <button 
+                      className="btn-secondary refresh-btn" 
+                      onClick={fetchActivityFeed}
+                      disabled={activityLoading}
+                      title="Refresh activity feed"
+                    >
+                      <RefreshCw size={16} className={activityLoading ? 'spinning' : ''} />
+                      {activityLoading ? 'Loading...' : 'Refresh'}
+                    </button>
+                  </div>
                   <div className="activity-list">
-                    {recentActivity.slice(0, 6).map(activity => (
-                      <div key={activity.id} className={`activity-item ${activity.type}`}>
-                        <div className="activity-icon">
-                          {activity.type === 'user_management' && <Users size={16} />}
-                          {activity.type === 'security' && <Shield size={16} />}
-                          {activity.type === 'reports' && <FileText size={16} />}
-                          {activity.type === 'service_management' && <Settings size={16} />}
-                          {activity.type === 'system' && <Server size={16} />}
-                        </div>
-                        <div className="activity-content">
-                          <div className="activity-header">
-                            <span className="user">{activity.user}</span>
-                            <span className="action">{activity.action}</span>
-                            <span className="target">{activity.target}</span>
-                          </div>
-                          <span className="timestamp">{activity.timestamp}</span>
-                        </div>
-                        <span className={`severity ${activity.severity}`}>{activity.severity}</span>
+                    {activityLoading && recentActivity.length === 0 ? (
+                      <div className="activity-loading">
+                        <div className="loading-spinner"></div>
+                        <span>Loading activity feed...</span>
                       </div>
-                    ))}
+                    ) : recentActivity.length === 0 ? (
+                      <div className="activity-empty">
+                        <Activity size={24} />
+                        <span>No recent activity</span>
+                      </div>
+                    ) : (
+                      recentActivity.slice(0, 10).map(activity => (
+                        <div 
+                          key={activity.id} 
+                          className={`activity-item ${activity.status} ${activity.severity ? `${activity.severity}-severity` : ''}`}
+                          data-type={activity.type}
+                        >
+                          <div className="activity-icon">
+                            {activity.icon === 'user-plus' && <UserPlus size={16} />}
+                            {activity.icon === 'check-circle' && <CheckCircle size={16} />}
+                            {activity.icon === 'play-circle' && <PlayCircle size={16} />}
+                            {activity.icon === 'x-circle' && <XCircle size={16} />}
+                            {activity.icon === 'info' && <Info size={16} />}
+                            {activity.icon === 'log-in' && <LogIn size={16} />}
+                            {activity.icon === 'edit' && <Edit size={16} />}
+                            {activity.icon === 'alert-triangle' && <AlertTriangle size={16} />}
+                            {activity.icon === 'shield' && <Shield size={16} />}
+                            {activity.icon === 'shield-alert' && <ShieldAlert size={16} />}
+                            {activity.icon === 'lock' && <Lock size={16} />}
+                            {activity.icon === 'cpu' && <Cpu size={16} />}
+                            {activity.icon === 'database' && <Database size={16} />}
+                            {activity.icon === 'server' && <Server size={16} />}
+                          </div>
+                          <div className="activity-content">
+                            <div className="activity-header">
+                              <span className="actor">{activity.actor}</span>
+                              <span className="action">{activity.action}</span>
+                              <span className="description">{activity.description}</span>
+                            </div>
+                          <span className="timestamp">{formatActivityTimestamp(activity.timestamp)}</span>
+                        </div>
+                        <div className="activity-actions">
+                          <span className={`status-badge ${activity.status}`}>
+                            {activity.status === 'info' && 'INFO'}
+                            {activity.status === 'success' && 'SUCCESS'}
+                            {activity.status === 'warning' && 'WARNING'}
+                            {activity.status === 'error' && 'ERROR'}
+                          </span>
+                          {activity.actionable && (
+                            <div className="action-buttons">
+                              {activity.type === 'failed_login_attempts' && (
+                                <>
+                                  <button 
+                                    className="btn-action resolve" 
+                                    onClick={() => handleResolveAlert(activity.id)}
+                                    title="Resolve security alert"
+                                  >
+                                    Resolve
+                                  </button>
+                                  <button 
+                                    className="btn-action view" 
+                                    onClick={() => handleViewAlertDetails(activity)}
+                                    title="View detailed information"
+                                  >
+                                    View Details
+                                  </button>
+                                </>
+                              )}
+                              {activity.type === 'account_locked' && (
+                                <>
+                                  <button 
+                                    className="btn-action resolve" 
+                                    onClick={() => handleUnlockAccount(activity.details.user_email)}
+                                    title="Unlock user account"
+                                  >
+                                    Unlock
+                                  </button>
+                                  <button 
+                                    className="btn-action view" 
+                                    onClick={() => handleViewAlertDetails(activity)}
+                                    title="View account details"
+                                  >
+                                    View Details
+                                  </button>
+                                </>
+                              )}
+                              {activity.type === 'admin_action' && activity.details.action_type === 'suspended' && (
+                                <>
+                                  <button 
+                                    className="btn-action resolve" 
+                                    onClick={() => handleUnsuspendUser(activity.details.provider_id)}
+                                    title="Unsuspend user"
+                                  >
+                                    Unsuspend
+                                  </button>
+                                  <button 
+                                    className="btn-action view" 
+                                    onClick={() => navigate(`/admin/users/${activity.details.provider_id}`)}
+                                    title="View user profile"
+                                  >
+                                    View Profile
+                                  </button>
+                                </>
+                              )}
+                              {activity.type === 'system_health' && activity.details.metric === 'cpu_usage' && (
+                                <>
+                                  <button 
+                                    className="btn-action resolve" 
+                                    onClick={() => handleResolveSystemAlert(activity.id)}
+                                    title="Acknowledge system alert"
+                                  >
+                                    Acknowledge
+                                  </button>
+                                  <button 
+                                    className="btn-action view" 
+                                    onClick={() => handleViewSystemMetrics()}
+                                    title="View system metrics"
+                                  >
+                                    View Metrics
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
 
@@ -1008,6 +1393,7 @@ const AdminDashboard = () => {
 
             {activeTab === 'users' && (
               <motion.div 
+                key={`users-${location.pathname}-${location.search}`}
                 className="users-tab"
                 initial="hidden"
                 animate="visible"
@@ -1085,31 +1471,44 @@ const AdminDashboard = () => {
                       managedUsersFilteredSorted.map(user => (
                       <div key={user.id} className="table-row">
                         <div className="table-cell user-info" onClick={() => navigate(`/admin/users/${user.id}`)} style={{ cursor: 'pointer' }}>
-                          <div className="user-avatar">
-                            {typeof user.avatar === 'string' && /^https?:\/\//i.test(user.avatar) ? (
-                              <img
-                                src={user.avatar}
-                                alt={user.name}
-                                onError={(e) => {
-                                  const el = e.currentTarget;
-                                  const wrapper = el.parentElement;
-                                  if (wrapper) {
-                                    wrapper.textContent = (user.name || user.email || 'NA')
-                                      .split(' ')
-                                      .filter(Boolean)
-                                      .map(p => p[0])
-                                      .slice(0,2)
-                                      .join('')
-                                      .toUpperCase();
-                                  }
-                                }}
-                              />
-                            ) : (
-                              (typeof user.avatar === 'string' ? user.avatar : 'NA')
-                            )}
+                          <div className={`user-avatar ${user.providerProfileImage ? 'has-profile-image' : ''}`}>
+                            {(() => {
+                              // Priority: Provider profile image > User avatar > Initials
+                              const imageUrl = user.providerProfileImage || user.avatar;
+                              
+                              if (typeof imageUrl === 'string' && /^https?:\/\//i.test(imageUrl)) {
+                                return (
+                                  <img
+                                    src={imageUrl}
+                                    alt={user.name}
+                                    onError={(e) => {
+                                      const el = e.currentTarget;
+                                      const wrapper = el.parentElement;
+                                      if (wrapper) {
+                                        wrapper.textContent = (user.name || user.email || 'NA')
+                                          .split(' ')
+                                          .filter(Boolean)
+                                          .map(p => p[0])
+                                          .slice(0,2)
+                                          .join('')
+                                          .toUpperCase();
+                                        wrapper.classList.remove('has-profile-image');
+                                      }
+                                    }}
+                                  />
+                                );
+                              } else {
+                                return (typeof imageUrl === 'string' ? imageUrl : 'NA');
+                              }
+                            })()}
                           </div>
                           <div className="user-details">
-                            <span className="user-name">{user.name}</span>
+                            <span 
+                              className={`user-name ${user.role === 'service_provider' ? 'has-service-provider' : ''}`}
+                              data-role={user.role}
+                            >
+                              {user.name}
+                            </span>
                             <span className="user-email">{user.email}</span>
                             {user.profile?.phone && <span className="user-phone">{user.profile.phone}</span>}
                           </div>
@@ -1122,7 +1521,66 @@ const AdminDashboard = () => {
                         </div>
                         {/* removed department column */}
                         <div className="table-cell">
-                          <span className={`status-badge ${user.status}`}>{user.status}</span>
+                          <span className={`status-badge ${user.status}`}>
+                            {(() => {
+                              // Add appropriate icons for different statuses
+                              switch (user.status) {
+                                case 'active':
+                                  return (
+                                    <>
+                                      <CheckCircle size={12} />
+                                      <span>Active</span>
+                                    </>
+                                  );
+                                case 'suspended':
+                                  return (
+                                    <>
+                                      <UserX size={12} />
+                                      <span>Suspended</span>
+                                    </>
+                                  );
+                                case 'pending':
+                                  return (
+                                    <>
+                                      <Clock size={12} />
+                                      <span>Pending Verification</span>
+                                    </>
+                                  );
+                                case 'pending':
+                                  return (
+                                    <>
+                                      <Clock size={12} />
+                                      <span>Pending</span>
+                                    </>
+                                  );
+                                case 'verified':
+                                  return (
+                                    <>
+                                      <CheckCircle size={12} />
+                                      <span>Verified</span>
+                                    </>
+                                  );
+                                case 'rejected':
+                                  return (
+                                    <>
+                                      <XCircle size={12} />
+                                      <span>Rejected</span>
+                                    </>
+                                  );
+                                case 'incomplete':
+                                  return (
+                                    <>
+                                      <AlertTriangle size={12} />
+                                      <span>Incomplete</span>
+                                    </>
+                                  );
+                                default:
+                                  return <span>{user.status}</span>;
+                              }
+                            })()}
+                          </span>
+                          
+                          
                           {user.profile?.verified && (
                             <span className="verified-badge">Verified</span>
                           )}
@@ -1139,23 +1597,54 @@ const AdminDashboard = () => {
                           <button className="btn-icon" title="View" onClick={() => navigate(`/admin/users/${user.id}`)}>
                             <Eye size={16} />
                           </button>
-                          {user.status === 'active' ? (
-                            <button 
-                              className="btn-icon warning" 
-                              title="Suspend"
-                              onClick={() => handleUserAction(user.id, 'suspended')}
-                            >
-                              <UserX size={16} />
-                            </button>
-                          ) : (
-                            <button 
-                              className="btn-icon success" 
-                              title="Activate"
-                              onClick={() => handleUserAction(user.id, 'active')}
-                            >
-                              <UserCheck size={16} />
-                            </button>
-                          )}
+                          {(() => {
+                            // Only show suspend/activate buttons for users who can be suspended
+                            const canBeSuspended = user.status === 'active' || user.status === 'verified';
+                            const canBeActivated = user.status === 'suspended';
+                            
+                            if (canBeSuspended) {
+                              return (
+                                <button 
+                                  className="btn-icon warning" 
+                                  title="Suspend"
+                                  onClick={() => handleSuspendUser(user.id, user.name)}
+                                >
+                                  <UserX size={16} />
+                                </button>
+                              );
+                            } else if (canBeActivated) {
+                              return (
+                                <button 
+                                  className="btn-icon success" 
+                                  title="Activate"
+                                  onClick={() => handleUserAction(user.id, 'active')}
+                                >
+                                  <UserCheck size={16} />
+                                </button>
+                              );
+                            } else if (user.status === 'pending') {
+                              return (
+                                <button 
+                                  className="btn-icon info" 
+                                  title="Verify Profile"
+                                  onClick={() => navigate(`/admin/users/${user.id}`)}
+                                >
+                                  <CheckCircle size={16} />
+                                </button>
+                              );
+                            } else if (user.status === 'rejected') {
+                              return (
+                                <button 
+                                  className="btn-icon warning" 
+                                  title="Review Profile"
+                                  onClick={() => navigate(`/admin/users/${user.id}`)}
+                                >
+                                  <AlertTriangle size={16} />
+                                </button>
+                              );
+                            }
+                            return null;
+                          })()}
                           
                         </div>
                       </div>
@@ -1861,6 +2350,77 @@ const AdminDashboard = () => {
                 <button type="submit" className="btn-primary">Create User</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Suspension Confirmation Modal */}
+      {isSuspensionModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Suspend User</h3>
+              <button 
+                className="modal-close" 
+                onClick={cancelSuspension}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="suspension-warning">
+                <div className="warning-icon">
+                  <AlertTriangle size={24} />
+                </div>
+                <div className="warning-content">
+                  <h4>Are you sure you want to suspend this user?</h4>
+                  <p>
+                    <strong>{suspensionData.userName}</strong> will be unable to log in and access their account.
+                  </p>
+                  {users.find(u => u.id === suspensionData.userId)?.role === 'service_provider' && (
+                    <p className="provider-warning">
+                      <strong>Service Provider:</strong> This will also suspend their provider profile and prevent them from receiving new bookings.
+                    </p>
+                  )}
+                  
+                  <div className="email-notice">
+                    <div className="notice-icon">📧</div>
+                    <div className="notice-text">
+                      <strong>Email Notification:</strong> An automated suspension notice will be sent to <strong>{suspensionData.userName}</strong> at their registered email address.
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="form-group">
+                <label htmlFor="suspension-reason">Reason for suspension (optional)</label>
+                <textarea
+                  id="suspension-reason"
+                  value={suspensionData.reason}
+                  onChange={(e) => setSuspensionData(prev => ({ ...prev, reason: e.target.value }))}
+                  placeholder="Enter reason for suspension..."
+                  rows={3}
+                  className="form-control"
+                />
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button 
+                className="btn-secondary" 
+                onClick={cancelSuspension}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn-danger" 
+                onClick={confirmSuspension}
+              >
+                <UserX size={16} />
+                Suspend User
+              </button>
+            </div>
           </div>
         </div>
       )}

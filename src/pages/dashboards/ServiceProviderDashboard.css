@@ -1018,6 +1018,35 @@
   color: #94a3b8;
 }
 
+.notification-content-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+}
+
+.notification-dismiss-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  opacity: 0;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.notification-item:hover .notification-dismiss-btn {
+  opacity: 1;
+}
+
+.notification-dismiss-btn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
 /* Page Content */
 .professional-dashboard .page-content {
   flex: 1;

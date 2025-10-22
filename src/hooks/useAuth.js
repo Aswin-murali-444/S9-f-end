@@ -1,26 +1,14 @@
 // Authentication hook for managing user state
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
 import { apiService } from '../services/api';
 import toast from 'react-hot-toast';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = 'https://zbscbvrklkntlbtefkgw.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpic2NidnJrbGtudGxidGVma2d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwODgzOTIsImV4cCI6MjA2ODY2NDM5Mn0.EJbPGMn7kXFgj5IahA2GIiEcA3dTDCbgj9cF09rcsuY';
-
-// Create Supabase client with proper configuration
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true
-  }
-});
+import { supabase } from '../lib/supabase';
 
 // Test Supabase connection
 console.log('🔍 Supabase configuration:', {
-  url: supabaseUrl,
-  hasKey: !!supabaseAnonKey,
-  keyLength: supabaseAnonKey?.length
+  url: supabase.supabaseUrl,
+  hasKey: !!supabase.supabaseKey,
+  keyLength: supabase.supabaseKey?.length
 });
 
 const AuthContext = createContext();
@@ -1234,57 +1222,74 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const getUserRole = async () => {
-    if (!user?.id) return null;
+  const getUserRole = useCallback(async () => {
+    if (!user?.id) {
+      return null;
+    }
 
+    const userId = String(user.id);
+    
     // In-memory throttle: if we asked recently, reuse
-    const cached = userRoleCache.get(user.id);
+    const cached = userRoleCache.get(userId);
     const now = Date.now();
     if (cached && (now - cached.timestamp) < 5000) {
       return cached.role;
     }
 
-    const inFlight = userRoleInFlight.get(user.id);
-    if (inFlight) return inFlight;
+    const inFlight = userRoleInFlight.get(userId);
+    if (inFlight) {
+      return inFlight;
+    }
 
     const fetchPromise = (async () => {
       try {
         const { data: userData, error } = await supabase
           .from('users')
           .select('role, status, email_verified')
-          .eq('auth_user_id', user.id)
+          .eq('auth_user_id', userId)
           .maybeSingle();
 
         if (error) {
-          // Quietly cache null briefly to avoid loops
-          userRoleCache.set(user.id, { role: null, timestamp: Date.now() });
+          console.warn('Database error in getUserRole:', error);
+          userRoleCache.set(userId, { role: null, timestamp: Date.now() });
           return null;
         }
 
         // Enforce status gate as a backup
         if (userData?.status && userData.status !== 'active') {
-          try { await supabase.auth.signOut(); } catch (_) {}
-          userRoleCache.set(user.id, { role: null, timestamp: Date.now() });
+          try { 
+            await supabase.auth.signOut(); 
+          } catch (signOutError) {
+            console.warn('Error signing out user:', signOutError);
+          }
+          userRoleCache.set(userId, { role: null, timestamp: Date.now() });
           return null;
         }
 
         const role = userData?.role || null;
-        userRoleCache.set(user.id, { role, timestamp: Date.now() });
+        userRoleCache.set(userId, { role, timestamp: Date.now() });
+        
         if (role) {
-          try { localStorage.setItem(`user_role_${user.id}`, role); } catch (_) {}
+          try { 
+            localStorage.setItem(`user_role_${userId}`, String(role)); 
+          } catch (storageError) {
+            console.warn('Error storing role in localStorage:', storageError);
+          }
         }
+        
         return role;
-      } catch (_) {
-        userRoleCache.set(user.id, { role: null, timestamp: Date.now() });
+      } catch (error) {
+        console.warn('Error in getUserRole:', error);
+        userRoleCache.set(userId, { role: null, timestamp: Date.now() });
         return null;
       } finally {
-        userRoleInFlight.delete(user.id);
+        userRoleInFlight.delete(userId);
       }
     })();
 
-    userRoleInFlight.set(user.id, fetchPromise);
+    userRoleInFlight.set(userId, fetchPromise);
     return fetchPromise;
-  };
+  }, [user?.id]);
 
   const getCompleteUserProfile = async () => {
     if (!user?.id) return null;

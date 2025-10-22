@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Mail, Phone, MapPin, Calendar, LogOut, Edit3, Save, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../hooks/useAuth';
+import { supabase } from '../lib/supabase';
 import { validationUtils } from '../utils/validation';
 import toast from 'react-hot-toast';
 import './ProfilePage.css';

@@ -4,7 +4,7 @@ import { toast } from 'react-hot-toast';
 import { Save, Trash2, Ban, RotateCcw, ArrowLeft, Upload, X } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
 import { apiService } from '../../services/api';
-import { supabase } from '../../hooks/useAuth';
+import { supabase } from '../../lib/supabase';
 import './AdminPages.css';
 
 const EditCategoryPage = () => {

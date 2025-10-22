@@ -4,10 +4,11 @@ import { useInView } from 'react-intersection-observer';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Bell, Plus, LogOut, Shield, Activity, Server, Users, Settings, 
-  Target, DollarSign, Star, PieChart, BarChart3, X, Sun, Moon
+  Target, DollarSign, Star, PieChart, BarChart3, X, Sun, Moon, Eye
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useSearch } from '../contexts/SearchContext';
+import { useNotifications } from '../hooks/useNotifications';
 import Logo from './Logo';
 import '../pages/admin/AdminPages.css';
 import '../pages/dashboards/AdminDashboard.css';
@@ -17,17 +18,11 @@ const AdminLayout = ({ children }) => {
   const location = useLocation();
   const { logout } = useAuth();
   const { searchQuery, setSearchQuery, performSearch, debouncedSearch, searchResults, isSearching } = useSearch();
+  const { unreadCount, notifications, markAsRead, markAllAsRead, dismissNotification } = useNotifications();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const notificationsRef = useRef(null);
   const [headerRef, headerInView] = useInView({ triggerOnce: false, threshold: 0.1 });
-
-  // Mock alerts data - in real app, this would come from props or context
-  const [alerts] = useState([
-    { id: 1, type: 'security', title: 'Security Alert', message: 'Failed login attempts detected', severity: 'high', timestamp: '2 min ago' },
-    { id: 2, type: 'performance', title: 'Performance', message: 'High CPU usage detected', severity: 'medium', timestamp: '5 min ago' },
-    { id: 3, type: 'system', title: 'System', message: 'Backup completed successfully', severity: 'low', timestamp: '10 min ago' }
-  ]);
 
   const navItems = [
     { key: 'overview', label: 'Overview', icon: BarChart3, path: '/dashboard/admin' },
@@ -374,10 +369,6 @@ const AdminLayout = ({ children }) => {
                 <div className="stat-value">4</div>
                 <div className="stat-label">Pending Approvals</div>
               </div>
-              <div className="stat-item">
-                <div className="stat-value">{alerts?.length || 0}</div>
-                <div className="stat-label">Open Alerts</div>
-              </div>
             </div>
             
             <div className="header-actions">
@@ -399,7 +390,9 @@ const AdminLayout = ({ children }) => {
                   aria-expanded={isNotificationsOpen}
                 >
                   <div className="bell-icon-text">🔔</div>
-                  <span className="notification-badge">3</span>
+                  {unreadCount > 0 && (
+                    <span className="notification-badge">{unreadCount}</span>
+                  )}
                 </button>
                 {isNotificationsOpen && (
                   <motion.div 
@@ -411,28 +404,70 @@ const AdminLayout = ({ children }) => {
                   >
                     <div className="notifications-header">
                       <h3>Notifications</h3>
-                      <button 
-                        onClick={() => setIsNotificationsOpen(false)}
-                        className="close-btn"
-                      >
-                        <X size={16} />
-                      </button>
+                      <div className="header-actions">
+                        {unreadCount > 0 && (
+                          <button 
+                            onClick={markAllAsRead}
+                            className="mark-all-read-btn"
+                            title="Mark all as read"
+                          >
+                            Mark all read
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => setIsNotificationsOpen(false)}
+                          className="close-btn"
+                          title="Close notifications"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
                     </div>
                     <div className="notifications-list">
-                      {alerts.map(alert => (
-                        <div key={alert.id} className={`notification-item ${alert.severity}`}>
-                          <div className="notification-icon">
-                            {alert.type === 'security' && <Shield size={16} />}
-                            {alert.type === 'performance' && <Activity size={16} />}
-                            {alert.type === 'system' && <Server size={16} />}
+                      {notifications.length > 0 ? (
+                        notifications.slice(0, 5).map(notification => (
+                          <div key={notification.id} className={`notification-item ${notification.status === 'unread' ? 'unread' : ''}`}>
+                            <div className="notification-content">
+                              <div className="notification-icon">
+                                {notification.type === 'security' && <Shield size={16} style={{ color: '#ef4444' }} />}
+                                {notification.type === 'performance' && <Activity size={16} style={{ color: '#f59e0b' }} />}
+                                {notification.type === 'system' && <Server size={16} style={{ color: '#10b981' }} />}
+                                {notification.type === 'user' && <Users size={16} style={{ color: '#3b82f6' }} />}
+                                {notification.type === 'billing' && <DollarSign size={16} style={{ color: '#8b5cf6' }} />}
+                                {!['security', 'performance', 'system', 'user', 'billing'].includes(notification.type) && <Bell size={16} style={{ color: '#6b7280' }} />}
+                              </div>
+                              <div className="notification-details">
+                                <h4>{notification.title}</h4>
+                                <p>{notification.message}</p>
+                                <span className="notification-time">{notification.time}</span>
+                              </div>
+                            </div>
+                            <div className="notification-actions">
+                              {notification.status === 'unread' && (
+                                <button 
+                                  className="mark-read-btn"
+                                  onClick={() => markAsRead(notification.id)}
+                                  title="Mark as read"
+                                >
+                                  <Eye size={14} />
+                                </button>
+                              )}
+                              <button 
+                                className="dismiss-btn"
+                                onClick={() => dismissNotification(notification.id)}
+                                title="Dismiss"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
                           </div>
-                          <div className="notification-content">
-                            <h4>{alert.title}</h4>
-                            <p>{alert.message}</p>
-                            <span className="notification-time">{alert.timestamp}</span>
-                          </div>
+                        ))
+                      ) : (
+                        <div className="no-notifications">
+                          <Bell size={24} style={{ color: '#9ca3af' }} />
+                          <p>No notifications</p>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </motion.div>
                 )}

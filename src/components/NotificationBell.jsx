@@ -8,6 +8,7 @@ const NotificationBell = ({ adminUserId }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState({});
 
   useEffect(() => {
     if (adminUserId) {
@@ -38,8 +39,17 @@ const NotificationBell = ({ adminUserId }) => {
   };
 
   const markAsRead = async (notificationId) => {
+    setActionLoading(prev => ({ ...prev, [notificationId]: 'read' }));
     try {
       await apiService.markNotificationAsRead(notificationId, adminUserId);
+      console.log('✅ Notification marked as read:', notificationId);
+      
+      // Refresh data from server to ensure consistency
+      await fetchNotifications();
+      await fetchUnreadCount();
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+      // Still update UI even if API fails
       setNotifications(prev => 
         prev.map(notif => 
           notif.id === notificationId 
@@ -48,14 +58,26 @@ const NotificationBell = ({ adminUserId }) => {
         )
       );
       setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+    } finally {
+      setActionLoading(prev => ({ ...prev, [notificationId]: null }));
     }
   };
 
   const markAllAsRead = async () => {
+    setActionLoading(prev => ({ ...prev, markAll: true }));
     try {
-      await apiService.markAllNotificationsAsRead(adminUserId);
+      console.log('🔄 Marking all notifications as read...');
+      const response = await apiService.markAllNotificationsAsRead(adminUserId);
+      console.log('✅ API Response:', response);
+      
+      // Refresh data from server to ensure consistency
+      console.log('🔄 Refreshing notifications from server...');
+      await fetchNotifications();
+      await fetchUnreadCount();
+      console.log('✅ Data refreshed successfully');
+    } catch (error) {
+      console.error('❌ Failed to mark all notifications as read:', error);
+      // Still update UI even if API fails
       setNotifications(prev => 
         prev.map(notif => ({ 
           ...notif, 
@@ -64,18 +86,34 @@ const NotificationBell = ({ adminUserId }) => {
         }))
       );
       setUnreadCount(0);
-    } catch (error) {
-      console.error('Failed to mark all notifications as read:', error);
+    } finally {
+      setActionLoading(prev => ({ ...prev, markAll: false }));
     }
   };
 
   const dismissNotification = async (notificationId) => {
+    setActionLoading(prev => ({ ...prev, [notificationId]: 'dismiss' }));
     try {
-      await apiService.dismissNotification(notificationId, adminUserId);
-      setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      // Use the correct dismiss method based on user type
+      if (adminUserId) {
+        // Admin user - use admin dismiss method
+        await apiService.dismissNotification(notificationId, adminUserId);
+      } else {
+        // Regular user - use user-specific dismiss method
+        await apiService.dismissUserNotification(userId, notificationId);
+      }
+      console.log('✅ Notification dismissed:', notificationId);
+      
+      // Refresh data from server to ensure consistency
+      await fetchNotifications();
+      await fetchUnreadCount();
     } catch (error) {
       console.error('Failed to dismiss notification:', error);
+      // Still update UI even if API fails
+      setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } finally {
+      setActionLoading(prev => ({ ...prev, [notificationId]: null }));
     }
   };
 
@@ -85,6 +123,8 @@ const NotificationBell = ({ adminUserId }) => {
         return <CheckCircle size={16} style={{ color: '#10b981' }} />;
       case 'verification_status_changed':
         return <AlertCircle size={16} style={{ color: '#3b82f6' }} />;
+      case 'system_alert':
+        return <Bell size={16} style={{ color: '#f59e0b' }} />;
       default:
         return <Bell size={16} style={{ color: '#6b7280' }} />;
     }
@@ -117,14 +157,24 @@ const NotificationBell = ({ adminUserId }) => {
         <div className="notification-dropdown">
           <div className="notification-header">
             <h3>Notifications</h3>
-            {unreadCount > 0 && (
+            <div className="header-actions">
+              {unreadCount > 0 && (
+                <button 
+                  className="mark-all-read-btn"
+                  onClick={markAllAsRead}
+                  disabled={actionLoading.markAll}
+                >
+                  {actionLoading.markAll ? 'Processing...' : 'Mark all read'}
+                </button>
+              )}
               <button 
-                className="mark-all-read-btn"
-                onClick={markAllAsRead}
+                onClick={() => setIsOpen(false)}
+                className="close-btn"
+                title="Close notifications"
               >
-                Mark all read
+                <X size={16} />
               </button>
-            )}
+            </div>
           </div>
 
           <div className="notification-list">
@@ -151,9 +201,9 @@ const NotificationBell = ({ adminUserId }) => {
                     <div className="notification-details">
                       <h4>{notification.title}</h4>
                       <p>{notification.message}</p>
-                      {notification.provider && (
-                        <p className="provider-info">
-                          Provider: {notification.provider.user_profiles?.first_name} {notification.provider.user_profiles?.last_name}
+                      {notification.sender && (
+                        <p className="sender-info">
+                          From: {notification.sender.email} ({notification.sender.role})
                         </p>
                       )}
                       <span className="notification-time">
@@ -167,16 +217,26 @@ const NotificationBell = ({ adminUserId }) => {
                         className="mark-read-btn"
                         onClick={() => markAsRead(notification.id)}
                         title="Mark as read"
+                        disabled={actionLoading[notification.id]}
                       >
-                        <Eye size={14} />
+                        {actionLoading[notification.id] === 'read' ? (
+                          <div className="mini-spinner"></div>
+                        ) : (
+                          <Eye size={14} />
+                        )}
                       </button>
                     )}
                     <button 
                       className="dismiss-btn"
                       onClick={() => dismissNotification(notification.id)}
                       title="Dismiss"
+                      disabled={actionLoading[notification.id]}
                     >
-                      <X size={14} />
+                      {actionLoading[notification.id] === 'dismiss' ? (
+                        <div className="mini-spinner"></div>
+                      ) : (
+                        <X size={14} />
+                      )}
                     </button>
                   </div>
                 </div>

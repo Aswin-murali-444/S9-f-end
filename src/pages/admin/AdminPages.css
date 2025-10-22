@@ -935,6 +935,36 @@
   color: #92400e;
 }
 
+.status-badge.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge.pending_verification {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge.verified {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.status-badge.rejected {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.status-badge.suspended {
+  background: #fed7aa;
+  color: #9a3412;
+}
+
+.status-badge.incomplete {
+  background: #f3f4f6;
+  color: #374151;
+}
+
 .no-members {
   text-align: center;
   color: #94a3b8;
@@ -2477,7 +2507,179 @@ input:checked + .toggle-slider:before {
 
 .toggle-label {
   font-weight: 500;
-  font-size: 0.9rem;
+}
+
+/* Notification styling to match NotificationBell component */
+.notifications-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f9fafb;
+}
+
+.notifications-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.notifications-header .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mark-all-read-btn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mark-all-read-btn:hover {
+  background: #2563eb;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.notifications-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.notification-item {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f3f4f6;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  transition: background-color 0.2s ease;
+}
+
+.notification-item:hover {
+  background-color: #f9fafb;
+}
+
+.notification-item.unread {
+  background-color: #eff6ff;
+  border-left: 3px solid #3b82f6;
+}
+
+.notification-item:last-child {
+  border-bottom: none;
+}
+
+.notification-content {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+}
+
+.notification-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  flex-shrink: 0;
+  color: #6b7280;
+}
+
+.notification-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.notification-details {
+  flex: 1;
+}
+
+.notification-details h4 {
+  margin: 0 0 4px 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.notification-details p {
+  margin: 0 0 4px 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.notification-time {
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.notification-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 12px;
+}
+
+.mark-read-btn,
+.dismiss-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #6b7280;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mark-read-btn:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.dismiss-btn:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.no-notifications {
+  padding: 40px 20px;
+  text-align: center;
+  color: #9ca3af;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.no-notifications p {
+  margin: 0;
+  font-size: 0.875rem;
 }
 
 .toggle-label.active {

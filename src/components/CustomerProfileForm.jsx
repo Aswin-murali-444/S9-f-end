@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useAuth, supabase } from '../hooks/useAuth';
+import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../lib/supabase';
 import { apiService } from '../services/api';
 import { validationUtils } from '../utils/validation';
 import toast from 'react-hot-toast';

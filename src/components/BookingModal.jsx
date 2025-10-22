@@ -5,7 +5,7 @@ import {
   CreditCard, Shield, CheckCircle, AlertCircle, Star, 
   ChevronDown, ChevronUp, ArrowRight, ArrowLeft
 } from 'lucide-react';
-import { supabase } from '../hooks/useAuth';
+import { supabase } from '../lib/supabase';
 import './BookingModal.css';
 
 const BookingModal = ({ isOpen, onClose, service, user }) => {

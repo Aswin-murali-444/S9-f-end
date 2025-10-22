@@ -19,6 +19,7 @@ const AddServicePage = () => {
     offerPrice: '',
     offerPercentage: '',
     offerEnabled: false,
+    serviceType: 'individual',
     active: true
   });
   const [categories, setCategories] = useState([]);
@@ -200,6 +201,13 @@ const AddServicePage = () => {
           }
         } else {
           delete newErrors.offerPercentage;
+        }
+        break;
+      case 'serviceType':
+        if (!value || !['individual', 'group'].includes(value)) {
+          newErrors.serviceType = 'Please select a valid service type';
+        } else {
+          delete newErrors.serviceType;
         }
         break;
       default:
@@ -401,7 +409,8 @@ const AddServicePage = () => {
       customDuration: true,
       price: true,
       offerPrice: true,
-      offerPercentage: true
+      offerPercentage: true,
+      serviceType: true
     };
     setTouched(allTouched);
     
@@ -414,8 +423,9 @@ const AddServicePage = () => {
     const isPriceValid = validateField('price', formData.price);
     const isOfferPriceValid = validateField('offerPrice', formData.offerPrice);
     const isOfferPercentageValid = validateField('offerPercentage', formData.offerPercentage);
+    const isServiceTypeValid = validateField('serviceType', formData.serviceType);
     
-    if (!isCategoryValid || !isNameValid || !isDescriptionValid || !isDurationValid || !isCustomDurationValid || !isPriceValid || !isOfferPriceValid || !isOfferPercentageValid) {
+    if (!isCategoryValid || !isNameValid || !isDescriptionValid || !isDurationValid || !isCustomDurationValid || !isPriceValid || !isOfferPriceValid || !isOfferPercentageValid || !isServiceTypeValid) {
       return; // Don't submit if there are validation errors
     }
     
@@ -431,6 +441,7 @@ const AddServicePage = () => {
         offerPrice: formData.offerPrice && formData.offerPrice.trim() !== '' ? parseFloat(formData.offerPrice) : null,
         offerPercentage: formData.offerPercentage && formData.offerPercentage.trim() !== '' ? parseFloat(formData.offerPercentage) : null,
         offerEnabled: formData.offerEnabled,
+        serviceType: formData.serviceType,
         active: formData.active,
         iconBase64: iconFile ? iconPreview.split(',')[1] : null, // Remove data:image/...;base64, prefix
         iconFileName: iconFile?.name || null,
@@ -672,6 +683,28 @@ const AddServicePage = () => {
                   {touched.description && errors.description && (
                     <span className="error-message">{errors.description}</span>
                   )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="serviceType">Service Type *</label>
+                  <select
+                    id="serviceType"
+                    name="serviceType"
+                    value={formData.serviceType}
+                    onChange={handleInputChange}
+                    onBlur={handleBlur}
+                    className={touched.serviceType && errors.serviceType ? 'error' : ''}
+                    required
+                  >
+                    <option value="individual">Individual Service</option>
+                    <option value="group">Group Service</option>
+                  </select>
+                  {touched.serviceType && errors.serviceType && (
+                    <span className="error-message">{errors.serviceType}</span>
+                  )}
+                  <small style={{ color: '#64748b', marginTop: '0.5rem' }}>
+                    Choose whether this service is for individual customers or group bookings
+                  </small>
                 </div>
               </div>
             </div>

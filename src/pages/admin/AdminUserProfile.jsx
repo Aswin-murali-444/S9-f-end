@@ -127,14 +127,35 @@ const AdminUserProfile = () => {
     try {
       const profileData = await apiService.getProviderProfile(providerId);
       const providerData = profileData?.data || null;
-      setProviderProfile(providerData);
+      
       if (providerData) {
-        setVerificationStatus(providerData.status || 'pending_verification');
+        setProviderProfile(providerData);
+        // Use the actual database status directly
+        setVerificationStatus(providerData.status || 'pending');
+        console.log('Provider profile fetched:', providerData);
+      } else {
+        console.log('No provider profile found for provider:', providerId);
+        // Set default pending status for service providers without profiles
+        const defaultProfile = {
+          provider_id: providerId,
+          status: 'pending',
+          is_verified: false
+        };
+        setProviderProfile(defaultProfile);
+        setVerificationStatus('pending');
       }
+      
       return providerData;
     } catch (error) {
       console.error('Failed to fetch provider profile:', error);
-      setProviderProfile(null);
+      // Set default pending status for service providers when fetch fails
+      const defaultProfile = {
+        provider_id: providerId,
+        status: 'pending',
+        is_verified: false
+      };
+      setProviderProfile(defaultProfile);
+      setVerificationStatus('pending');
       return null;
     }
   };
@@ -150,6 +171,19 @@ const AdminUserProfile = () => {
       setIsUpdatingVerification(true);
       setVerificationError('');
 
+      console.log('Updating verification status:', {
+        providerId: providerProfile.provider_id,
+        status: verificationStatus,
+        statusType: typeof verificationStatus,
+        reason: verificationReason
+      });
+      
+      // Ensure we're sending the correct status
+      if (verificationStatus === 'pending_verification') {
+        console.error('ERROR: Frontend is sending pending_verification instead of pending!');
+        verificationStatus = 'pending';
+      }
+
       const response = await apiService.updateProviderProfileStatus(
         providerProfile.provider_id,
         verificationStatus,
@@ -164,8 +198,14 @@ const AdminUserProfile = () => {
           updated_at: new Date().toISOString()
         }));
         
+        // Also update the verification status in local state
+        setVerificationStatus(verificationStatus);
+        
         setIsEditingVerification(false);
         setVerificationReason('');
+        
+        // Reload the user data to ensure consistency
+        await loadUser();
         
         // Show success message (you can add a toast notification here)
         console.log('Verification status updated successfully');
@@ -189,7 +229,7 @@ const AdminUserProfile = () => {
   // Function to cancel verification editing
   const cancelVerificationEdit = () => {
     setIsEditingVerification(false);
-    setVerificationStatus(providerProfile?.status || 'pending_verification');
+    setVerificationStatus(providerProfile?.status || 'pending');
     setVerificationReason('');
     setVerificationError('');
   };
@@ -221,6 +261,77 @@ const AdminUserProfile = () => {
         let providerProfileData = null;
         if (userData.role === 'service_provider') {
           providerProfileData = await fetchProviderProfile(userId);
+          
+          // Use service_provider_details status as the primary source for verification status display
+          // Admin updates both tables, but service_provider_details is the source of truth for verification
+          try {
+            const serviceProviderDetails = await apiService.getServiceProviderDetails(userId);
+            console.log('Service provider details status:', serviceProviderDetails?.data?.status);
+            console.log('Provider profile status:', providerProfileData?.status);
+            
+            // Use service provider details status as primary for verification status
+            if (serviceProviderDetails?.data?.status) {
+              const actualStatus = serviceProviderDetails.data.status;
+              
+              // Map service_provider_details status to provider_profiles status
+              let mappedStatus = actualStatus;
+              if (actualStatus === 'pending_verification') {
+                mappedStatus = 'pending';
+              } else if (actualStatus === 'inactive') {
+                mappedStatus = 'rejected';
+              } else if (actualStatus === 'active') {
+                mappedStatus = 'active';
+              } else if (actualStatus === 'suspended') {
+                mappedStatus = 'suspended';
+              }
+              
+              // Update provider profile data with the mapped status
+              if (providerProfileData) {
+                providerProfileData.status = mappedStatus;
+                providerProfileData.is_verified = mappedStatus === 'active';
+              } else {
+                providerProfileData = {
+                  provider_id: userId,
+                  status: mappedStatus,
+                  is_verified: mappedStatus === 'active',
+                  created_at: userData.created_at,
+                  updated_at: userData.updated_at
+                };
+              }
+              setProviderProfile(providerProfileData);
+              setVerificationStatus(mappedStatus);
+            } else if (providerProfileData?.status) {
+              // Fallback to provider profile status if no service provider details
+              setProviderProfile(providerProfileData);
+              setVerificationStatus(providerProfileData.status);
+            } else {
+              // No status found in either table, default to pending
+              console.log('No status found in either table, setting default pending status');
+              const defaultStatus = 'pending';
+              providerProfileData = {
+                provider_id: userId,
+                status: defaultStatus,
+                is_verified: false,
+                created_at: userData.created_at,
+                updated_at: userData.updated_at
+              };
+              setProviderProfile(providerProfileData);
+              setVerificationStatus(defaultStatus);
+            }
+          } catch (error) {
+            console.error('Failed to fetch service provider details:', error);
+            // Fallback to pending
+            const defaultStatus = 'pending';
+            providerProfileData = {
+              provider_id: userId,
+              status: defaultStatus,
+              is_verified: false,
+              created_at: userData.created_at,
+              updated_at: userData.updated_at
+            };
+            setProviderProfile(providerProfileData);
+            setVerificationStatus(defaultStatus);
+          }
         }
         
         const locations = formatLocationData(profile, providerProfileData);
@@ -333,7 +444,13 @@ const AdminUserProfile = () => {
             <p>View and manage user details for {user.name || user.email}</p>
           </div>
           <div className="header-actions">
-            <button className="btn-primary btn-animate" onClick={() => navigate('/dashboard/admin?tab=users')}>
+            <button 
+              className="btn-primary btn-animate" 
+              onClick={() => {
+                // Navigate back and force a state reset
+                navigate('/dashboard/admin?tab=users', { replace: true });
+              }}
+            >
               <ArrowLeft size={16} />
               Back to User Management
             </button>
@@ -783,16 +900,59 @@ const AdminUserProfile = () => {
                     <div className="form-group">
                       <label>Profile Status</label>
                       <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {providerProfile.profile_status === 'verified' ? (
-                          <CheckCircle size={16} style={{ color: '#10b981' }} />
-                        ) : providerProfile.profile_status === 'rejected' ? (
-                          <XCircle size={16} style={{ color: '#ef4444' }} />
-                        ) : (
-                          <AlertCircle size={16} style={{ color: '#f59e0b' }} />
-                        )}
-                        <span className={`status-badge ${providerProfile.profile_status || 'active'}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
-                          {formatValue(providerProfile.profile_status, 'active')}
-                        </span>
+                        {(() => {
+                          // Use the actual provider profile status, not profile_status
+                          const actualStatus = providerProfile.status || 'pending';
+                          
+                          if (actualStatus === 'active') {
+                            return (
+                              <>
+                                <CheckCircle size={16} style={{ color: '#10b981' }} />
+                                <span className={`status-badge ${actualStatus}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
+                                  Active
+                                </span>
+                              </>
+                            );
+                          } else if (actualStatus === 'verified') {
+                            return (
+                              <>
+                                <CheckCircle size={16} style={{ color: '#10b981' }} />
+                                <span className={`status-badge ${actualStatus}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
+                                  Verified
+                                </span>
+                              </>
+                            );
+                          } else if (actualStatus === 'rejected') {
+                            return (
+                              <>
+                                <XCircle size={16} style={{ color: '#ef4444' }} />
+                                <span className={`status-badge ${actualStatus}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
+                                  Rejected
+                                </span>
+                              </>
+                            );
+                          } else if (actualStatus === 'suspended') {
+                            return (
+                              <>
+                                <AlertTriangle size={16} style={{ color: '#f59e0b' }} />
+                                <span className={`status-badge ${actualStatus}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
+                                  Suspended
+                                </span>
+                              </>
+                            );
+                          } else {
+                            // pending, incomplete, etc.
+                            return (
+                              <>
+                                <AlertCircle size={16} style={{ color: '#f59e0b' }} />
+                                <span className={`status-badge ${actualStatus}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
+                                  {actualStatus === 'pending' ? 'Pending Verification' : 
+                                   actualStatus === 'incomplete' ? 'Incomplete' : actualStatus}
+                                </span>
+                              </>
+                            );
+                          }
+                        })()}
                       </div>
                     </div>
 
@@ -804,7 +964,7 @@ const AdminUserProfile = () => {
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                {providerProfile.status === 'verified' ? (
+                                {providerProfile.status === 'active' ? (
                                   <CheckCircle size={20} style={{ color: '#10b981' }} />
                                 ) : providerProfile.status === 'rejected' ? (
                                   <XCircle size={20} style={{ color: '#ef4444' }} />
@@ -816,8 +976,9 @@ const AdminUserProfile = () => {
                                 <span style={{ fontWeight: '500', fontSize: '1rem' }}>
                                   Current Status: 
                                 </span>
-                                <span className={`status-badge ${providerProfile.status || 'pending_verification'}`} style={{ fontSize: '0.875rem', padding: '6px 12px' }}>
-                                  {formatValue(providerProfile.status, 'pending_verification').replace('_', ' ').toUpperCase()}
+                                <span className={`status-badge ${providerProfile.status || 'pending'}`} style={{ fontSize: '0.875rem', padding: '6px 12px' }}>
+                                  {providerProfile.status === 'pending' ? 'PENDING VERIFICATION' :
+                                   formatValue(providerProfile.status, 'pending').replace('_', ' ').toUpperCase()}
                                 </span>
                               </div>
                             </div>
@@ -868,11 +1029,11 @@ const AdminUserProfile = () => {
                                     backgroundColor: 'white'
                                   }}
                                 >
-                                  <option value="pending_verification">Pending Verification</option>
+                                  <option value="pending">Pending Verification</option>
+                                  <option value="active">Active</option>
                                   <option value="verified">Verified</option>
                                   <option value="rejected">Rejected</option>
                                   <option value="suspended">Suspended</option>
-                                  <option value="active">Active</option>
                                 </select>
                               </div>
                               
@@ -974,14 +1135,24 @@ const AdminUserProfile = () => {
                     <div className="form-group">
                       <label>Verification Status</label>
                       <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {providerProfile.is_verified ? (
-                          <CheckCircle size={16} style={{ color: '#10b981' }} />
-                        ) : (
-                          <XCircle size={16} style={{ color: '#ef4444' }} />
-                        )}
-                        <span className={`status-badge ${providerProfile.is_verified ? 'active' : 'inactive'}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
-                          {formatBoolean(providerProfile.is_verified, 'Verified', 'Not Verified')}
-                        </span>
+                        {(() => {
+                          // Determine verification status based on provider profile status
+                          const actualStatus = providerProfile.status || 'pending';
+                          const isVerified = actualStatus === 'active';
+                          
+                          return (
+                            <>
+                              {isVerified ? (
+                                <CheckCircle size={16} style={{ color: '#10b981' }} />
+                              ) : (
+                                <XCircle size={16} style={{ color: '#ef4444' }} />
+                              )}
+                              <span className={`status-badge ${isVerified ? 'verified' : 'pending'}`} style={{ fontSize: '0.875rem', padding: '4px 8px' }}>
+                                {isVerified ? 'Verified' : 'Not Verified'}
+                              </span>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 
