@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "node",
+      "args": [
+        "C:/LOcal E/S9 Mini2/supabase-mcp-server/index.mjs"
+      ],
+      "env": {
+        "SUPABASE_URL": "https://zbscbvrklkntlbtefkgw.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpic2NidnJrbGtudGxidGVma2d3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzA4ODM5MiwiZXhwIjoyMDY4NjY0MzkyfQ.0n2Us3XrsXZO2wAhAvUncuZL-bOt-1vELeiUMNQP1uk",
+        "DATABASE_URL": "postgresql://postgres:Aswin%402995Aswin%402995@db.zbscbvrklkntlbtefkgw.supabase.co:5432/postgres"
+      }
+    }
+  }
+}
+
+

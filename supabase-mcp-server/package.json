@@ -1,0 +1,23 @@
+{
+  "name": "supabase-mcp-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "create-test-cursor-table": "node supabase-mcp-server/create-test-table.js",
+    "drop-test-cursor-table": "node supabase-mcp-server/test-execute-sql.js",
+    "verify-test-cursor-table": "node supabase-mcp-server/verify-table.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.2",
+    "@supabase/supabase-js": "^2.77.0",
+    "dotenv": "^17.2.3",
+    "pg": "^8.16.3",
+    "zod": "^3.25.76"
+  }
+}
