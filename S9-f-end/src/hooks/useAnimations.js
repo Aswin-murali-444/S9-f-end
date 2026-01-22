@@ -186,6 +186,49 @@ export const useAnimations = () => {
     return { elementRef, handleMouseEnter, handleMouseLeave };
   };
 
+  // Number counting animation
+  const useCountUp = (end, start = 0, duration = 2000, decimals = 0) => {
+    const [count, setCount] = useState(start);
+    const [isAnimating, setIsAnimating] = useState(false);
+
+    useEffect(() => {
+      if (end === start || isNaN(end)) return;
+      
+      setIsAnimating(true);
+      const startTime = Date.now();
+      const difference = end - start;
+
+      const animate = () => {
+        const now = Date.now();
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Easing function (ease-out)
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const current = start + difference * easeOut;
+        
+        setCount(decimals > 0 ? parseFloat(current.toFixed(decimals)) : Math.floor(current));
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          setCount(end);
+          setIsAnimating(false);
+        }
+      };
+
+      const animationId = requestAnimationFrame(animate);
+      return () => cancelAnimationFrame(animationId);
+    }, [end, start, duration, decimals]);
+
+    return { count, isAnimating };
+  };
+
+  // Percentage counting animation
+  const useCountUpPercentage = (end, duration = 2000) => {
+    return useCountUp(end, 0, duration, 1);
+  };
+
   return {
     triggerBootstrapAnimation,
     triggerCustomAnimation,
@@ -199,5 +242,7 @@ export const useAnimations = () => {
     usePageTransition,
     useLoadingAnimation,
     useHoverAnimation,
+    useCountUp,
+    useCountUpPercentage,
   };
 }; 

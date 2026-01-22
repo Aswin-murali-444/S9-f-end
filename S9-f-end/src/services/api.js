@@ -12,6 +12,16 @@ const API_BASE_URL = (() => {
   return '/api';
 })();
 
+// Debug logging for production troubleshooting
+if (typeof window !== 'undefined') {
+  console.log('🔍 API Configuration:', {
+    envBase: import.meta.env.VITE_API_URL,
+    resolvedBase: API_BASE_URL,
+    hostname: window.location?.hostname,
+    href: window.location?.href
+  });
+}
+
 class ApiService {
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;

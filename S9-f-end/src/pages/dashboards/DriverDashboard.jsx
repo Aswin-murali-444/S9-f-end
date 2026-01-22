@@ -52,17 +52,17 @@ const DriverDashboard = () => {
   useEffect(() => {
     // Simulate loading comprehensive data
     setRideRequests([
-      { id: 1, passenger: "Sarah Johnson", pickup: "123 Main St", destination: "456 Oak Ave", time: "14:30", distance: "5.2 km", fare: "$18", status: "pending", rating: 4.8, phone: "+1-555-0123" },
-      { id: 2, passenger: "Mike Chen", pickup: "789 Pine Rd", destination: "321 Elm St", time: "15:00", distance: "3.8 km", fare: "$14", status: "accepted", rating: 4.9, phone: "+1-555-0124" },
-      { id: 3, passenger: "Emily Davis", pickup: "Downtown Mall", destination: "Airport", time: "15:30", distance: "12.5 km", fare: "$35", status: "pending", rating: 4.7, phone: "+1-555-0125" },
-      { id: 4, passenger: "David Wilson", pickup: "Hotel Plaza", destination: "Train Station", time: "16:00", distance: "4.2 km", fare: "$16", status: "pending", rating: 4.6, phone: "+1-555-0126" }
+      { id: 1, passenger: "Sarah Johnson", pickup: "123 Main St", destination: "456 Oak Ave", time: "14:30", distance: "5.2 km", fare: "₹18", status: "pending", rating: 4.8, phone: "+1-555-0123" },
+      { id: 2, passenger: "Mike Chen", pickup: "789 Pine Rd", destination: "321 Elm St", time: "15:00", distance: "3.8 km", fare: "₹14", status: "accepted", rating: 4.9, phone: "+1-555-0124" },
+      { id: 3, passenger: "Emily Davis", pickup: "Downtown Mall", destination: "Airport", time: "15:30", distance: "12.5 km", fare: "₹35", status: "pending", rating: 4.7, phone: "+1-555-0125" },
+      { id: 4, passenger: "David Wilson", pickup: "Hotel Plaza", destination: "Train Station", time: "16:00", distance: "4.2 km", fare: "₹16", status: "pending", rating: 4.6, phone: "+1-555-0126" }
     ]);
     
     setTrips([
-      { id: 1, passenger: "Alice Brown", pickup: "Downtown Mall", destination: "Airport", date: "2024-01-10", fare: "$35", rating: 5, status: "completed", distance: "12.5 km", duration: "25 min", tip: "$5" },
-      { id: 2, passenger: "John Doe", pickup: "Hotel Plaza", destination: "Train Station", date: "2024-01-09", fare: "$22", rating: 4, status: "completed", distance: "4.2 km", duration: "12 min", tip: "$3" },
-      { id: 3, passenger: "Lisa Smith", pickup: "Shopping Center", destination: "Office Park", date: "2024-01-08", fare: "$28", rating: 5, status: "completed", distance: "8.7 km", duration: "18 min", tip: "$4" },
-      { id: 4, passenger: "Robert Johnson", pickup: "Residential Area", destination: "Hospital", date: "2024-01-07", fare: "$19", rating: 4, status: "completed", distance: "3.1 km", duration: "8 min", tip: "$2" }
+      { id: 1, passenger: "Alice Brown", pickup: "Downtown Mall", destination: "Airport", date: "2024-01-10", fare: "₹35", rating: 5, status: "completed", distance: "12.5 km", duration: "25 min", tip: "₹5" },
+      { id: 2, passenger: "John Doe", pickup: "Hotel Plaza", destination: "Train Station", date: "2024-01-09", fare: "₹22", rating: 4, status: "completed", distance: "4.2 km", duration: "12 min", tip: "₹3" },
+      { id: 3, passenger: "Lisa Smith", pickup: "Shopping Center", destination: "Office Park", date: "2024-01-08", fare: "₹28", rating: 5, status: "completed", distance: "8.7 km", duration: "18 min", tip: "₹4" },
+      { id: 4, passenger: "Robert Johnson", pickup: "Residential Area", destination: "Hospital", date: "2024-01-07", fare: "₹19", rating: 4, status: "completed", distance: "3.1 km", duration: "8 min", tip: "₹2" }
     ]);
     
     setVehicleStatus({
@@ -93,10 +93,10 @@ const DriverDashboard = () => {
     });
 
     setMaintenance([
-      { id: 1, type: "Oil Change", dueDate: "2024-01-25", status: "scheduled", cost: "$45", priority: "medium", description: "Regular oil change and filter replacement" },
-      { id: 2, type: "Tire Rotation", dueDate: "2024-02-01", status: "pending", cost: "$35", priority: "low", description: "Rotate tires for even wear" },
-      { id: 3, type: "Brake Inspection", dueDate: "2024-01-30", status: "urgent", cost: "$120", priority: "high", description: "Check brake pads and rotors" },
-      { id: 4, type: "Air Filter", dueDate: "2024-02-15", status: "pending", cost: "$25", priority: "low", description: "Replace cabin and engine air filters" }
+      { id: 1, type: "Oil Change", dueDate: "2024-01-25", status: "scheduled", cost: "₹45", priority: "medium", description: "Regular oil change and filter replacement" },
+      { id: 2, type: "Tire Rotation", dueDate: "2024-02-01", status: "pending", cost: "₹35", priority: "low", description: "Rotate tires for even wear" },
+      { id: 3, type: "Brake Inspection", dueDate: "2024-01-30", status: "urgent", cost: "₹120", priority: "high", description: "Check brake pads and rotors" },
+      { id: 4, type: "Air Filter", dueDate: "2024-02-15", status: "pending", cost: "₹25", priority: "low", description: "Replace cabin and engine air filters" }
     ]);
 
     setRoutes([
@@ -107,7 +107,7 @@ const DriverDashboard = () => {
 
     setNotifications([
       { id: 1, type: "maintenance", message: "Oil change due in 5 days", priority: "medium", time: "2 hours ago" },
-      { id: 2, type: "earnings", message: "Weekly bonus unlocked: $25", priority: "high", time: "4 hours ago" },
+      { id: 2, type: "earnings", message: "Weekly bonus unlocked: ₹25", priority: "high", time: "4 hours ago" },
       { id: 3, type: "rating", message: "New 5-star rating from Sarah J.", priority: "low", time: "6 hours ago" }
     ]);
   }, []);
@@ -136,7 +136,7 @@ const DriverDashboard = () => {
   };
 
   const stats = [
-    { label: "Today's Earnings", value: `$${earnings.today}`, icon: DollarSign, color: "#10b981", change: "+$23", changeType: "positive" },
+    { label: "Today's Earnings", value: `₹${earnings.today}`, icon: DollarSign, color: "#10b981", change: "+₹23", changeType: "positive" },
     { label: "Active Rides", value: rideRequests.filter(r => r.status === 'accepted').length.toString(), icon: Car, color: "#4f9cf9", change: "+1", changeType: "positive" },
     { label: "Total Distance", value: "284 km", icon: Route, color: "#f59e0b", change: "+45 km", changeType: "positive" },
     { label: "Driver Rating", value: "4.8", icon: Star, color: "#ef4444", change: "+0.1", changeType: "positive" }
@@ -587,23 +587,23 @@ const DriverDashboard = () => {
                   <div className="earnings-summary">
                     <div className="summary-card">
                       <h4>Total Earnings</h4>
-                      <div className="summary-value">${earnings.total}</div>
-                      <div className="summary-change positive">+$2,450 this month</div>
+                      <div className="summary-value">₹{earnings.total}</div>
+                      <div className="summary-change positive">+₹2,450 this month</div>
                     </div>
                     <div className="summary-card">
                       <h4>This Week</h4>
-                      <div className="summary-value">${earnings.thisWeek}</div>
-                      <div className="summary-change positive">+$125 from last week</div>
+                      <div className="summary-value">₹{earnings.thisWeek}</div>
+                      <div className="summary-change positive">+₹125 from last week</div>
                     </div>
                     <div className="summary-card">
                       <h4>Average per Ride</h4>
-                      <div className="summary-value">${earnings.averagePerRide}</div>
-                      <div className="summary-change positive">+$1.20 from last week</div>
+                      <div className="summary-value">₹{earnings.averagePerRide}</div>
+                      <div className="summary-change positive">+₹1.20 from last week</div>
                     </div>
                     <div className="summary-card">
                       <h4>Total Tips</h4>
-                      <div className="summary-value">${earnings.tips}</div>
-                      <div className="summary-change positive">+$23 this month</div>
+                      <div className="summary-value">₹{earnings.tips}</div>
+                      <div className="summary-change positive">+₹23 this month</div>
                     </div>
                   </div>
                 </div>

@@ -3078,7 +3078,7 @@ input:checked + .toggle-slider:before {
 }
 
 .price-input-group::before {
-  content: '$';
+  content: '₹';
   position: absolute;
   left: 1rem;
   top: 50%;

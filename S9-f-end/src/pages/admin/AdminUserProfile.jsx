@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { apiService } from '../../services/api';
 import AdminLayout from '../../components/AdminLayout';
-import { Users, MapPin, Mail, Phone, User as UserIcon, ArrowLeft, Calendar, Clock, ShieldCheck, Navigation, Map, Briefcase, Award, DollarSign, Star, Target, Package, Globe, Home, Building, FileText, CheckCircle, XCircle, AlertCircle, Settings, Save, AlertTriangle } from 'lucide-react';
+import { Users, MapPin, Mail, Phone, User as UserIcon, ArrowLeft, Calendar, Clock, ShieldCheck, Navigation, Map, Briefcase, Award, IndianRupee, Star, Target, Package, Globe, Home, Building, FileText, CheckCircle, XCircle, AlertCircle, Settings, Save, AlertTriangle } from 'lucide-react';
 import './AdminPages.css';
 
 const AdminUserProfile = () => {
@@ -860,7 +860,7 @@ const AdminUserProfile = () => {
                       <div className="form-group">
                         <label>Hourly Rate</label>
                         <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <DollarSign size={16} />
+                          <IndianRupee size={16} />
                           ₹{formatValue(providerProfile.hourly_rate, '0')}
                         </div>
                       </div>

@@ -28,25 +28,53 @@ const LoadingSpinner = ({
 
   if (fullScreen) {
     return (
-      <div className={`loading-overlay ${className}`}>
-        <div className="loading-content">
-          <div className={`loading-spinner ${getSizeClass()} ${getColorClass()}`}>
-            <div className="spinner-ring"></div>
-            <div className="spinner-ring"></div>
-            <div className="spinner-ring"></div>
+      <div className={`loading-overlay professional ${className}`}>
+        <div className="loading-content professional">
+          <div className="spinner-wrapper">
+            <div className={`loading-spinner professional ${getSizeClass()} ${getColorClass()}`}>
+              <div className="spinner-ring ring-1"></div>
+              <div className="spinner-ring ring-2"></div>
+              <div className="spinner-ring ring-3"></div>
+              <div className="spinner-center"></div>
+            </div>
+            <div className="spinner-glow"></div>
           </div>
-          {text && <p className="loading-text">{text}</p>}
+          {text && (
+            <div className="loading-text-wrapper">
+              <p className="loading-text professional">{text}</p>
+              <div className="loading-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`loading-spinner ${getSizeClass()} ${getColorClass()} ${className}`}>
-      <div className="spinner-ring"></div>
-      <div className="spinner-ring"></div>
-      <div className="spinner-ring"></div>
-      {text && <p className="loading-text">{text}</p>}
+    <div className={`loading-spinner-wrapper professional ${className}`}>
+      <div className="spinner-wrapper">
+        <div className={`loading-spinner professional ${getSizeClass()} ${getColorClass()}`}>
+          <div className="spinner-ring ring-1"></div>
+          <div className="spinner-ring ring-2"></div>
+          <div className="spinner-ring ring-3"></div>
+          <div className="spinner-center"></div>
+        </div>
+        <div className="spinner-glow"></div>
+      </div>
+      {text && (
+        <div className="loading-text-wrapper">
+          <p className="loading-text professional">{text}</p>
+          <div className="loading-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

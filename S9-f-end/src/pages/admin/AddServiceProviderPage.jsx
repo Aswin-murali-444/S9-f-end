@@ -110,19 +110,13 @@ const AddServiceProviderPage = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Load categories
-        const categoriesResponse = await fetch('/api/categories');
-        if (categoriesResponse.ok) {
-          const categoriesData = await categoriesResponse.json();
-          setCategories(categoriesData);
-        }
+        // Load categories using apiService (uses proper API_BASE_URL)
+        const categoriesData = await apiService.getCategories();
+        setCategories(categoriesData);
         
-        // Load services
-        const servicesResponse = await fetch('/api/services');
-        if (servicesResponse.ok) {
-          const servicesData = await servicesResponse.json();
-          setServices(servicesData);
-        }
+        // Load services using apiService (uses proper API_BASE_URL)
+        const servicesData = await apiService.getServices();
+        setServices(servicesData);
 
         // Load all available providers for team creation
         const providersData = await apiService.getAvailableProviders();

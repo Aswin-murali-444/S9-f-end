@@ -2,7 +2,15 @@ import { supabase } from '../lib/supabase';
 
 class CartWishlistService {
   constructor() {
-    this.baseUrl = '/api/cart-wishlist';
+    // Resolve base URL robustly across dev/preview/prod
+    const envBase = import.meta.env.VITE_API_URL;
+    const baseUrl = envBase 
+      ? envBase.replace(/\/$/, '') 
+      : typeof window !== 'undefined' && (window.location?.hostname === 'localhost' || window.location?.hostname === '127.0.0.1')
+        ? 'http://localhost:3001'
+        : '/api';
+    
+    this.baseUrl = `${baseUrl}/cart-wishlist`;
   }
 
   // Get authentication headers

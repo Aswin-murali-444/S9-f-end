@@ -4,7 +4,7 @@ import { useInView } from 'react-intersection-observer';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Bell, Plus, LogOut, Shield, Activity, Server, Users, Settings, 
-  Target, DollarSign, Star, PieChart, BarChart3, X, Sun, Moon, Eye
+  Target, IndianRupee, Star, PieChart, BarChart3, X, Sun, Moon, Eye
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useSearch } from '../contexts/SearchContext';
@@ -30,7 +30,7 @@ const AdminLayout = ({ children }) => {
     { key: 'services', label: 'Services', icon: Settings, path: '/dashboard/admin?tab=services' },
     { key: 'allocation', label: 'Allocation', icon: Target, path: '/dashboard/admin?tab=allocation' },
     { key: 'monitoring', label: 'Monitoring', icon: Activity, path: '/dashboard/admin?tab=monitoring' },
-    { key: 'billing', label: 'Billing', icon: DollarSign, path: '/dashboard/admin?tab=billing' },
+    { key: 'billing', label: 'Billing', icon: IndianRupee, path: '/dashboard/admin?tab=billing' },
     { key: 'feedback', label: 'Feedback', icon: Star, path: '/dashboard/admin?tab=feedback' },
     { key: 'system', label: 'System Health', icon: Server, path: '/dashboard/admin?tab=system' },
     { key: 'security', label: 'Security', icon: Shield, path: '/dashboard/admin?tab=security' },
@@ -433,7 +433,7 @@ const AdminLayout = ({ children }) => {
                                 {notification.type === 'performance' && <Activity size={16} style={{ color: '#f59e0b' }} />}
                                 {notification.type === 'system' && <Server size={16} style={{ color: '#10b981' }} />}
                                 {notification.type === 'user' && <Users size={16} style={{ color: '#3b82f6' }} />}
-                                {notification.type === 'billing' && <DollarSign size={16} style={{ color: '#8b5cf6' }} />}
+                                {notification.type === 'billing' && <IndianRupee size={16} style={{ color: '#8b5cf6' }} />}
                                 {!['security', 'performance', 'system', 'user', 'billing'].includes(notification.type) && <Bell size={16} style={{ color: '#6b7280' }} />}
                               </div>
                               <div className="notification-details">

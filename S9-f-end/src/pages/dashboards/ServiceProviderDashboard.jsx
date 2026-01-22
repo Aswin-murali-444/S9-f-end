@@ -109,6 +109,40 @@ import ProfileCompletionModal from '../../components/ProfileCompletionModal';
 import './ServiceProviderDashboard.css';
 import { apiService } from '../../services/api';
 
+// Custom Rupee Icon Component
+const RupeeIcon = ({ size = 20, className = '', style = {} }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    style={style}
+  >
+    <path d="M6 3h12M6 3H4l1 18h14l1-18h-2M6 3l1 18M7 21h10" />
+    <path d="M8 8h8M8 12h6" />
+  </svg>
+);
+
+// Alternative: Simple Rupee Symbol Component
+const RupeeSymbol = ({ size = 20, className = '', style = {} }) => (
+  <span 
+    className={className}
+    style={{ 
+      fontSize: `${size}px`, 
+      fontWeight: 'bold',
+      lineHeight: 1,
+      ...style 
+    }}
+  >
+    ₹
+  </span>
+);
+
 const ServiceProviderDashboard = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -145,8 +179,8 @@ const ServiceProviderDashboard = () => {
     show: {
       opacity: 1,
       transition: {
-        staggerChildren: prefersReducedMotion ? 0 : 0.08,
-        delayChildren: prefersReducedMotion ? 0 : 0.05
+        staggerChildren: prefersReducedMotion ? 0 : 0.04,
+        delayChildren: prefersReducedMotion ? 0 : 0.02
       }
     }
   };
@@ -156,7 +190,7 @@ const ServiceProviderDashboard = () => {
     show: {
       opacity: 1,
       y: 0,
-      transition: { duration: prefersReducedMotion ? 0.15 : 0.35, ease: 'easeOut' }
+      transition: { duration: prefersReducedMotion ? 0.1 : 0.2, ease: 'easeOut' }
     }
   };
 
@@ -176,7 +210,7 @@ const ServiceProviderDashboard = () => {
 
   // Loading states for different data sections
   const [jobsLoading, setJobsLoading] = useState(false);
-  const [earningsLoading, setEarningsLoading] = useState(false);
+  const [earningsLoading, setEarningsLoading] = useState(true); // Start with true for initial load
   const [profileLoading, setProfileLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -232,15 +266,13 @@ const ServiceProviderDashboard = () => {
         setRefreshing(true);
       } else {
         setJobsLoading(true);
-        setEarningsLoading(true);
         setProfileLoading(true);
       }
       
-      // Simulate API calls for different data sections
+      // Simulate API calls for different data sections (earnings will be loaded separately)
       await Promise.all([
         new Promise(resolve => setTimeout(resolve, 800)), // Jobs
         new Promise(resolve => setTimeout(resolve, 600)), // Notifications
-        new Promise(resolve => setTimeout(resolve, 400)), // Earnings
         new Promise(resolve => setTimeout(resolve, 500))  // Profile
       ]);
       
@@ -289,8 +321,6 @@ const ServiceProviderDashboard = () => {
       toast.error('Failed to load some dashboard data');
     } finally {
       setJobsLoading(false);
-      setNotificationsLoading(false);
-      setEarningsLoading(false);
       setProfileLoading(false);
       setRefreshing(false);
     }
@@ -429,6 +459,50 @@ const ServiceProviderDashboard = () => {
     }
   };
 
+  // Fetch earnings from completed bookings
+  const fetchEarnings = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setEarningsLoading(true);
+      
+      // Get all bookings for this provider
+      const response = await apiService.getProviderBookings(user.id, {
+        limit: 100,
+        offset: 0
+      });
+      
+      // Filter completed bookings and format as earnings
+      const completedBookings = (response.bookings || []).filter(booking => 
+        booking.status === 'completed' || booking.status === 'confirmed'
+      );
+      
+      const formattedEarnings = completedBookings.map((booking, index) => ({
+        id: booking.id || index + 1,
+        customer: booking.customerName || booking.customer_name || 'Unknown Customer',
+        service: booking.serviceType || booking.service_name || booking.service_type || 'Service',
+        amount: booking.amount || booking.total_amount || 0,
+        date: booking.scheduledDate || booking.scheduled_date || booking.created_at 
+          ? new Date(booking.scheduledDate || booking.scheduled_date || booking.created_at).toLocaleDateString('en-IN', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            })
+          : new Date().toLocaleDateString('en-IN'),
+        status: booking.status === 'completed' ? 'completed' : 
+                booking.status === 'confirmed' ? 'pending' : 
+                booking.status || 'pending'
+      }));
+      
+      setEarnings(formattedEarnings);
+    } catch (error) {
+      console.error('Failed to fetch earnings:', error);
+      setEarnings([]);
+    } finally {
+      setEarningsLoading(false);
+    }
+  };
+
   // Refresh dashboard data
   const handleRefresh = () => {
     loadDashboardData(true);
@@ -437,6 +511,7 @@ const ServiceProviderDashboard = () => {
     fetchMatchingBookings(); // Refresh matching bookings
     fetchProviderReviews(); // Refresh reviews
     fetchTeamMembers(); // Refresh team data
+    fetchEarnings(); // Refresh earnings
   };
 
   // Loading effect
@@ -459,8 +534,22 @@ const ServiceProviderDashboard = () => {
     fetchProviderReviews();
     fetchTeamMembers();
     
+    // Load earnings data
+    fetchEarnings();
+    
     return () => clearTimeout(timer);
   }, []);
+
+  // Fetch earnings when earnings tab is accessed (if not already loaded)
+  useEffect(() => {
+    if (activeTab === 'earnings' && user?.id) {
+      // Only fetch if we don't have earnings data and we're not already loading
+      if (earnings.length === 0 && !earningsLoading) {
+        fetchEarnings();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, user?.id]);
 
   // Real booking data - fetched from API
   const [jobs, setJobs] = useState([]);
@@ -479,11 +568,7 @@ const ServiceProviderDashboard = () => {
     getNotificationColor 
   } = useNotifications();
 
-  const [earnings, setEarnings] = useState([
-    { id: 1, customer: "Emma Davis", service: "Garden Maintenance", amount: 60, date: "2024-01-13", status: "completed" },
-    { id: 2, customer: "Mike Wilson", service: "Electrical Work", amount: 200, date: "2024-01-14", status: "in_progress" },
-    { id: 3, customer: "Sarah Johnson", service: "Plumbing Repair", amount: 120, date: "2024-01-15", status: "pending" }
-  ]);
+  const [earnings, setEarnings] = useState([]);
 
   const [ratings, setRatings] = useState([]);
   const [ratingStats, setRatingStats] = useState({
@@ -608,13 +693,13 @@ const ServiceProviderDashboard = () => {
     { label: "Active Requests", value: animatedRequests.toString(), icon: Calendar, color: "#4f9cf9", change: "+3" },
     { label: "Completed Jobs", value: animatedJobs.toString(), icon: CheckCircle, color: "#8b5cf6", change: "+5" },
     { label: "Client Rating", value: animatedRating.toFixed(1), icon: Star, color: "#f59e0b", change: "+0.2" },
-    { label: "Hourly Rate", value: `₹${profile.hourly_rate.toLocaleString('en-IN')}`, icon: DollarSign, color: "#059669", change: "Current" }
+    { label: "Hourly Rate", value: `₹${profile.hourly_rate.toLocaleString('en-IN')}`, icon: RupeeSymbol, color: "#059669", change: "Current" }
   ];
 
   const navigationItems = [
     { key: 'home', label: 'Overview', icon: Home },
     { key: 'jobs', label: 'My Jobs', icon: Briefcase },
-    { key: 'earnings', label: 'Earnings', icon: DollarSign },
+    { key: 'earnings', label: 'Earnings', icon: RupeeSymbol },
     { key: 'schedule', label: 'Schedule', icon: Calendar },
     { key: 'profile', label: 'Profile', icon: User, incomplete: isProfileCheckReady ? !isProfileComplete : false },
     { key: 'reviews', label: 'Reviews', icon: Star },
@@ -1197,7 +1282,7 @@ const ServiceProviderDashboard = () => {
                   className="provider-info-card"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0, ...glowKeyframes }}
-                  transition={{ delay: 0.15, duration: prefersReducedMotion ? 0.2 : 0.5, repeat: prefersReducedMotion ? 0 : Infinity, repeatType: 'mirror', repeatDelay: 4 }}
+                  transition={{ delay: 0.05, duration: prefersReducedMotion ? 0.15 : 0.25, repeat: prefersReducedMotion ? 0 : Infinity, repeatType: 'mirror', repeatDelay: 2 }}
                 >
                   <div className="provider-info-header">
                     <div className="provider-avatar">
@@ -1694,7 +1779,7 @@ const ServiceProviderDashboard = () => {
                           {job.address}
                         </div>
                         <div className="detail-item">
-                          <DollarSign size={16} />
+                          <RupeeSymbol size={16} />
                           ₹{job.amount}
                         </div>
                         <div className="detail-item">
@@ -1795,87 +1880,249 @@ const ServiceProviderDashboard = () => {
 
           {/* Earnings Tab */}
           {activeTab === 'earnings' && (
-            <div className="tab-content">
-              <div className="content-header">
-                <h1>Earnings & Payments</h1>
-                <div className="header-actions">
-                  <button className="btn-primary" disabled={earningsLoading}>
-                    {earningsLoading ? <LoadingSpinner size="small" /> : <Download size={16} />}
+            <motion.div 
+              className="tab-content earnings-tab-enhanced"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <div className="content-header earnings-header-enhanced">
+                <div className="header-title-section">
+                  <h1 className="earnings-title">Earnings & Payments</h1>
+                  <p className="earnings-subtitle">Track your income and payment history</p>
+                </div>
+                <div className="header-actions earnings-actions">
+                  <motion.button 
+                    className="btn-secondary earnings-btn"
+                    disabled={earningsLoading}
+                    onClick={fetchEarnings}
+                    title="Refresh earnings data"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <RefreshCw size={18} className={earningsLoading ? 'animate-spin' : ''} />
+                    Refresh
+                  </motion.button>
+                  <motion.button 
+                    className="btn-primary earnings-btn"
+                    disabled={earningsLoading || earnings.length === 0}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {earningsLoading ? <LoadingSpinner size="small" /> : <Download size={18} />}
                     Export Report
-                  </button>
+                  </motion.button>
                 </div>
               </div>
 
-              <div className="earnings-summary">
-                <div className="summary-card">
-                  <div className="summary-icon">
-                    <DollarSign size={24} />
-                  </div>
-                  <div className="summary-content">
-                    <h3>Total Earnings</h3>
-                    <div className="summary-amount">₹{earnings.reduce((sum, earning) => sum + earning.amount, 0)}</div>
-                    <div className="summary-change positive">+12% this month</div>
-                  </div>
-                </div>
-                <div className="summary-card">
-                  <div className="summary-icon">
-                    <CheckCircle size={24} />
-                  </div>
-                  <div className="summary-content">
-                    <h3>Completed Jobs</h3>
-                    <div className="summary-amount">{jobs.filter(j => j.status === 'completed').length}</div>
-                    <div className="summary-change positive">+5 this week</div>
-                  </div>
-                </div>
-                <div className="summary-card">
-                  <div className="summary-icon">
-                    <Star size={24} />
-                  </div>
-                  <div className="summary-content">
-                    <h3>Average Rating</h3>
-                    <div className="summary-amount">4.9</div>
-                    <div className="summary-change positive">+0.2 this month</div>
-                  </div>
-                </div>
-              </div>
+              {earningsLoading ? (
+                <motion.div 
+                  className="loading-container earnings-loading"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <LoadingSpinner size="large" text="Loading earnings..." />
+                </motion.div>
+              ) : (
+                <>
+                  <motion.div 
+                    className="earnings-summary enhanced"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.1 }}
+                  >
+                    <motion.div 
+                      className="summary-card enhanced-card earnings-card-1"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.4, delay: 0.2 }}
+                      whileHover={{ y: -5, scale: 1.02 }}
+                    >
+                      <div className="summary-icon earnings-icon-1">
+                        <RupeeSymbol size={28} />
+                        <div className="icon-glow"></div>
+                      </div>
+                      <div className="summary-content">
+                        <h3>Total Earnings</h3>
+                        <div className="summary-amount earnings-amount-main">
+                          ₹{earnings.reduce((sum, earning) => sum + (earning.amount || 0), 0).toLocaleString('en-IN')}
+                        </div>
+                        <div className="summary-change positive earnings-change">
+                          <TrendingUp size={14} />
+                          {earnings.length > 0 ? `${earnings.filter(e => e.status === 'completed').length} completed` : 'No earnings yet'}
+                        </div>
+                      </div>
+                      <div className="card-decoration"></div>
+                    </motion.div>
+                    
+                    <motion.div 
+                      className="summary-card enhanced-card earnings-card-2"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.4, delay: 0.3 }}
+                      whileHover={{ y: -5, scale: 1.02 }}
+                    >
+                      <div className="summary-icon earnings-icon-2">
+                        <CheckCircle size={28} />
+                        <div className="icon-glow"></div>
+                      </div>
+                      <div className="summary-content">
+                        <h3>Completed Jobs</h3>
+                        <div className="summary-amount">{jobs.filter(j => j.status === 'completed').length}</div>
+                        <div className="summary-change positive earnings-change">
+                          <CheckCircle size={14} />
+                          {earnings.filter(e => e.status === 'completed').length} paid
+                        </div>
+                      </div>
+                      <div className="card-decoration"></div>
+                    </motion.div>
+                    
+                    <motion.div 
+                      className="summary-card enhanced-card earnings-card-3"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.4, delay: 0.4 }}
+                      whileHover={{ y: -5, scale: 1.02 }}
+                    >
+                      <div className="summary-icon earnings-icon-3">
+                        <Star size={28} />
+                        <div className="icon-glow"></div>
+                      </div>
+                      <div className="summary-content">
+                        <h3>Average Rating</h3>
+                        <div className="summary-amount">{ratingStats.averageRating > 0 ? ratingStats.averageRating.toFixed(1) : 'N/A'}</div>
+                        <div className="summary-change positive earnings-change">
+                          <Star size={14} />
+                          {ratingStats.totalReviews} reviews
+                        </div>
+                      </div>
+                      <div className="card-decoration"></div>
+                    </motion.div>
+                  </motion.div>
 
-              <div className="earnings-table">
-                <div className="table-header">
-                  <div>Customer</div>
-                  <div>Service</div>
-                  <div>Date</div>
-                  <div>Amount</div>
-                  <div>Status</div>
-                  <div>Actions</div>
-                </div>
-                {earningsLoading ? (
-                  <div className="loading-placeholder" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-                    <LoadingSpinner size="small" text="Loading earnings..." />
-                  </div>
-                ) : earnings.length === 0 ? (
-                  <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-                    <DollarSign size={48} style={{ opacity: 0.5, marginBottom: '1rem' }} />
-                    <p>No earnings data available</p>
-                  </div>
-                ) : earnings.map(earning => (
-                  <div key={earning.id} className="earning-row">
-                    <div className="table-cell">{earning.customer}</div>
-                    <div className="table-cell">{earning.service}</div>
-                    <div className="table-cell">{earning.date}</div>
-                    <div className="table-cell earning-amount">₹{earning.amount}</div>
-                    <div className={`table-cell earning-status ${earning.status}`}>
-                      {earning.status}
+                  <motion.div 
+                    className="earnings-table enhanced-table"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.5 }}
+                  >
+                    <div className="table-header enhanced-header">
+                      <div className="header-cell">
+                        <User size={16} />
+                        Customer
+                      </div>
+                      <div className="header-cell">
+                        <Package size={16} />
+                        Service
+                      </div>
+                      <div className="header-cell">
+                        <Calendar size={16} />
+                        Date
+                      </div>
+                      <div className="header-cell">
+                        <RupeeSymbol size={16} />
+                        Amount
+                      </div>
+                      <div className="header-cell">
+                        <Activity size={16} />
+                        Status
+                      </div>
+                      <div className="header-cell">
+                        Actions
+                      </div>
                     </div>
-                    <div className="table-cell">
-                      <button className="btn-outline">
-                        <Receipt size={16} />
-                        Receipt
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                    {earnings.length === 0 ? (
+                      <motion.div 
+                        className="empty-state earnings-empty"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.4 }}
+                      >
+                        <div className="empty-icon-wrapper">
+                          <RupeeSymbol size={64} />
+                          <div className="empty-icon-glow"></div>
+                        </div>
+                        <h3 className="empty-title">No earnings data available</h3>
+                        <p className="empty-description">
+                          Earnings will appear here once you complete jobs and receive payments.
+                        </p>
+                        <motion.button 
+                          className="btn-primary empty-action-btn"
+                          onClick={fetchEarnings}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          <RefreshCw size={16} />
+                          Refresh
+                        </motion.button>
+                      </motion.div>
+                    ) : (
+                      <div className="table-body">
+                        {earnings.map((earning, index) => (
+                          <motion.div 
+                            key={earning.id} 
+                            className="earning-row enhanced-row"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.3, delay: 0.6 + (index * 0.05) }}
+                            whileHover={{ x: 5, backgroundColor: '#f8fafc' }}
+                          >
+                            <div className="table-cell customer-cell">
+                              <div className="customer-avatar">
+                                {earning.customer.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="customer-name">{earning.customer}</span>
+                            </div>
+                            <div className="table-cell service-cell">
+                              <Package size={14} className="cell-icon" />
+                              {earning.service}
+                            </div>
+                            <div className="table-cell date-cell">
+                              <Calendar size={14} className="cell-icon" />
+                              {earning.date}
+                            </div>
+                            <div className="table-cell earning-amount enhanced-amount">
+                              <RupeeSymbol size={16} className="rupee-icon-inline" />
+                              {earning.amount.toLocaleString('en-IN')}
+                            </div>
+                            <div className={`table-cell earning-status enhanced-status ${earning.status}`}>
+                              <span className={`status-badge enhanced-badge ${earning.status}`}>
+                                {earning.status === 'completed' ? (
+                                  <>
+                                    <CheckCircle size={12} />
+                                    Paid
+                                  </>
+                                ) : earning.status === 'pending' ? (
+                                  <>
+                                    <Clock size={12} />
+                                    Pending
+                                  </>
+                                ) : (
+                                  earning.status
+                                )}
+                              </span>
+                            </div>
+                            <div className="table-cell actions-cell">
+                              <motion.button 
+                                className="btn-receipt"
+                                disabled={earning.status !== 'completed'}
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                title="Download Receipt"
+                              >
+                                <Receipt size={16} />
+                                <span>Receipt</span>
+                              </motion.button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                </>
+              )}
+            </motion.div>
           )}
 
           {/* Schedule Tab */}

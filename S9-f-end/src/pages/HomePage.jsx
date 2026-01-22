@@ -563,7 +563,7 @@ const HomePage = () => {
             <div className="price-card featured card-hover">
               <div className="price-header">
                 <h3>Pro</h3>
-                <div className="price">$19/mo</div>
+                <div className="price">₹19/mo</div>
                 <div className="sub">AI scheduling, smart alerts</div>
               </div>
               <ul className="price-features">

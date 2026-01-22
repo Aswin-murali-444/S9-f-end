@@ -83,28 +83,28 @@ class InvoiceService {
       
       const rightAlign = 150;
       doc.text(`Service Amount:`, 20, 177);
-      doc.text(`Rs. ${(bookingData.base_price || 0).toFixed(2)}`, rightAlign, 177);
+      doc.text(`₹${(bookingData.base_price || 0).toFixed(2)}`, rightAlign, 177);
       
       if (bookingData.service_fee > 0) {
         doc.text(`Service Fee:`, 20, 184);
-        doc.text(`Rs. ${bookingData.service_fee.toFixed(2)}`, rightAlign, 184);
+        doc.text(`₹${bookingData.service_fee.toFixed(2)}`, rightAlign, 184);
       }
       
       if (bookingData.tax_amount > 0) {
         doc.text(`Tax (18%):`, 20, 191);
-        doc.text(`Rs. ${bookingData.tax_amount.toFixed(2)}`, rightAlign, 191);
+        doc.text(`₹${bookingData.tax_amount.toFixed(2)}`, rightAlign, 191);
       }
       
       if (bookingData.offer_applied && bookingData.offer_discount_amount > 0) {
         doc.text(`Discount:`, 20, 198);
-        doc.text(`-Rs. ${bookingData.offer_discount_amount.toFixed(2)}`, rightAlign, 198);
+        doc.text(`-₹${bookingData.offer_discount_amount.toFixed(2)}`, rightAlign, 198);
       }
       
       // Total amount
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text('Total Amount:', 20, 210);
-      doc.text(`Rs. ${(bookingData.total_amount || bookingData.base_price || 0).toFixed(2)}`, rightAlign, 210);
+      doc.text(`₹${(bookingData.total_amount || bookingData.base_price || 0).toFixed(2)}`, rightAlign, 210);
       
       // Payment info
       doc.setFontSize(11);
@@ -583,7 +583,7 @@ class InvoiceService {
                 <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">${bookingData.service_name || 'Professional Service'}</td>
                 <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">${new Date(bookingData.scheduled_date).toLocaleDateString('en-IN')} at ${bookingData.scheduled_time}</td>
                 <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">${bookingData.duration_minutes ? `${bookingData.duration_minutes} mins` : '1 hour'}</td>
-                <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: right;">Rs. ${bookingData.base_price.toFixed(2)}</td>
+                <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: right;">₹${bookingData.base_price.toFixed(2)}</td>
               </tr>
             </tbody>
           </table>
@@ -595,30 +595,30 @@ class InvoiceService {
           <div style="width: 300px;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <span style="color: #64748b;">Service Amount:</span>
-              <span>Rs. ${bookingData.base_price.toFixed(2)}</span>
+              <span>₹${bookingData.base_price.toFixed(2)}</span>
             </div>
             ${bookingData.service_fee > 0 ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <span style="color: #64748b;">Service Fee:</span>
-              <span>Rs. ${bookingData.service_fee.toFixed(2)}</span>
+              <span>₹${bookingData.service_fee.toFixed(2)}</span>
             </div>
             ` : ''}
             ${bookingData.tax_amount > 0 ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <span style="color: #64748b;">Tax (18%):</span>
-              <span>Rs. ${bookingData.tax_amount.toFixed(2)}</span>
+              <span>₹${bookingData.tax_amount.toFixed(2)}</span>
             </div>
             ` : ''}
             ${bookingData.offer_applied && bookingData.offer_discount_amount > 0 ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <span style="color: #22c55e;">Discount:</span>
-              <span style="color: #22c55e;">-Rs. ${bookingData.offer_discount_amount.toFixed(2)}</span>
+              <span style="color: #22c55e;">-₹${bookingData.offer_discount_amount.toFixed(2)}</span>
             </div>
             ` : ''}
             <hr style="border: none; border-top: 1px solid #3b82f6; margin: 10px 0;">
             <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; color: #1e293b;">
               <span>Total Amount:</span>
-              <span>Rs. ${bookingData.total_amount.toFixed(2)}</span>
+              <span>₹${bookingData.total_amount.toFixed(2)}</span>
             </div>
           </div>
         </div>

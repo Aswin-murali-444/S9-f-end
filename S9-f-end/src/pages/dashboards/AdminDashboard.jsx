@@ -12,7 +12,7 @@ import {
   CheckCircle, 
   XCircle,
   Clock, 
-  DollarSign, 
+  IndianRupee, 
   Activity,
   Database,
   Server,
@@ -61,6 +61,8 @@ import {
 import { useAnimations } from '../../hooks/useAnimations';
 import Logo from '../../components/Logo';
 import NotificationBell from '../../components/NotificationBell';
+import AnimatedNumber from '../../components/AnimatedNumber';
+import SkeletonLoader from '../../components/SkeletonLoader';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
 import { supabase } from '../../lib/supabase';
@@ -527,20 +529,46 @@ const AdminDashboard = () => {
     visible: {
       opacity: 1,
       transition: {
-        delayChildren: 0.3,
-        staggerChildren: 0.1
+        staggerChildren: 0.08,
+        delayChildren: 0.15,
+        duration: 0.6
       }
     }
   };
 
   const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
+    hidden: { 
+      opacity: 0, 
+      y: 30,
+      scale: 0.9
+    },
     visible: {
-      y: 0,
       opacity: 1,
+      y: 0,
+      scale: 1,
       transition: {
         type: "spring",
-        stiffness: 100
+        stiffness: 200,
+        damping: 20,
+        mass: 0.8
+      }
+    }
+  };
+
+  const cardVariants = {
+    hidden: { 
+      opacity: 0, 
+      y: 20,
+      rotateX: -10
+    },
+    visible: {
+      opacity: 1,
+      y: 0,
+      rotateX: 0,
+      transition: {
+        type: "spring",
+        stiffness: 150,
+        damping: 15
       }
     }
   };
@@ -558,7 +586,7 @@ const AdminDashboard = () => {
     { key: 'services', label: 'Services', icon: Settings },
     { key: 'allocation', label: 'Allocation', icon: Target },
     { key: 'monitoring', label: 'Monitoring', icon: Activity },
-    { key: 'billing', label: 'Billing', icon: DollarSign },
+    { key: 'billing', label: 'Billing', icon: IndianRupee },
     { key: 'feedback', label: 'Feedback', icon: Star },
     { key: 'system', label: 'System Health', icon: Server },
     { key: 'security', label: 'Security', icon: Shield },
@@ -945,36 +973,121 @@ const AdminDashboard = () => {
       {/* Main Content Area */}
       <div className="admin-main">
         {/* Top Header */}
-        <header className="admin-header">
-          <div className="header-left">
-            <button 
+        <motion.header 
+          className="admin-header"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
+          <motion.div 
+            className="header-left"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1, duration: 0.5 }}
+          >
+            <motion.button 
               className="mobile-menu-btn"
               onClick={() => setIsSidebarOpen(true)}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
             >
               <Menu size={24} />
-            </button>
-            <h1>Admin Dashboard</h1>
-          </div>
+            </motion.button>
+            <div className="header-title-section">
+              <motion.h1
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                Admin Dashboard
+              </motion.h1>
+              <motion.div 
+                className="header-breadcrumb"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                <span className="breadcrumb-item">Dashboard</span>
+                <span className="breadcrumb-separator">/</span>
+                <span className="breadcrumb-item active">
+                  {activeTab === 'overview' ? 'Overview' : 
+                   activeTab === 'users' ? 'User Management' :
+                   activeTab === 'services' ? 'Services' :
+                   activeTab === 'billing' ? 'Billing' :
+                   activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
+                </span>
+              </motion.div>
+            </div>
+          </motion.div>
           
-          <div className="header-right">
-            <button 
+          <motion.div 
+            className="header-right"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1, duration: 0.5 }}
+          >
+            {/* Current Date & Time */}
+            <motion.div 
+              className="header-datetime"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+            >
+              <Clock size={16} />
+              <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+            </motion.div>
+
+            <motion.button 
               className="admin-theme-toggle" 
               title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
               onClick={toggleDarkMode}
+              whileHover={{ scale: 1.1, rotate: 180 }}
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
             >
               <div className="admin-theme-icon">
                 {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
               </div>
-            </button>
+            </motion.button>
             
             <NotificationBell adminUserId={user?.id} />
             
-            <button className="btn-primary" onClick={() => navigate('/admin/add-service-provider')}>
-              <Plus size={20} />
-              Add Service Provider
-            </button>
-          </div>
-        </header>
+            {/* User Profile Section */}
+            <motion.div 
+              className="header-user-profile"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3, duration: 0.4 }}
+              whileHover={{ scale: 1.02 }}
+            >
+              <div className="user-profile-avatar">
+                {user?.user_metadata?.avatar_url || user?.user_metadata?.picture ? (
+                  <img 
+                    src={user.user_metadata.avatar_url || user.user_metadata.picture} 
+                    alt={displayName}
+                  />
+                ) : (
+                  <span>{displayName.charAt(0).toUpperCase()}</span>
+                )}
+              </div>
+              <div className="user-profile-info">
+                <span className="user-profile-name">{displayName}</span>
+                <span className="user-profile-role">Administrator</span>
+              </div>
+            </motion.div>
+            
+            <motion.button 
+              className="btn-primary header-action-btn" 
+              onClick={() => navigate('/admin/add-service-provider')}
+              whileHover={{ scale: 1.05, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            >
+              <Plus size={18} />
+              <span>Add Provider</span>
+            </motion.button>
+          </motion.div>
+        </motion.header>
 
         {/* Content Area */}
         <main className="admin-content">
@@ -987,28 +1100,73 @@ const AdminDashboard = () => {
             variants={containerVariants}
           >
             <div className="stats-grid">
-              {stats.map((stat, index) => (
-                <motion.div 
-                  key={stat.label}
-                  className="stat-card"
-                  variants={itemVariants}
-                  whileHover={{ scale: 1.05 }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                >
-                  <div className="stat-icon" style={{ backgroundColor: stat.color }}>
-                    <stat.icon size={24} color="white" />
-                  </div>
-                  <div className="stat-content">
-                    <h3>{stat.value}</h3>
-                    <p>{stat.label}</p>
-                    {stat.change && (
-                      <span className={`change ${stat.changeType}`}>
-                        {stat.change}
-                      </span>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
+              {stats.map((stat, index) => {
+                // Extract numeric value for animation
+                const numericValue = typeof stat.value === 'string' 
+                  ? parseFloat(stat.value.replace(/[^0-9.]/g, '')) || 0 
+                  : stat.value;
+                const isPercentage = stat.value.toString().includes('/100') || stat.value.toString().includes('%');
+                
+                return (
+                  <motion.div 
+                    key={stat.label}
+                    className="stat-card"
+                    variants={itemVariants}
+                    custom={index}
+                    whileHover={{ 
+                      scale: 1.05,
+                      y: -8,
+                      transition: { type: "spring", stiffness: 400, damping: 17 }
+                    }}
+                    whileTap={{ scale: 0.98 }}
+                    transition={{ 
+                      type: "spring", 
+                      stiffness: 300,
+                      delay: index * 0.1
+                    }}
+                  >
+                    <motion.div 
+                      className="stat-icon" 
+                      style={{ backgroundColor: stat.color }}
+                      whileHover={{ 
+                        rotate: [0, -10, 10, -10, 0],
+                        scale: 1.15,
+                        transition: { duration: 0.5 }
+                      }}
+                    >
+                      <stat.icon size={24} color="white" />
+                    </motion.div>
+                    <div className="stat-content">
+                      <h3>
+                        {isPercentage ? (
+                          <AnimatedNumber 
+                            value={numericValue} 
+                            duration={2000}
+                            suffix={stat.value.toString().includes('/100') ? '/100' : '%'}
+                          />
+                        ) : (
+                          <AnimatedNumber 
+                            value={numericValue} 
+                            duration={2000}
+                            formatNumber={true}
+                          />
+                        )}
+                      </h3>
+                      <p>{stat.label}</p>
+                      {stat.change && (
+                        <motion.span 
+                          className={`change ${stat.changeType}`}
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.5 + index * 0.1 }}
+                        >
+                          {stat.change}
+                        </motion.span>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           </motion.section>
 
@@ -1022,10 +1180,27 @@ const AdminDashboard = () => {
                 variants={containerVariants}
               >
                 {/* System Overview */}
-                <div className="system-overview">
-                  <h3>System Overview</h3>
+                <motion.div 
+                  className="system-overview"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2, duration: 0.6 }}
+                >
+                  <motion.h3
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    System Overview
+                  </motion.h3>
                   <div className="overview-grid">
-                    <div className="overview-card">
+                    <motion.div 
+                      className="overview-card"
+                      variants={cardVariants}
+                      initial="hidden"
+                      animate="visible"
+                      transition={{ delay: 0.4 }}
+                    >
                       <div className="card-header">
                         <h4>Performance Metrics</h4>
                         <button
@@ -1036,31 +1211,98 @@ const AdminDashboard = () => {
                           title={isRefreshing ? 'Refreshing…' : 'Refresh'}
                           style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                         >
-                          <RefreshCw size={16} className="refresh-icon" />
+                          <RefreshCw 
+                            size={16} 
+                            className={`refresh-icon ${isRefreshing ? 'spinning' : ''}`} 
+                          />
                           {isRefreshing ? 'Refreshing…' : 'Refresh'}
                         </button>
                       </div>
                       <div className="metrics-list">
-                        <div className="metric-item">
-                          <span>Response Time</span>
-                          <span className="metric-value">{systemMetrics.responseTime}</span>
-                        </div>
-                        <div className="metric-item">
-                          <span>CPU Usage</span>
-                          <span className="metric-value">{systemMetrics.cpuUsage}%</span>
-                        </div>
-                        <div className="metric-item">
-                          <span>Memory Usage</span>
-                          <span className="metric-value">{systemMetrics.memoryUsage}%</span>
-                        </div>
-                        <div className="metric-item">
-                          <span>Disk Usage</span>
-                          <span className="metric-value">{systemMetrics.diskUsage}%</span>
-                        </div>
+                        <motion.div 
+                          className="metric-item"
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1 }}
+                        >
+                          <div className="metric-header">
+                            <span>Response Time</span>
+                            <span className="metric-value">{systemMetrics.responseTime}</span>
+                          </div>
+                        </motion.div>
+                        <motion.div 
+                          className="metric-item"
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.2 }}
+                        >
+                          <div className="metric-header">
+                            <span>CPU Usage</span>
+                            <span className="metric-value">
+                              <AnimatedNumber value={systemMetrics.cpuUsage} duration={1500} decimals={1} suffix="%" />
+                            </span>
+                          </div>
+                          <div className="metric-progress-bar">
+                            <motion.div 
+                              className="metric-progress-fill cpu"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${systemMetrics.cpuUsage}%` }}
+                              transition={{ duration: 1.5, delay: 0.3, ease: "easeOut" }}
+                            />
+                          </div>
+                        </motion.div>
+                        <motion.div 
+                          className="metric-item"
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.3 }}
+                        >
+                          <div className="metric-header">
+                            <span>Memory Usage</span>
+                            <span className="metric-value">
+                              <AnimatedNumber value={systemMetrics.memoryUsage} duration={1500} decimals={1} suffix="%" />
+                            </span>
+                          </div>
+                          <div className="metric-progress-bar">
+                            <motion.div 
+                              className="metric-progress-fill memory"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${systemMetrics.memoryUsage}%` }}
+                              transition={{ duration: 1.5, delay: 0.4, ease: "easeOut" }}
+                            />
+                          </div>
+                        </motion.div>
+                        <motion.div 
+                          className="metric-item"
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.4 }}
+                        >
+                          <div className="metric-header">
+                            <span>Disk Usage</span>
+                            <span className="metric-value">
+                              <AnimatedNumber value={systemMetrics.diskUsage} duration={1500} decimals={1} suffix="%" />
+                            </span>
+                          </div>
+                          <div className="metric-progress-bar">
+                            <motion.div 
+                              className="metric-progress-fill disk"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${systemMetrics.diskUsage}%` }}
+                              transition={{ duration: 1.5, delay: 0.5, ease: "easeOut" }}
+                            />
+                          </div>
+                        </motion.div>
                       </div>
-                    </div>
+                    </motion.div>
 
-                    <div className="overview-card">
+                    <motion.div 
+                      className="overview-card"
+                      variants={cardVariants}
+                      initial="hidden"
+                      animate="visible"
+                      transition={{ delay: 0.5 }}
+                    >
                       <div className="card-header">
                         <h4>Platform Statistics</h4>
                         <BarChart3 size={16} />
@@ -1094,9 +1336,15 @@ const AdminDashboard = () => {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
 
-                    <div className="overview-card">
+                    <motion.div 
+                      className="overview-card"
+                      variants={cardVariants}
+                      initial="hidden"
+                      animate="visible"
+                      transition={{ delay: 0.6 }}
+                    >
                       <div className="card-header">
                         <h4>Security Status</h4>
                         <Shield size={16} />
@@ -1117,27 +1365,51 @@ const AdminDashboard = () => {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                     
-                    <div className="overview-card role-distribution">
+                    <motion.div 
+                      className="overview-card role-distribution"
+                      variants={cardVariants}
+                      initial="hidden"
+                      animate="visible"
+                      transition={{ delay: 0.7 }}
+                    >
                       <div className="card-header">
                         <h4>User Roles</h4>
                         <Users size={16} />
                       </div>
                       <div className="roles-list">
-                        {roleDistribution.map(item => (
-                          <div key={item.role} className="role-item">
+                        {roleDistribution.map((item, index) => (
+                          <motion.div 
+                            key={item.role} 
+                            className="role-item"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.7 + index * 0.1, duration: 0.4 }}
+                          >
                             <span className={`role-label ${item.role}`}>{item.role.replace('_',' ')}</span>
                             <div className="role-bar">
-                              <div className="role-fill" style={{ width: `${item.percent}%` }}></div>
+                              <motion.div 
+                                className="role-fill" 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${item.percent}%` }}
+                                transition={{ delay: 0.8 + index * 0.1, duration: 1, ease: "easeOut" }}
+                              />
                             </div>
-                            <span className="role-count">{item.count}</span>
-                          </div>
+                            <motion.span 
+                              className="role-count"
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: 0.9 + index * 0.1 }}
+                            >
+                              {item.count}
+                            </motion.span>
+                          </motion.div>
                         ))}
                       </div>
-                    </div>
+                    </motion.div>
                   </div>
-                </div>
+                </motion.div>
 
                 {/* Recent Activity */}
                 <div className="recent-activity">
@@ -1155,21 +1427,29 @@ const AdminDashboard = () => {
                   </div>
                   <div className="activity-list">
                     {activityLoading && recentActivity.length === 0 ? (
-                      <div className="activity-loading">
-                        <div className="loading-spinner"></div>
-                        <span>Loading activity feed...</span>
-                      </div>
+                      <SkeletonLoader type="card" count={5} />
                     ) : recentActivity.length === 0 ? (
                       <div className="activity-empty">
                         <Activity size={24} />
                         <span>No recent activity</span>
                       </div>
                     ) : (
-                      recentActivity.slice(0, 10).map(activity => (
-                        <div 
+                      recentActivity.slice(0, 10).map((activity, index) => (
+                        <motion.div 
                           key={activity.id} 
                           className={`activity-item ${activity.status} ${activity.severity ? `${activity.severity}-severity` : ''}`}
                           data-type={activity.type}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ 
+                            delay: index * 0.05,
+                            duration: 0.4,
+                            ease: "easeOut"
+                          }}
+                          whileHover={{ 
+                            x: 4,
+                            transition: { duration: 0.2 }
+                          }}
                         >
                           <div className="activity-icon">
                             {activity.icon === 'user-plus' && <UserPlus size={16} />}
@@ -1279,7 +1559,7 @@ const AdminDashboard = () => {
                             </div>
                           )}
                         </div>
-                        </div>
+                        </motion.div>
                       ))
                     )}
                   </div>
@@ -1288,9 +1568,23 @@ const AdminDashboard = () => {
                 {/* Active Alerts */}
                 <div className="active-alerts">
                   <h3>Active Alerts</h3>
-                  <div className="alerts-grid">
-                    {alerts.filter(alert => alert.status === 'active').map(alert => (
-                      <div key={alert.id} className={`alert-card ${alert.severity}`}>
+                  <motion.div 
+                    className="alerts-grid"
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="visible"
+                  >
+                    {alerts.filter(alert => alert.status === 'active').map((alert, index) => (
+                      <motion.div 
+                        key={alert.id} 
+                        className={`alert-card ${alert.severity}`}
+                        variants={itemVariants}
+                        whileHover={{ 
+                          scale: 1.02,
+                          y: -2,
+                          transition: { duration: 0.2 }
+                        }}
+                      >
                         <div className="alert-header">
                           <div className="alert-icon">
                             {alert.type === 'security' && <Shield size={20} />}
@@ -1315,40 +1609,45 @@ const AdminDashboard = () => {
                             <button className="btn-secondary">View Details</button>
                           </div>
                         </div>
-                      </div>
+                      </motion.div>
                     ))}
-                  </div>
+                  </motion.div>
                 </div>
 
                 {/* Quick Actions */}
                 <div className="quick-actions">
                   <h3>Quick Actions</h3>
-                  <div className="actions-grid">
-                    <button className="action-card" onClick={() => navigate('/admin/add-service-provider')}>
-                      <UserPlus size={24} />
-                      <span>Add Service Provider</span>
-                    </button>
-                    <button className="action-card" onClick={() => navigate('/admin/categories')}>
-                      <Settings size={24} />
-                      <span>Manage Categories</span>
-                    </button>
-                    <button className="action-card" onClick={() => navigate('/admin/add-service')}>
-                      <Settings size={24} />
-                      <span>Add Service</span>
-                    </button>
-                    <button className="action-card" onClick={() => navigate('/admin/categories')}>
-                      <Database size={24} />
-                      <span>Manage Categories</span>
-                    </button>
-                    <button className="action-card" onClick={() => navigate('/admin/assign-provider')}>
-                      <Target size={24} />
-                      <span>Assign Provider</span>
-                    </button>
-                    <button className="action-card" onClick={() => navigate('/admin/create-bill')}>
-                      <DollarSign size={24} />
-                      <span>Create Bill</span>
-                    </button>
-                  </div>
+                  <motion.div 
+                    className="actions-grid"
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="visible"
+                  >
+                    {[
+                      { icon: UserPlus, label: 'Add Service Provider', path: '/admin/add-service-provider' },
+                      { icon: Settings, label: 'Manage Categories', path: '/admin/categories' },
+                      { icon: Settings, label: 'Add Service', path: '/admin/add-service' },
+                      { icon: Database, label: 'Manage Categories', path: '/admin/categories' },
+                      { icon: Target, label: 'Assign Provider', path: '/admin/assign-provider' },
+                      { icon: IndianRupee, label: 'Create Bill', path: '/admin/create-bill' }
+                    ].map((action, index) => (
+                      <motion.button
+                        key={index}
+                        className="action-card"
+                        onClick={() => navigate(action.path)}
+                        variants={itemVariants}
+                        whileHover={{ 
+                          scale: 1.05,
+                          y: -4,
+                          transition: { type: "spring", stiffness: 400, damping: 17 }
+                        }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <action.icon size={24} />
+                        <span>{action.label}</span>
+                      </motion.button>
+                    ))}
+                  </motion.div>
                 </div>
               </motion.div>
             )}
@@ -1430,8 +1729,22 @@ const AdminDashboard = () => {
                         </div>
                       </div>
                     ) : (
-                      managedUsersFilteredSorted.map(user => (
-                      <div key={user.id} className="table-row">
+                      managedUsersFilteredSorted.map((user, index) => (
+                      <motion.div 
+                        key={user.id} 
+                        className="table-row"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ 
+                          delay: index * 0.03,
+                          duration: 0.3,
+                          ease: "easeOut"
+                        }}
+                        whileHover={{ 
+                          backgroundColor: "rgba(79, 156, 249, 0.03)",
+                          transition: { duration: 0.2 }
+                        }}
+                      >
                         <div className="table-cell user-info" onClick={() => navigate(`/admin/users/${user.id}`)} style={{ cursor: 'pointer' }}>
                           <div className={`user-avatar ${user.providerProfileImage ? 'has-profile-image' : ''}`}>
                             {(() => {
@@ -1609,8 +1922,8 @@ const AdminDashboard = () => {
                           })()}
                           
                         </div>
-                      </div>
-                    ))
+                      </motion.div>
+                      ))
                     )}
                   </div>
                 </div>
@@ -1746,7 +2059,7 @@ const AdminDashboard = () => {
                     variants={itemVariants}
                   >
                     <div className="form-card-icon">
-                      <DollarSign size={32} />
+                      <IndianRupee size={32} />
                     </div>
                     <div className="form-card-content">
                       <h3>Billing Setup (Create Bill)</h3>
@@ -1899,7 +2212,7 @@ const AdminDashboard = () => {
                             <span className="text-muted">{inv.customer} • {inv.date}</span>
                           </div>
                           <div className="list-actions">
-                            <span className="amount">${inv.amount.toFixed(2)}</span>
+                            <span className="amount">{inv.amount.toFixed(2)}</span>
                             <span className={`status-badge ${inv.status}`}>{inv.status}</span>
                           </div>
                         </div>
@@ -1916,7 +2229,7 @@ const AdminDashboard = () => {
                             <span className="text-muted">{po.date}</span>
                           </div>
                           <div className="list-actions">
-                            <span className="amount">${po.amount.toFixed(2)}</span>
+                            <span className="amount">{po.amount.toFixed(2)}</span>
                             <span className={`status-badge ${po.status}`}>{po.status}</span>
                           </div>
                         </div>
@@ -1933,7 +2246,7 @@ const AdminDashboard = () => {
                             <span className="text-muted">{tx.type} • {tx.ref}</span>
                           </div>
                           <div className="list-actions">
-                            <span className="amount">${tx.amount.toFixed(2)}</span>
+                            <span className="amount">{tx.amount.toFixed(2)}</span>
                             <span className={`status-badge ${tx.status}`}>{tx.status}</span>
                           </div>
                         </div>
@@ -2202,7 +2515,7 @@ const AdminDashboard = () => {
                     <div className="analytics-card">
                       <h4>Revenue Growth</h4>
                       <div className="analytics-value">
-                        <span className="current">${(analytics.revenueGrowth?.current || 0).toLocaleString()}</span>
+                        <span className="current">{(analytics.revenueGrowth?.current || 0).toLocaleString()}</span>
                         <span className="change positive">{analytics.revenueGrowth?.change || "+0%"}</span>
                       </div>
                       <div className="analytics-chart">

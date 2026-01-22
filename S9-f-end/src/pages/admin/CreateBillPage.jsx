@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Save, DollarSign, Calendar, User, FileText } from 'lucide-react';
+import { Save, IndianRupee, Calendar, User, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/AdminLayout';
 import { validationUtils } from '../../utils/validation';
@@ -490,24 +490,24 @@ const CreateBillPage = () => {
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                         <span>Service Amount:</span>
-                        <span>${calculations.baseAmount.toFixed(2)}</span>
+                        <span>₹{calculations.baseAmount.toFixed(2)}</span>
                       </div>
                       {calculations.taxAmount > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: '#64748b' }}>
                           <span>Tax ({formData.taxRate}%):</span>
-                          <span>+${calculations.taxAmount.toFixed(2)}</span>
+                          <span>+₹{calculations.taxAmount.toFixed(2)}</span>
                         </div>
                       )}
                       {calculations.discountAmount > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: '#059669' }}>
                           <span>Discount:</span>
-                          <span>-${calculations.discountAmount.toFixed(2)}</span>
+                          <span>-₹{calculations.discountAmount.toFixed(2)}</span>
                         </div>
                       )}
                       <hr style={{ margin: '0.5rem 0', border: 'none', borderTop: '1px solid #e2e8f0' }} />
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', fontSize: '1.1rem' }}>
                         <span>Total Amount:</span>
-                        <span>${calculations.total.toFixed(2)}</span>
+                        <span>₹{calculations.total.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>

@@ -258,12 +258,48 @@
   }
 }
 
-/* Loading Animations */
-.loading-spinner {
-  animation: spin 1s linear infinite;
+/* Loading Animations - Professional Enhanced */
+/* Note: Only apply to simple loading-spinner divs, not the LoadingSpinner component */
+.loading-spinner:not(.professional):not([class*="spinner-"]) {
+  width: 40px;
+  height: 40px;
+  position: relative;
+  display: inline-block;
 }
 
-@keyframes spin {
+.loading-spinner:not(.professional):not([class*="spinner-"])::before,
+.loading-spinner:not(.professional):not([class*="spinner-"])::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  border-style: solid;
+  border-width: 3px;
+  top: 0;
+  left: 0;
+}
+
+.loading-spinner:not(.professional):not([class*="spinner-"])::before {
+  width: 100%;
+  height: 100%;
+  border-color: rgba(59, 130, 246, 0.2);
+  border-top-color: #3b82f6;
+  animation: professionalSpin 1.2s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+}
+
+.loading-spinner:not(.professional):not([class*="spinner-"])::after {
+  width: 60%;
+  height: 60%;
+  top: 20%;
+  left: 20%;
+  border-color: rgba(139, 92, 246, 0.2);
+  border-right-color: #8b5cf6;
+  animation: professionalSpin 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite reverse;
+  animation-delay: -0.3s;
+  opacity: 0.8;
+}
+
+@keyframes professionalSpin {
   from {
     transform: rotate(0deg);
   }
