@@ -1,0 +1,52 @@
+.logo-container {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.logo-container:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+.logo-container svg {
+  transition: all 0.3s ease;
+}
+
+.logo-container:hover svg {
+  transform: scale(1.02);
+}
+
+/* Animation for the flowing lines */
+.logo-container svg path {
+  animation: flow 3s ease-in-out infinite;
+}
+
+.logo-container svg path:nth-child(4) {
+  animation-delay: 0.5s;
+}
+
+@keyframes flow {
+  0%, 100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 0.7;
+    transform: translateX(1px);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .logo-container {
+    transform: scale(0.9);
+  }
+}
+
+@media (max-width: 480px) {
+  .logo-container {
+    transform: scale(0.8);
+  }
+} 

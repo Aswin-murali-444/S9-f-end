@@ -1,0 +1,790 @@
+/* Editable Profile Sections Styles */
+.editable-profile-sections {
+  width: 100%;
+}
+
+/* Profile Photo Section */
+.profile-photo-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.profile-photo-container {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.profile-photo-wrapper {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+/* Elevated avatar effect */
+.avatar-elevated {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25), inset 0 0 0 6px rgba(255, 255, 255, 0.15);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.avatar-elevated:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.3), inset 0 0 0 6px rgba(255, 255, 255, 0.2);
+}
+
+.profile-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.profile-photo-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+}
+
+.photo-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 50%;
+}
+
+.profile-photo-wrapper:hover .photo-overlay {
+  opacity: 1;
+}
+
+.photo-input {
+  display: none;
+}
+
+.photo-upload-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: #374151;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+}
+
+.photo-upload-btn:hover {
+  background: white;
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.photo-upload-btn span {
+  white-space: nowrap;
+}
+
+.profile-photo-info {
+  flex: 1;
+}
+
+.profile-photo-info h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 1rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.profile-subtitle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.9);
+  margin-top: -0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.profile-subtitle svg {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dot-sep {
+  opacity: 0.85;
+}
+
+.profile-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.badge.subtle {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.profile-contact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.875rem;
+}
+
+.contact-item svg {
+  color: rgba(255, 255, 255, 0.8);
+  flex-shrink: 0;
+}
+
+.contact-item span {
+  color: white;
+  font-weight: 500;
+}
+
+.profile-status-text {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #10f981;
+  font-weight: 500;
+  font-size: 0.875rem;
+  background: rgba(16, 249, 129, 0.2);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(16, 249, 129, 0.3);
+}
+
+.profile-status-text svg {
+  color: #10f981;
+  flex-shrink: 0;
+}
+
+/* Service Provider Information */
+.service-provider-info {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.provider-role {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.provider-role svg {
+  color: rgba(255, 255, 255, 0.8);
+  flex-shrink: 0;
+}
+
+.provider-detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.provider-detail:last-child {
+  margin-bottom: 0;
+}
+
+.detail-label {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.8rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.detail-value {
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: right;
+  flex: 1;
+  margin-left: 1rem;
+}
+
+/* Responsive Design for Profile Photo */
+@media (max-width: 768px) {
+  .profile-photo-container {
+    flex-direction: column;
+    text-align: center;
+    gap: 1rem;
+  }
+  
+  .profile-photo-wrapper {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .profile-photo-info h3 {
+    font-size: 1.25rem;
+  }
+  
+  .service-provider-info {
+    margin: 0.75rem 0;
+    padding: 0.75rem;
+  }
+  
+  .provider-detail {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  
+  .detail-value {
+    text-align: left;
+    margin-left: 0;
+  }
+}
+
+.editable-profile-sections.loading,
+.editable-profile-sections.error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  color: #6b7280;
+}
+
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.loading-spinner .animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Inactive Profile State */
+.inactive-profile {
+  padding: 2rem;
+}
+
+.inactive-profile-content {
+  text-align: center;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.inactive-icon {
+  margin-bottom: 1.5rem;
+  color: #f59e0b;
+}
+
+.inactive-profile-content h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 1rem;
+}
+
+.inactive-profile-content p {
+  color: #6b7280;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.inactive-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+/* Form Sections */
+.form-sections-enhanced {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.form-section-enhanced {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.section-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  color: #6b7280;
+}
+
+.section-header h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+  flex: 1;
+}
+
+.completion-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #10b981;
+  color: white;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Form Grid */
+.form-grid-enhanced {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.form-group-enhanced {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group-enhanced label {
+  font-weight: 500;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.input-wrapper svg {
+  color: #374151 !important;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  opacity: 1;
+  display: block;
+}
+
+/* Ensure all icons in form fields are visible */
+.form-group-enhanced svg {
+  color: #374151 !important;
+  opacity: 1 !important;
+  display: block !important;
+  width: 20px !important;
+  height: 20px !important;
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  border-radius: 4px !important;
+  padding: 2px !important;
+  z-index: 5 !important;
+  position: relative !important;
+}
+
+/* Icon container - perfect centering inside the square */
+.icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background-color: rgba(59, 130, 246, 0.1);
+  border-radius: 4px;
+  border: 10px solid rgba(59, 130, 246, 0.2);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.icon-container svg {
+  color: #e0e2e6;
+  width: 20px;
+  height: 20px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 0;
+}
+
+/* Field containers - perfect vertical alignment */
+.editable-field-container,
+.readonly-field-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  height: 40px;
+  min-height: 40px;
+}
+
+/* Special alignment for readonly fields (no edit button) */
+.readonly-field-container {
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.readonly-field-container .icon-container {
+  margin-right: 0.75rem;
+  align-self: center;
+}
+
+/* Ensure email field icon is perfectly aligned */
+.readonly-field-container .icon-container svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 0;
+}
+
+/* Editable Field Styles - cleaned up */
+
+.editable-field-container svg {
+  color: #374151 !important;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  opacity: 1;
+  display: block;
+}
+
+.editable-input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 2px solid #3b82f6;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  background: white;
+  transition: all 0.2s ease;
+  height: 40px;
+  box-sizing: border-box;
+  line-height: 1;
+}
+
+.readonly-input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 2px solid #d1d5db;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  background: #f9fafb;
+  color: #6b7280;
+  cursor: not-allowed;
+  height: 40px;
+  box-sizing: border-box;
+  line-height: 1;
+  align-self: center;
+}
+
+.readonly-input:focus {
+  outline: none;
+  border-color: #d1d5db;
+}
+
+.editable-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.field-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.save-btn,
+.cancel-btn,
+.edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 40px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.save-btn svg,
+.cancel-btn svg,
+.edit-btn svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 0;
+}
+
+.save-btn {
+  background: #10b981;
+  color: white;
+}
+
+.save-btn:hover {
+  background: #059669;
+}
+
+.cancel-btn {
+  background: #ef4444;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background: #dc2626;
+}
+
+.edit-btn {
+  background: #3b82f6;
+  color: white;
+  border: 1px solid #3b82f6;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+}
+
+.edit-btn:hover {
+  background: #2563eb;
+  color: white;
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+  transform: translateY(-1px);
+}
+
+/* Help Text */
+.help-text {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+/* Buttons */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: #2563eb;
+}
+
+.btn-primary:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.btn-large {
+  padding: 1rem 2rem;
+  font-size: 1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .form-grid-enhanced {
+    grid-template-columns: 1fr;
+  }
+  
+  .form-section-enhanced {
+    padding: 1rem;
+  }
+  
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .completion-badge {
+    align-self: flex-start;
+  }
+}
+
+/* Animation for field transitions */
+.editable-field-container,
+.readonly-field-container {
+  transition: all 0.2s ease;
+}
+
+.form-group-enhanced {
+  transition: all 0.2s ease;
+}
+
+/* Status-specific styling */
+.completion-badge.pending {
+  background: #f59e0b;
+}
+
+.completion-badge.incomplete {
+  background: #6b7280;
+}
+
+.completion-badge.rejected {
+  background: #ef4444;
+}
+
+.completion-badge.suspended {
+  background: #8b5cf6;
+}
+
+/* Validation Styles */
+.validation-message {
+  margin-top: 0.5rem;
+  min-height: 1.25rem;
+}
+
+.error-text {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #ef4444;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.success-message {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #22c55e;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.info-message {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Input validation states */
+.editable-input.error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+}
+
+.editable-input.error:focus {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
+}
+
+.editable-input.success {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2) !important;
+}
+
+.editable-input.success:focus {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2) !important;
+}
+
+/* Disabled save button when validation fails */
+.save-btn:disabled {
+  background: #9ca3af !important;
+  cursor: not-allowed !important;
+  opacity: 0.6;
+}
+
+.save-btn:disabled:hover {
+  background: #9ca3af !important;
+  transform: none !important;
+}

@@ -1,0 +1,156 @@
+.dashboard-router {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.dashboard-router .error-message {
+  text-align: center;
+  padding: 3rem;
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border-radius: 16px;
+  border: 1px solid #fecaca;
+}
+
+.dashboard-router .error-message h2 {
+  color: #dc2626;
+  margin-bottom: 1rem;
+  font-size: 1.875rem;
+  font-weight: 700;
+}
+
+.dashboard-router .error-message p {
+  color: #7f1d1d;
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.dashboard-router .dashboard-info {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 20px;
+  padding: 3rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e2e8f0;
+}
+
+.dashboard-router .dashboard-info h2 {
+  color: #1e293b;
+  font-size: 2.25rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.dashboard-router .role-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dashboard-router .dashboard-actions {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.dashboard-router .primary-button {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+}
+
+.dashboard-router .primary-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4);
+}
+
+.dashboard-router .primary-button:active {
+  transform: translateY(0);
+}
+
+.dashboard-router .role-specific-info {
+  margin-top: 2rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.dashboard-router .info-card {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border-radius: 16px;
+  padding: 2rem;
+  border: 1px solid #cbd5e1;
+  transition: all 0.3s ease;
+}
+
+.dashboard-router .info-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-router .info-card h3 {
+  color: #1e293b;
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.dashboard-router .info-card p {
+  color: #475569;
+  font-size: 1rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .dashboard-router {
+    padding: 1rem;
+  }
+  
+  .dashboard-router .dashboard-info {
+    padding: 2rem 1.5rem;
+  }
+  
+  .dashboard-router .dashboard-info h2 {
+    font-size: 1.875rem;
+  }
+  
+  .dashboard-router .role-specific-info {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .dashboard-router .info-card {
+    padding: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-router .dashboard-info {
+    padding: 1.5rem 1rem;
+  }
+  
+  .dashboard-router .dashboard-info h2 {
+    font-size: 1.5rem;
+  }
+  
+  .dashboard-router .primary-button {
+    padding: 0.875rem 1.5rem;
+    font-size: 1rem;
+  }
+}
