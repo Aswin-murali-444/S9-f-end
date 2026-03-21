@@ -388,18 +388,6 @@
   flex: 1;
 }
 
-.section-title-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  flex: 1;
-}
-
-.hosted-sync-token {
-  font-size: 0.72rem;
-  color: #64748b;
-  font-weight: 500;
-}
 
 .completion-badge {
   display: flex;

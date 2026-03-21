@@ -731,10 +731,7 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
             <div className="section-icon">
               <Briefcase size={20} />
             </div>
-            <div className="section-title-wrap">
-              <h3>Service Details</h3>
-              <span className="hosted-sync-token">Sync token: hosted-check-21mar-v1</span>
-            </div>
+            <h3>Service Details</h3>
             <span className="completion-badge">
               <CheckCircle size={16} />
               Active
