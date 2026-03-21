@@ -4,7 +4,11 @@ const API_BASE_URL = resolveApiBaseUrl();
 
 class AIAssistantService {
   constructor() {
-    this.baseUrl = `${API_BASE_URL}/api/ai-assistant`;
+    const normalizedBase = String(API_BASE_URL || '').replace(/\/$/, '');
+    const aiPath = normalizedBase.endsWith('/api') || normalizedBase === '/api'
+      ? '/ai-assistant'
+      : '/api/ai-assistant';
+    this.baseUrl = `${normalizedBase}${aiPath}`;
   }
 
   async sendMessage(message, conversationHistory = [], imageData = null) {

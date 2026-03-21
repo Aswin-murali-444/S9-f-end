@@ -1,8 +1,11 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 
 class AIAssistantService {
   constructor() {
-    this.baseUrl = `${API_BASE_URL}/api/ai-assistant`;
+    const aiPath = API_BASE_URL.endsWith('/api') || API_BASE_URL === '/api'
+      ? '/ai-assistant'
+      : '/api/ai-assistant';
+    this.baseUrl = `${API_BASE_URL}${aiPath}`;
   }
 
   async sendMessage(message, conversationHistory = [], imageData = null) {
