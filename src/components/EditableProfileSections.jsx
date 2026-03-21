@@ -323,7 +323,7 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
         <div className="input-wrapper">
           {isEditing ? (
             <div className="editable-field-container">
-              <div className="icon-container">
+              <div className="eps-icon-container">
                 <Icon size={20} />
               </div>
               <input
@@ -336,7 +336,7 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
               />
               <div className="field-actions">
                 <button
-                  className="save-btn"
+                  className="eps-save-btn"
                   onClick={() => handleFieldSave(fieldName)}
                   disabled={saving || hasError}
                   title={hasError ? 'Fix validation errors first' : 'Save changes'}
@@ -344,7 +344,7 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
                   <CheckCircle size={16} />
                 </button>
                 <button
-                  className="cancel-btn"
+                  className="eps-cancel-btn"
                   onClick={() => handleFieldCancel(fieldName)}
                   disabled={saving}
                   title="Cancel changes"
@@ -355,7 +355,7 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
             </div>
           ) : (
             <div className="readonly-field-container">
-              <div className="icon-container">
+              <div className="eps-icon-container">
                 <Icon size={20} />
               </div>
               <input
@@ -365,7 +365,7 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
                 className="readonly-input"
               />
               <button
-                className="edit-btn"
+                className="eps-edit-btn"
                 onClick={() => handleFieldEdit(fieldName, currentValue)}
                 title="Edit field"
               >
@@ -404,10 +404,7 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
   if (loading) {
     return (
       <div className="editable-profile-sections loading">
-        <div className="loading-spinner">
-          <Clock size={24} className="animate-spin" />
-          <span>Loading profile data...</span>
-        </div>
+        <span>Loading profile data...</span>
       </div>
     );
   }
@@ -627,7 +624,7 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
             <div className="form-group-enhanced">
               <label>Service Category</label>
               <div className="input-wrapper">
-                <div className="icon-container">
+                <div className="eps-icon-container">
                   <Package size={20} />
                 </div>
                 <input
@@ -642,7 +639,7 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
             <div className="form-group-enhanced">
               <label>Specific Service</label>
               <div className="input-wrapper">
-                <div className="icon-container">
+                <div className="eps-icon-container">
                   <Target size={20} />
                 </div>
                 <input

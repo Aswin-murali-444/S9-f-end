@@ -449,7 +449,8 @@
 }
 
 /* Icon container - perfect centering inside the square */
-.icon-container {
+.icon-container,
+.eps-icon-container {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -462,7 +463,8 @@
   position: relative;
 }
 
-.icon-container svg {
+.icon-container svg,
+.eps-icon-container svg {
   color: #1e3a8a;
   width: 18px;
   height: 18px;
@@ -473,7 +475,9 @@
 }
 
 .editable-field-container .icon-container svg,
-.readonly-field-container .icon-container svg {
+.readonly-field-container .icon-container svg,
+.editable-field-container .eps-icon-container svg,
+.readonly-field-container .eps-icon-container svg {
   position: static !important;
   top: auto !important;
   left: auto !important;
@@ -502,13 +506,15 @@
   align-items: center;
 }
 
-.readonly-field-container .icon-container {
+.readonly-field-container .icon-container,
+.readonly-field-container .eps-icon-container {
   margin-right: 0.75rem;
   align-self: center;
 }
 
 /* Ensure email field icon is perfectly aligned */
-.readonly-field-container .icon-container svg {
+.readonly-field-container .icon-container svg,
+.readonly-field-container .eps-icon-container svg {
   position: static;
   top: auto;
   left: auto;
@@ -574,7 +580,10 @@
 
 .save-btn,
 .cancel-btn,
-.edit-btn {
+.edit-btn,
+.eps-save-btn,
+.eps-cancel-btn,
+.eps-edit-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -590,7 +599,10 @@
 
 .save-btn svg,
 .cancel-btn svg,
-.edit-btn svg {
+.edit-btn svg,
+.eps-save-btn svg,
+.eps-cancel-btn svg,
+.eps-edit-btn svg {
   position: static;
   top: auto;
   left: auto;
@@ -601,34 +613,41 @@
   line-height: 1;
 }
 
-.readonly-field-container .edit-btn {
+.readonly-field-container .edit-btn,
+.readonly-field-container .eps-edit-btn {
   align-self: center;
 }
 
-.readonly-field-container .edit-btn svg {
+.readonly-field-container .edit-btn svg,
+.readonly-field-container .eps-edit-btn svg {
   width: 16px;
   height: 16px;
 }
 
-.save-btn {
+.save-btn,
+.eps-save-btn {
   background: #10b981;
   color: white;
 }
 
-.save-btn:hover {
+.save-btn:hover,
+.eps-save-btn:hover {
   background: #059669;
 }
 
-.cancel-btn {
+.cancel-btn,
+.eps-cancel-btn {
   background: #ef4444;
   color: white;
 }
 
-.cancel-btn:hover {
+.cancel-btn:hover,
+.eps-cancel-btn:hover {
   background: #dc2626;
 }
 
-.edit-btn {
+.edit-btn,
+.eps-edit-btn {
   background: #2563eb;
   color: white;
   border: 1px solid #1d4ed8;
@@ -637,7 +656,8 @@
   flex-shrink: 0;
 }
 
-.edit-btn:hover {
+.edit-btn:hover,
+.eps-edit-btn:hover {
   background: #2563eb;
   color: white;
   box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
@@ -645,7 +665,8 @@
 }
 
 /* Hard-scope field icon and pen alignment to avoid global CSS collisions */
-.editable-profile-sections .form-group-enhanced .icon-container {
+.editable-profile-sections .form-group-enhanced .icon-container,
+.editable-profile-sections .form-group-enhanced .eps-icon-container {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -654,7 +675,8 @@
   position: relative !important;
 }
 
-.editable-profile-sections .form-group-enhanced .icon-container svg {
+.editable-profile-sections .form-group-enhanced .icon-container svg,
+.editable-profile-sections .form-group-enhanced .eps-icon-container svg {
   width: 18px !important;
   height: 18px !important;
   position: static !important;
@@ -668,7 +690,9 @@
 }
 
 .editable-profile-sections .readonly-field-container .edit-btn,
-.editable-profile-sections .editable-field-container .edit-btn {
+.editable-profile-sections .editable-field-container .edit-btn,
+.editable-profile-sections .readonly-field-container .eps-edit-btn,
+.editable-profile-sections .editable-field-container .eps-edit-btn {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -677,7 +701,9 @@
 }
 
 .editable-profile-sections .readonly-field-container .edit-btn svg,
-.editable-profile-sections .editable-field-container .edit-btn svg {
+.editable-profile-sections .editable-field-container .edit-btn svg,
+.editable-profile-sections .readonly-field-container .eps-edit-btn svg,
+.editable-profile-sections .editable-field-container .eps-edit-btn svg {
   width: 16px !important;
   height: 16px !important;
   position: static !important;
