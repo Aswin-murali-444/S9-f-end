@@ -6121,11 +6121,26 @@ input[type="text"][placeholder*="Search" i]::placeholder {
 }
 
 .events-table .table-header {
-  grid-template-columns: 1.5fr 1fr 1.5fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: 1.4fr 1.2fr 1.4fr 1fr 0.8fr 0.9fr 1.1fr;
 }
 
 .events-table .table-row {
-  grid-template-columns: 1.5fr 1fr 1.5fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: 1.4fr 1.2fr 1.4fr 1fr 0.8fr 0.9fr 1.1fr;
+}
+
+.events-table .table-cell.actions {
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+}
+
+.events-table .table-cell.actions .btn-secondary,
+.events-table .table-cell.actions .btn-primary {
+  height: 34px;
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 0.75rem;
+  border-radius: 8px;
+  white-space: nowrap;
 }
 
 .event-type {
