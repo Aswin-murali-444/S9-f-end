@@ -1,6 +1,7 @@
 // API service for backend communication
 import { resolveApiBaseUrl } from '../lib/apiBaseUrl.js';
 import { supabase } from '../lib/supabase.js';
+import { PRODUCTION_API_FALLBACK } from '../lib/apiBaseUrl.js';
 
 const API_BASE_URL = resolveApiBaseUrl();
 const normalizeBase = (base) => String(base || '').replace(/\/$/, '');
@@ -9,6 +10,15 @@ const toggleApiPrefix = (base) => {
   const normalized = normalizeBase(base);
   if (normalized.endsWith('/api')) return normalized.slice(0, -4);
   return `${normalized}/api`;
+};
+const isNonLocalBrowser = () => {
+  if (typeof window === 'undefined') return false;
+  const host = String(window.location?.hostname || '').toLowerCase();
+  return host !== 'localhost' && host !== '127.0.0.1';
+};
+const isLocalTarget = (urlOrBase) => {
+  const value = String(urlOrBase || '').toLowerCase();
+  return value.includes('localhost') || value.includes('127.0.0.1');
 };
 
 // Debug logging for production troubleshooting
@@ -23,7 +33,11 @@ if (typeof window !== 'undefined') {
 
 class ApiService {
   async request(endpoint, options = {}) {
-    const url = joinUrl(API_BASE_URL, endpoint);
+    const initialUrl = joinUrl(API_BASE_URL, endpoint);
+    // Hard guard: never call localhost from deployed/browser non-local environments.
+    const url = isNonLocalBrowser() && isLocalTarget(initialUrl)
+      ? joinUrl(PRODUCTION_API_FALLBACK, endpoint)
+      : initialUrl;
     
     const config = {
       headers: {

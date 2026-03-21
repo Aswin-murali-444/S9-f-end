@@ -21,7 +21,7 @@ export function resolveApiBaseUrl() {
   if (envBase) {
     const normalizedEnv = String(envBase).replace(/\/$/, '');
     const envHost = extractHost(normalizedEnv);
-    const envTargetsLocal = envHost && isLocalhost(envHost);
+    const envTargetsLocal = (envHost && isLocalhost(envHost)) || isLocalhost(normalizedEnv) || /localhost|127\.0\.0\.1/i.test(normalizedEnv);
     // Guard against accidental production config pointing to localhost.
     if (envTargetsLocal && !browserIsLocal) {
       return PRODUCTION_API_FALLBACK;
