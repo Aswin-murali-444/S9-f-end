@@ -4710,6 +4710,10 @@ input[type="text"][placeholder*="Search" i]::placeholder {
   border: 1px solid rgba(79, 156, 249, 0.18);
 }
 
+.feedback-single-column {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .feedback-inbox-header {
   display: flex;
   align-items: center;
@@ -4727,16 +4731,56 @@ input[type="text"][placeholder*="Search" i]::placeholder {
 .feedback-message-row {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 0.9rem 1rem;
-  background: #f8fbff;
+  padding: 1rem 1.1rem;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
 }
 
 .feedback-message-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.4rem;
+}
+
+.feedback-sender-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.feedback-service-type {
+  font-size: 0.8rem;
+  color: #475569;
+  font-weight: 600;
+}
+
+.feedback-contact-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-bottom: 0.65rem;
+  color: #64748b;
+  font-size: 0.83rem;
+}
+
+.feedback-message-body {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.feedback-message-footer {
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: #64748b;
 }
 
 .table-row:last-child {
