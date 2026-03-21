@@ -524,7 +524,7 @@
   z-index: 1;
   position: relative;
   background: transparent;
-  padding: 10px;
+  padding: 0;
 }
 
 /* Icon container - perfect centering inside the square */
