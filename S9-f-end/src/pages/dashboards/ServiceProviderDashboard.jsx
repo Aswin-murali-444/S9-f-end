@@ -2226,76 +2226,62 @@ const ServiceProviderDashboard = () => {
                 </div>
               )}
 
-              {/* Team Information */}
-              <div className="content-section">
-                <div className="section-header">
-                  <h2>Your Team</h2>
-                  <div className="section-subtitle">
-                    <Users size={16} />
-                    <span>{teamMembers.length} team member{teamMembers.length !== 1 ? 's' : ''}</span>
-                  </div>
-                </div>
-                {teamMembers.length > 0 ? (
-                  <>
-                    <div className="team-grid">
-                      {teamMembers.slice(0, 4).map((member, index) => (
-                        <motion.div 
-                          key={member.id} 
-                          className="team-member-card"
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.1 }}
-                          whileHover={{ scale: 1.02 }}
-                        >
-                          <div className="member-avatar">
-                            {member.profile_photo_url ? (
-                              <img src={member.profile_photo_url} alt={member.name} />
-                            ) : (
-                              <User size={20} />
-                            )}
-                          </div>
-                          <div className="member-info">
-                            <h4>{member.name}</h4>
-                            <p>{member.role || 'Team Member'}</p>
-                            {member.specialization && (
-                              <p className="member-specialization">{member.specialization}</p>
-                            )}
-                            <div className="member-status">
-                              <div className={`status-dot ${member.status === 'active' ? 'active' : 'inactive'}`}></div>
-                              <span>{member.status === 'active' ? 'Active' : 'Inactive'}</span>
-                            </div>
-                            {member.experience_years > 0 && (
-                              <div className="member-experience">
-                                <span>{member.experience_years} years experience</span>
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      ))}
+              {/* Team Information: show only when team data exists */}
+              {(teamMembers.length > 0 || pendingTeamResponses.length > 0) && (
+                <div className="content-section">
+                  <div className="section-header">
+                    <h2>Your Team</h2>
+                    <div className="section-subtitle">
+                      <Users size={16} />
+                      <span>{teamMembers.length} team member{teamMembers.length !== 1 ? 's' : ''}</span>
                     </div>
-                    {teamMembers.length > 4 && (
-                      <div className="team-more">
-                        <button className="btn-outline">
-                          View All Team Members ({teamMembers.length})
-                          <ArrowRight size={16} />
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-                    <Users size={48} style={{ opacity: 0.5, marginBottom: '1rem' }} />
-                    <p>No team members yet</p>
-                    <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', color: '#94a3b8' }}>
-                      Add team members to collaborate on service requests.
-                    </p>
-                    <button className="btn-primary" style={{ marginTop: '1rem' }}>
-                      <Plus size={16} />
-                      Add Team Member
-                    </button>
                   </div>
-                )}
-              </div>
+                  <div className="team-grid">
+                    {teamMembers.slice(0, 4).map((member, index) => (
+                      <motion.div 
+                        key={member.id} 
+                        className="team-member-card"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        whileHover={{ scale: 1.02 }}
+                      >
+                        <div className="member-avatar">
+                          {member.profile_photo_url ? (
+                            <img src={member.profile_photo_url} alt={member.name} />
+                          ) : (
+                            <User size={20} />
+                          )}
+                        </div>
+                        <div className="member-info">
+                          <h4>{member.name}</h4>
+                          <p>{member.role || 'Team Member'}</p>
+                          {member.specialization && (
+                            <p className="member-specialization">{member.specialization}</p>
+                          )}
+                          <div className="member-status">
+                            <div className={`status-dot ${member.status === 'active' ? 'active' : 'inactive'}`}></div>
+                            <span>{member.status === 'active' ? 'Active' : 'Inactive'}</span>
+                          </div>
+                          {member.experience_years > 0 && (
+                            <div className="member-experience">
+                              <span>{member.experience_years} years experience</span>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                  {teamMembers.length > 4 && (
+                    <div className="team-more">
+                      <button className="btn-outline">
+                        View All Team Members ({teamMembers.length})
+                        <ArrowRight size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Recent Jobs */}
               <div className="content-section">
