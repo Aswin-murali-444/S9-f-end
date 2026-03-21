@@ -857,6 +857,11 @@ class ApiService {
     return this.request(`/admin/analytics-summary?days=${encodeURIComponent(days)}`);
   }
 
+  // Get payment insights for analytics tab (customer paid vs worker paid vs profit)
+  async getAdminPaymentInsights(days = 30) {
+    return this.request(`/admin/payment-insights?days=${encodeURIComponent(days)}`);
+  }
+
   // Get provider time off / leave for admin dashboard
   async getAdminProviderTimeOff() {
     return this.request('/admin/provider-time-off');

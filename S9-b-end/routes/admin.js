@@ -1385,6 +1385,124 @@ router.get('/analytics-summary', async (req, res) => {
   }
 });
 
+// GET /admin/payment-insights – customer paid vs worker paid vs company profit
+router.get('/payment-insights', async (req, res) => {
+  try {
+    const daysRaw = parseInt(req.query.days, 10);
+    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 7), 365) : 30;
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(start.getDate() - days);
+
+    const { data: bookingRows, error: bookingErr } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        created_at,
+        total_amount,
+        payment_status,
+        services(name)
+      `)
+      .gte('created_at', start.toISOString())
+      .lte('created_at', now.toISOString())
+      .limit(5000);
+
+    if (bookingErr) {
+      return res.status(500).json({ error: bookingErr.message || 'Failed to fetch payment insights bookings' });
+    }
+
+    const bookings = Array.isArray(bookingRows) ? bookingRows : [];
+    const bookingById = new Map(bookings.map((b) => [String(b.id), b]));
+
+    const isCustomerPaid = (status) => {
+      const s = String(status || '').toLowerCase();
+      return ['paid', 'completed', 'processing', 'success'].includes(s);
+    };
+    const customerPaidRows = bookings.filter((b) => isCustomerPaid(b.payment_status));
+
+    let payoutRows = [];
+    try {
+      const { data: pRows, error: pErr } = await supabase
+        .from('booking_worker_payouts')
+        .select('booking_id, worker_payout_amount, payout_status, paid_at')
+        .or(`paid_at.gte.${start.toISOString()},created_at.gte.${start.toISOString()}`)
+        .limit(5000);
+      if (!pErr && Array.isArray(pRows)) payoutRows = pRows;
+    } catch (_) {
+      payoutRows = [];
+    }
+
+    const isWorkerPaid = (status) => {
+      const s = String(status || '').toLowerCase();
+      return ['paid', 'completed', 'success', 'earned'].includes(s);
+    };
+
+    const byService = new Map();
+    let totalCustomerPaid = 0;
+    let totalWorkerPaid = 0;
+    let totalPendingWorkerPayout = 0;
+
+    const getBucket = (serviceName) => {
+      const key = serviceName || 'Unknown Service';
+      if (!byService.has(key)) {
+        byService.set(key, {
+          serviceName: key,
+          jobsCount: 0,
+          customerPaid: 0,
+          workerPaid: 0
+        });
+      }
+      return byService.get(key);
+    };
+
+    customerPaidRows.forEach((b) => {
+      const serviceName = b?.services?.name || 'Unknown Service';
+      const amt = Number(b.total_amount || 0);
+      const bucket = getBucket(serviceName);
+      bucket.jobsCount += 1;
+      bucket.customerPaid += amt;
+      totalCustomerPaid += amt;
+    });
+
+    payoutRows.forEach((p) => {
+      const b = bookingById.get(String(p.booking_id));
+      const serviceName = b?.services?.name || 'Unknown Service';
+      const amt = Number(p.worker_payout_amount || 0);
+      const bucket = getBucket(serviceName);
+      if (isWorkerPaid(p.payout_status)) {
+        bucket.workerPaid += amt;
+        totalWorkerPaid += amt;
+      } else {
+        totalPendingWorkerPayout += amt;
+      }
+    });
+
+    const rows = Array.from(byService.values())
+      .map((r) => {
+        const companyProfit = r.customerPaid - r.workerPaid;
+        const marginPct = r.customerPaid > 0 ? (companyProfit / r.customerPaid) * 100 : 0;
+        return { ...r, companyProfit, marginPct };
+      })
+      .sort((a, b) => b.customerPaid - a.customerPaid);
+
+    return res.json({
+      success: true,
+      data: {
+        totals: {
+          customerPaid: totalCustomerPaid,
+          workerPaid: totalWorkerPaid,
+          pendingWorkerPayout: totalPendingWorkerPayout,
+          companyProfit: totalCustomerPaid - totalWorkerPaid
+        },
+        byService: rows
+      }
+    });
+  } catch (err) {
+    console.error('Admin payment-insights error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to fetch payment insights' });
+  }
+});
+
 // GET /admin/allocations – unified view of individual and team assignments
 router.get('/allocations', async (req, res) => {
   try {

@@ -608,95 +608,11 @@ const AdminDashboard = () => {
     return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
   };
 
-  const computePaymentInsights = (billingData) => {
-    const customerPayments = Array.isArray(billingData?.customer_payments) ? billingData.customer_payments : [];
-    const providerPayouts = Array.isArray(billingData?.provider_payouts) ? billingData.provider_payouts : [];
-
-    const customerByBooking = new Map();
-    customerPayments.forEach((p) => {
-      customerByBooking.set(String(p.booking_id), p);
-    });
-
-    const isWorkerPaidStatus = (status) => {
-      const s = String(status || '').toLowerCase();
-      return ['paid', 'completed', 'success', 'earned'].includes(s);
-    };
-
-    const serviceAgg = new Map();
-    let customerPaidTotal = 0;
-    let workerPaidTotal = 0;
-    let pendingWorkerPayout = 0;
-
-    customerPayments.forEach((p) => {
-      const service = p.service_name || 'Unknown Service';
-      const amount = Number(p.total_amount || 0);
-      customerPaidTotal += amount;
-
-      if (!serviceAgg.has(service)) {
-        serviceAgg.set(service, {
-          serviceName: service,
-          jobsCount: 0,
-          customerPaid: 0,
-          workerPaid: 0
-        });
-      }
-      const row = serviceAgg.get(service);
-      row.jobsCount += 1;
-      row.customerPaid += amount;
-    });
-
-    providerPayouts.forEach((p) => {
-      const payoutAmount = Number(p.amount || 0);
-      const bookingId = String(p.booking_id || '');
-      const linkedCustomerPayment = customerByBooking.get(bookingId);
-      const service = linkedCustomerPayment?.service_name || p.service_name || 'Unknown Service';
-
-      if (!serviceAgg.has(service)) {
-        serviceAgg.set(service, {
-          serviceName: service,
-          jobsCount: 0,
-          customerPaid: 0,
-          workerPaid: 0
-        });
-      }
-      const row = serviceAgg.get(service);
-
-      if (isWorkerPaidStatus(p.status)) {
-        row.workerPaid += payoutAmount;
-        workerPaidTotal += payoutAmount;
-      } else {
-        pendingWorkerPayout += payoutAmount;
-      }
-    });
-
-    const byService = Array.from(serviceAgg.values())
-      .map((row) => {
-        const companyProfit = row.customerPaid - row.workerPaid;
-        const marginPct = row.customerPaid > 0 ? (companyProfit / row.customerPaid) * 100 : 0;
-        return {
-          ...row,
-          companyProfit,
-          marginPct
-        };
-      })
-      .sort((a, b) => b.customerPaid - a.customerPaid);
-
-    setPaymentInsights({
-      totals: {
-        customerPaid: customerPaidTotal,
-        workerPaid: workerPaidTotal,
-        pendingWorkerPayout,
-        companyProfit: customerPaidTotal - workerPaidTotal
-      },
-      byService
-    });
-  };
-
   const fetchAnalyticsSummary = async (days = analyticsRangeDays) => {
     try {
-      const [summaryResponse, billingResponse] = await Promise.all([
+      const [summaryResponse, paymentInsightsResponse] = await Promise.all([
         apiService.getAdminAnalyticsSummary(days),
-        apiService.getAdminBillingSummary(500)
+        apiService.getAdminPaymentInsights(days)
       ]);
       const response = summaryResponse;
       if (!response?.success || !response?.data) return;
@@ -728,10 +644,18 @@ const AdminDashboard = () => {
         systemPerformance: Array.isArray(d?.trends?.systemPerformance) ? d.trends.systemPerformance : [],
         securityScore: Array.isArray(d?.trends?.securityScore) ? d.trends.securityScore : []
       }));
-      if (billingResponse?.success && billingResponse?.data) {
-        computePaymentInsights(billingResponse.data);
+      if (paymentInsightsResponse?.success && paymentInsightsResponse?.data) {
+        setPaymentInsights(paymentInsightsResponse.data);
       } else {
-        computePaymentInsights({});
+        setPaymentInsights({
+          totals: {
+            customerPaid: 0,
+            workerPaid: 0,
+            pendingWorkerPayout: 0,
+            companyProfit: 0
+          },
+          byService: []
+        });
       }
     } catch (error) {
       console.error('Failed to fetch analytics summary:', error);
