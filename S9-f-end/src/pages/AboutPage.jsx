@@ -8,10 +8,10 @@ const AboutPage = () => {
       {/* Hero Section */}
       <section className="about-hero">
         <div className="container">
-          <h1>Redefining <span className="text-primary">Home Care</span> with AI Technology</h1>
+          <h1>Redefining <span className="text-primary">Home Services</span> with Practical Technology</h1>
           <p className="hero-subtitle">
             Our AI-enabled platform transforms traditional home maintenance into an intelligent,
-            responsive ecosystem that adapts to your family's unique needs with smart monitoring and coordination.
+            responsive ecosystem that helps families book services, monitor progress, and manage home operations efficiently.
           </p>
         </div>
       </section>
@@ -21,45 +21,43 @@ const AboutPage = () => {
         <div className="container">
           <div className="content-grid">
             <div className="content-text">
-              <h2>Smart Home Maintenance and Family Support Platform</h2>
+              <h2>Nexus Home Services Platform</h2>
               <p>
-                The Smart Home Maintenance and Family Support Platform is an AI-enabled solution that allows 
-                families to manage household services and elder care remotely through a unified dashboard. 
-                It integrates home maintenance, caregiving, transport, and deliveries with real-time monitoring 
-                via smart cameras.
+                Nexus is a full-stack home services platform that helps families manage maintenance,
+                support services, transport, and deliveries through one unified system.
+                Customers, providers, supervisors, and admins each get role-based dashboards built for their workflow.
               </p>
               <p>
-                Artificial intelligence supports intelligent scheduling, service allocation, anomaly detection, 
-                and feedback analysis. For example, if an elderly member requires medical care and hospital 
-                transportation, the system automatically assigns a trusted caregiver and driver to ensure 
-                smooth coordination.
+                The platform uses data-driven recommendations and assignment workflows to improve speed and quality.
+                Features like real-time booking status, team-based job handling, and notifications help customers
+                stay informed while providers execute services more effectively.
               </p>
               
               <div className="features-list">
                 <div className="feature-item">
                   <div className="check-icon">✓</div>
                   <div>
-                    <h4>AI-Enabled Intelligence</h4>
-                    <p>Advanced AI supports intelligent scheduling, service allocation, and quality assurance</p>
+                    <h4>Smarter Assignments</h4>
+                    <p>Recommendations and job allocation support improve response time and matching</p>
                   </div>
                 </div>
                 <div className="feature-item">
                   <div className="check-icon">✓</div>
                   <div>
-                    <h4>Smart Camera Integration</h4>
-                    <p>Real-time monitoring via smart cameras for remote family oversight and security</p>
+                    <h4>Real-Time Tracking</h4>
+                    <p>Customers can follow booking progress and receive status updates in-app</p>
                   </div>
                 </div>
                 <div className="feature-item">
                   <div className="check-icon">✓</div>
                   <div>
                     <h4>Role-Based Access Control</h4>
-                    <p>Secure collaboration among customers, service providers, caregivers, drivers, and administrators</p>
+                    <p>Secure collaboration across customers, providers, supervisors, drivers, and admins</p>
                   </div>
                 </div>
               </div>
               
-              <button className="learn-tech-btn" aria-label="Learn more about our AI-powered technology platform">Learn More About Our Technology</button>
+              <button className="learn-tech-btn" aria-label="Learn more about our technology platform">Learn More About Our Platform</button>
             </div>
             
             <div className="tech-features">
@@ -72,23 +70,23 @@ const AboutPage = () => {
               
               <div className="tech-card">
                 <Camera className="tech-icon" />
-                <h3>Smart Camera Monitoring</h3>
-                <p>Real-time property surveillance and elderly care monitoring with AI-powered 
-                   threat detection and emergency response systems.</p>
+                <h3>Live Status Visibility</h3>
+                <p>From booking to completion, users get clear status updates and timeline visibility
+                   across services and team jobs.</p>
               </div>
               
               <div className="tech-card">
                 <Shield className="tech-icon" />
-                <h3>Centralized Security</h3>
+                <h3>Centralized Operations</h3>
                 <p>Our security module provides real-time monitoring, access control, and 
-                   immediate threat response for complete peace of mind.</p>
+                   quality checks, and operational consistency.</p>
               </div>
               
               <div className="tech-card">
                 <Truck className="tech-icon" />
-                <h3>Smart Delivery & Transport</h3>
+                <h3>Delivery & Transport Workflows</h3>
                 <p>AI-coordinated delivery services and elderly transportation with real-time 
-                   tracking and route optimization for maximum efficiency.</p>
+                   tracking and route optimization for faster completion.</p>
               </div>
             </div>
           </div>

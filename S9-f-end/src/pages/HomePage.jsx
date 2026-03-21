@@ -22,7 +22,7 @@ const HomePage = () => {
   } = useAnimations();
 
   // Enhanced animations
-  const heroTitle = useTypingAnimation("Smart Home", 50);
+  const heroTitle = useTypingAnimation("Trusted", 50);
   const floatOffset = useFloat(15, 4);
   const isPulsing = usePulse(3000);
   const { ref: statsRef, triggerAnimation: triggerStatsAnimation } = useAnimatedInView(0.2);
@@ -89,7 +89,7 @@ const HomePage = () => {
               style={{ transform: `translateY(${floatOffset}px)` }}
             >
               <Brain size={20} />
-              AI-Enabled Smart Home Platform
+              Home Services + Team Job Platform
             </motion.div>
             
             <motion.h1 
@@ -98,28 +98,28 @@ const HomePage = () => {
               style={{ minHeight: '2.5em' }}
             >
               {heroTitle}
-              <span className="text-primary animate-shimmer">Maintenance & Family Support</span> Platform
+              <span className="text-primary animate-shimmer">Home Services</span> for Modern Families
             </motion.h1>
             
             <motion.p 
               className="hero-description animate-fade-in" 
               variants={itemVariants}
             >
-              Manage household services and elder care remotely through our unified dashboard. 
-              AI-powered scheduling, smart camera monitoring, and intelligent service allocation 
-              for both urban and rural households.
+              Book verified professionals, track jobs in real time, and manage everything in one place.
+              Nexus combines customer, provider, supervisor, and admin workflows with faster assignments,
+              transparent updates, and reliable service delivery.
             </motion.p>
             
             <div className="hero-features">
               <div className="hero-feature hover-lift">
                 <Camera size={20} />
-                <span>Smart Camera Integration</span>
-                <small>Real-time monitoring</small>
+                <span>Live Job Tracking</span>
+                <small>Status updates</small>
               </div>
               <div className="hero-feature hover-lift">
                 <Brain size={20} />
-                <span>AI-Powered Services</span>
-                <small>Intelligent scheduling</small>
+                <span>AI Recommendations</span>
+                <small>Smarter suggestions</small>
               </div>
             </div>
             
@@ -182,9 +182,9 @@ const HomePage = () => {
         <div className="container">
           <div className="section-header fade-in-up">
             <span className="section-badge animate-bounce-in">🔧 Our Services</span>
-            <h2>Comprehensive <span className="text-primary animate-shimmer">Smart Home Solutions</span></h2>
-            <p>From AI-powered maintenance to smart camera monitoring, we provide intelligent, 
-               integrated services that adapt to your family's unique needs with real-time oversight.</p>
+            <h2>Comprehensive <span className="text-primary animate-shimmer">Home Service Solutions</span></h2>
+            <p>From maintenance and cleaning to team-based specialist jobs, we provide dependable,
+               transparent services designed for day-to-day household needs.</p>
           </div>
           
           <div className="services-grid" ref={servicesRef}>
@@ -192,8 +192,8 @@ const HomePage = () => {
               <div className="service-icon animate-float">
                 <Home />
               </div>
-              <h3>Smart Home Maintenance</h3>
-              <p>AI-enabled household services with intelligent scheduling</p>
+              <h3>Home Maintenance</h3>
+              <p>Reliable household services with transparent job tracking</p>
               <ul className="service-list">
                 <li>🔧 Plumbing & Electrical</li>
                 <li>🔨 Carpentry & Repairs</li>
@@ -220,20 +220,20 @@ const HomePage = () => {
               <div className="service-icon animate-float">
                 <Camera />
               </div>
-              <h3>Smart Camera & Monitoring</h3>
-              <p>Real-time remote monitoring with AI-powered anomaly detection</p>
+              <h3>Specialist Team Services</h3>
+              <p>Team-based jobs for services that need coordinated execution</p>
               <ul className="service-list">
-                <li>📹 Smart Camera Installation</li>
-                <li>📱 Remote Monitoring Setup</li>
-                <li>🧠 AI Anomaly Detection</li>
-                <li>📊 Real-time Analytics</li>
-                <li>🚨 Motion Detection Alerts</li>
-                <li>🌙 Night Vision & Recording</li>
-                <li>☁️ Cloud Storage Solutions</li>
-                <li>🔒 Secure Access Control</li>
+                <li>👥 Team assignment workflows</li>
+                <li>✅ Acceptance and status tracking</li>
+                <li>📊 Progress visibility for customers</li>
+                <li>🧾 Structured updates and notes</li>
+                <li>⏱️ Better turnaround on complex jobs</li>
+                <li>📱 Notifications for every stage</li>
+                <li>⭐ Quality and completion tracking</li>
+                <li>🔒 Role-based operations</li>
               </ul>
               <button 
-                onClick={() => handleServiceNavigation('#smart-security')} 
+                onClick={() => handleServiceNavigation('#ai-coordination')} 
                 className="service-link btn-animate"
                 style={{ cursor: 'pointer', width: '100%', textAlign: 'left' }}
               >
@@ -248,8 +248,8 @@ const HomePage = () => {
               <div className="service-icon animate-float">
                 <Heart />
               </div>
-              <h3>AI-Powered Elder Care</h3>
-              <p>Intelligent caregiving with health monitoring and emergency alerts</p>
+              <h3>Elder & Family Support</h3>
+              <p>Care-focused services with dependable scheduling and updates</p>
               <ul className="service-list">
                 <li>⏰ Daily Routine Assistance</li>
                 <li>💊 Medication Management</li>
@@ -276,8 +276,8 @@ const HomePage = () => {
               <div className="service-icon animate-float">
                 <Truck />
               </div>
-              <h3>Smart Transport & Delivery</h3>
-              <p>AI-coordinated transportation and delivery services</p>
+              <h3>Delivery & Transport</h3>
+              <p>Planned transport and delivery services for daily convenience</p>
               <ul className="service-list">
                 <li>🚗 Medical Transport</li>
                 <li>🛒 Grocery Delivery</li>
@@ -333,7 +333,7 @@ const HomePage = () => {
                 <Brain />
               </div>
               <h3>AI Analytics & Insights</h3>
-              <p>Intelligent feedback analysis and performance optimization</p>
+              <p>Recommendations and operational insights from platform data</p>
               <ul className="service-list">
                 <li>📊 Service Performance Analytics</li>
                 <li>🧠 Predictive Maintenance</li>
@@ -543,8 +543,8 @@ const HomePage = () => {
         <div className="container">
           <div className="section-header fade-in-up">
             <span className="section-badge animate-bounce-in">💳 Simple Pricing</span>
-            <h2>Transparent plans for every <span className="text-primary animate-shimmer">household</span></h2>
-            <p>Start free and scale as you need. No hidden fees.</p>
+            <h2>Simple options for every <span className="text-primary animate-shimmer">household</span></h2>
+            <p>Choose the experience that fits your family. Service charges remain transparent.</p>
           </div>
           <div className="pricing-grid">
             <div className="price-card card-hover">
@@ -624,8 +624,8 @@ const HomePage = () => {
       <section className="cta-banner">
         <div className="container">
           <div className="cta-content">
-            <h3>Ready to book a trusted professional?</h3>
-            <p>Join thousands of families using our smart platform for daily services.</p>
+            <h3>Ready to book trusted home services?</h3>
+            <p>Use one platform for booking, tracking, and service history.</p>
             <div className="cta-actions">
               <Link to="/services" className="btn-primary btn-animate">Browse Services</Link>
               <Link to="/register" className="btn-secondary btn-animate">Create Account</Link>

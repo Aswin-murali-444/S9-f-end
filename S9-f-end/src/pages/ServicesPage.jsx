@@ -94,7 +94,7 @@ const ServicesPage = () => {
             <Home className="service-main-icon" />
             <div>
               <h2>Available Services</h2>
-              <p>These services are fetched live from the database</p>
+              <p>Live catalog from your service management database</p>
             </div>
           </div>
 
@@ -215,9 +215,9 @@ const ServicesPage = () => {
       {/* Hero Section */}
       <section className="services-hero">
         <div className="container">
-          <h1>Comprehensive <span className="text-primary">Smart Home Solutions</span></h1>
-          <p>From AI-powered maintenance to specialized elderly care, we provide professional, 
-             smart camera-monitored services tailored to your family's unique needs.</p>
+          <h1>Comprehensive <span className="text-primary">Home Service Solutions</span></h1>
+          <p>From maintenance and cleaning to elder support and team assignments, Nexus helps you
+             book faster, track better, and complete jobs with confidence.</p>
         </div>
       </section>
 
@@ -227,8 +227,8 @@ const ServicesPage = () => {
           <div className="service-header">
             <Home className="service-main-icon" />
             <div>
-              <h2>Smart Home Maintenance</h2>
-              <p>AI-supervised maintenance with real-time progress tracking</p>
+              <h2>Home Maintenance</h2>
+              <p>Professional maintenance with real-time progress tracking</p>
             </div>
           </div>
           
@@ -293,8 +293,8 @@ const ServicesPage = () => {
           <div className="service-header">
             <Camera className="service-main-icon" />
             <div>
-              <h2>Smart Camera & Security</h2>
-              <p>Professional security camera installation and AI monitoring</p>
+              <h2>Security & Monitoring</h2>
+              <p>Property safety services with real-time visibility and alerts</p>
             </div>
           </div>
           
@@ -359,8 +359,8 @@ const ServicesPage = () => {
           <div className="service-header">
             <Heart className="service-main-icon" />
             <div>
-              <h2>AI-Powered Elder Care</h2>
-              <p>Compassionate care with health monitoring and emergency alerts</p>
+              <h2>Elder Care Support</h2>
+              <p>Compassionate assistance services with reliable updates to families</p>
             </div>
           </div>
           
@@ -423,8 +423,8 @@ const ServicesPage = () => {
           <div className="service-header">
             <Truck className="service-main-icon" />
             <div>
-              <h2>Smart Delivery & Transport</h2>
-              <p>AI-coordinated delivery and transportation services</p>
+              <h2>Delivery & Transport</h2>
+              <p>Planned deliveries and safe transport support for daily needs</p>
             </div>
           </div>
           
@@ -659,8 +659,8 @@ const ServicesPage = () => {
           <div className="service-header">
             <Brain className="service-main-icon" />
             <div>
-              <h2>AI Service Coordination</h2>
-              <p>Intelligent scheduling and service provider allocation</p>
+              <h2>Service Coordination & Recommendations</h2>
+              <p>Smarter assignment support and recommendations powered by platform data</p>
             </div>
           </div>
           
