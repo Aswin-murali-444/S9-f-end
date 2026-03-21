@@ -3761,6 +3761,8 @@ const AdminDashboard = () => {
                           const supportMetaRaw = msg.provider_admin_support_messages;
                           const supportMeta = Array.isArray(supportMetaRaw) ? supportMetaRaw[0] : supportMetaRaw;
                           const supportPriority = String(supportMeta?.priority || '').toLowerCase();
+                          const isProviderJobMessage = Boolean(supportMeta) || String(msg.source || '') === 'provider_dashboard_settings';
+                          const sourceLabel = isProviderJobMessage ? 'Provider Dashboard (Job Provider)' : 'Public Contact Form';
                           const providerUser = supportMeta?.provider_user || null;
                           const providerDisplayName =
                             providerUser?.name ||
@@ -3790,6 +3792,12 @@ const AdminDashboard = () => {
 
                             <div className="feedback-details-grid">
                               <div className="feedback-field-group">
+                                <span className="feedback-field-label">Sender Type</span>
+                                <span className={`status-badge ${isProviderJobMessage ? 'info' : 'success'}`}>
+                                  {isProviderJobMessage ? 'Provider (Job)' : 'Contact Lead'}
+                                </span>
+                              </div>
+                              <div className="feedback-field-group">
                                 <span className="feedback-field-label">Service Type</span>
                                 <span className="feedback-service-type">
                                   {String(msg.service_type || 'general')
@@ -3797,6 +3805,10 @@ const AdminDashboard = () => {
                                     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
                                     .join(' ')}
                                 </span>
+                              </div>
+                              <div className="feedback-field-group">
+                                <span className="feedback-field-label">Message Source</span>
+                                <span>{sourceLabel}</span>
                               </div>
                               {supportMeta && (
                                 <div className="feedback-field-group">
