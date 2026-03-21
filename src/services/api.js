@@ -1,15 +1,22 @@
 // API service for backend communication
 // Resolve base URL robustly across dev/preview/prod
+const PRODUCTION_API_FALLBACK = 'https://nexus-d2dx.onrender.com';
 const API_BASE_URL = (() => {
   const envBase = import.meta.env.VITE_API_URL;
-  if (envBase) return envBase.replace(/\/$/, '');
+  const isLocalhost = (value = '') => /localhost|127\.0\.0\.1/i.test(String(value));
+  const host = typeof window !== 'undefined' ? (window.location?.hostname || '') : '';
+  const runningLocal = host === 'localhost' || host === '127.0.0.1';
+  if (envBase) {
+    const normalized = envBase.replace(/\/$/, '');
+    if (!runningLocal && isLocalhost(normalized)) return PRODUCTION_API_FALLBACK;
+    return normalized;
+  }
   if (typeof window !== 'undefined') {
-    const host = window.location?.hostname || '';
     if (host === 'localhost' || host === '127.0.0.1') {
       return 'http://localhost:3001';
     }
   }
-  return '/api';
+  return import.meta.env.PROD ? PRODUCTION_API_FALLBACK : '/api';
 })();
 const normalizeBase = (base) => String(base || '').replace(/\/$/, '');
 const joinUrl = (base, endpoint) => `${normalizeBase(base)}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
@@ -18,10 +25,19 @@ const toggleApiPrefix = (base) => {
   if (normalized.endsWith('/api')) return normalized.slice(0, -4);
   return `${normalized}/api`;
 };
+const isNonLocalBrowser = () => {
+  if (typeof window === 'undefined') return false;
+  const host = String(window.location?.hostname || '').toLowerCase();
+  return host !== 'localhost' && host !== '127.0.0.1';
+};
+const isLocalTarget = (urlOrBase) => /localhost|127\.0\.0\.1/i.test(String(urlOrBase || ''));
 
 class ApiService {
   async request(endpoint, options = {}) {
-    const url = joinUrl(API_BASE_URL, endpoint);
+    const initialUrl = joinUrl(API_BASE_URL, endpoint);
+    const url = isNonLocalBrowser() && isLocalTarget(initialUrl)
+      ? joinUrl(PRODUCTION_API_FALLBACK, endpoint)
+      : initialUrl;
     
     const config = {
       headers: {
