@@ -914,28 +914,75 @@ router.get('/security-events', async (req, res) => {
       });
     }
 
-    // 3) Recent successful logins from users table
-    const { data: recentLogins, error: loginsError } = await supabase
-      .from('users')
-      .select('id, email, last_login_at')
-      .not('last_login_at', 'is', null)
-      .order('last_login_at', { ascending: false })
-      .limit(cap);
-
-    if (!loginsError && Array.isArray(recentLogins)) {
-      recentLogins.forEach((u) => {
-        events.push({
-          id: `login-${u.id}-${u.last_login_at}`,
-          type: 'data_access',
-          user: u?.email || 'Unknown user',
-          ip: null,
-          target: 'Successful account login',
-          resource: null,
-          timestamp: u?.last_login_at || null,
-          severity: 'info',
-          status: 'normal'
-        });
+    // 3) Live auth events from Supabase Auth (registration, login, Google continue/sign-in)
+    try {
+      const perPage = Math.min(Math.max(cap * 3, 30), 200);
+      const { data: authList, error: authUsersError } = await supabase.auth.admin.listUsers({
+        page: 1,
+        perPage
       });
+
+      if (!authUsersError && Array.isArray(authList?.users)) {
+        const authUsers = authList.users;
+
+        const hasGoogleIdentity = (authUser) => {
+          const appProvider = String(authUser?.app_metadata?.provider || '').toLowerCase();
+          if (appProvider === 'google') return true;
+          const identities = Array.isArray(authUser?.identities) ? authUser.identities : [];
+          return identities.some((identity) => String(identity?.provider || '').toLowerCase() === 'google');
+        };
+
+        authUsers.forEach((authUser) => {
+          const email = authUser?.email || 'Unknown user';
+          const createdAt = authUser?.created_at || null;
+          const lastSignInAt = authUser?.last_sign_in_at || null;
+          const provider = hasGoogleIdentity(authUser) ? 'google' : 'email';
+
+          if (createdAt) {
+            events.push({
+              id: `auth-register-${authUser.id}-${createdAt}`,
+              type: 'user_registered',
+              user: email,
+              ip: null,
+              target: provider === 'google' ? 'New user registered (Google)' : 'New user registered',
+              resource: provider,
+              timestamp: createdAt,
+              severity: 'low',
+              status: 'normal'
+            });
+          }
+
+          if (lastSignInAt) {
+            events.push({
+              id: `auth-login-${authUser.id}-${lastSignInAt}`,
+              type: 'user_login',
+              user: email,
+              ip: null,
+              target: provider === 'google' ? 'Successful login (Google)' : 'Successful login',
+              resource: provider,
+              timestamp: lastSignInAt,
+              severity: 'info',
+              status: 'normal'
+            });
+
+            if (provider === 'google') {
+              events.push({
+                id: `auth-google-${authUser.id}-${lastSignInAt}`,
+                type: 'google_continue',
+                user: email,
+                ip: null,
+                target: 'Continue with Google used',
+                resource: 'google',
+                timestamp: lastSignInAt,
+                severity: 'info',
+                status: 'normal'
+              });
+            }
+          }
+        });
+      }
+    } catch (authEventsError) {
+      console.warn('Skipping Supabase Auth-based security events:', authEventsError?.message || authEventsError);
     }
 
     // Sort by timestamp desc and return limited rows

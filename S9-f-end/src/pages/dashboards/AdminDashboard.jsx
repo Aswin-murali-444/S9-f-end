@@ -4032,7 +4032,7 @@ const AdminDashboard = () => {
                       {securityEvents.map(event => (
                         <div key={event.id} className="table-row">
                           <div className="table-cell">
-                            <span className={`event-type ${event.type}`}>{event.type.replace('_', ' ')}</span>
+                            <span className={`event-type ${event.type}`}>{String(event.type || '').replace(/_/g, ' ')}</span>
                           </div>
                           <div className="table-cell">{event.user || event.ip}</div>
                           <div className="table-cell">{event.target || event.resource || 'N/A'}</div>
