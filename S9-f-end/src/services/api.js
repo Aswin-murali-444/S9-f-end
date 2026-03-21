@@ -845,7 +845,23 @@ class ApiService {
     if (status) params.set('status', status);
     if (adminAuthUserId) params.set('adminAuthUserId', adminAuthUserId);
     const q = params.toString();
-    return this.request(q ? `/contact/admin/messages?${q}` : '/contact/admin/messages');
+    const endpoint = q ? `/contact/admin/messages?${q}` : '/contact/admin/messages';
+    try {
+      return await this.request(endpoint);
+    } catch (error) {
+      // Graceful fallback while backend rollout is in progress
+      if (error?.status === 404) {
+        try {
+          return await this.request(q ? `/api/contact/admin/messages?${q}` : '/api/contact/admin/messages');
+        } catch (fallbackError) {
+          if (fallbackError?.status === 404) {
+            return { success: true, data: [] };
+          }
+          throw fallbackError;
+        }
+      }
+      throw error;
+    }
   }
 
   // Notification methods
