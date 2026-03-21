@@ -320,7 +320,9 @@ const BookingModal = ({ isOpen, onClose, service, user }) => {
                                 </div>
                                 <div className="meta-item">
                                   <Star size={16} />
-                                  <span>Rating: 4.8 (127 reviews)</span>
+                                  <span>
+                                    Rating: {(Number(service?.rating) || 0).toFixed(1)} ({Math.max(0, Number(service?.review_count) || 0)} reviews)
+                                  </span>
                                 </div>
                               </div>
                             </div>

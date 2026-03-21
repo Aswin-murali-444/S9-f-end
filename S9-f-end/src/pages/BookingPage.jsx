@@ -36,6 +36,9 @@ const BookingPage = () => {
   const { logout } = useAuth();
   // Workers and duration controls
   const [workersCount, setWorkersCount] = useState(1);
+  // For group/team work: allow customer to *request* extra workers (optional)
+  const [extraWorkersRequested, setExtraWorkersRequested] = useState(0);
+  const [extraWorkersReason, setExtraWorkersReason] = useState('');
   const defaultDurationMins = (typeof (service?.duration) === 'number' && service.duration > 0) ? service.duration : 60;
   const [durationHours, setDurationHours] = useState(Math.max(0.5, Math.round((defaultDurationMins / 60) * 10) / 10));
   
@@ -94,6 +97,9 @@ const BookingPage = () => {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [serviceReviewPreview, setServiceReviewPreview] = useState([]);
+  const [serviceReviewPreviewLoading, setServiceReviewPreviewLoading] = useState(false);
+  const [serviceReviewPreviewError, setServiceReviewPreviewError] = useState('');
   const [completedSteps, setCompletedSteps] = useState({
     serviceDetails: false,
     scheduling: false,
@@ -108,6 +114,103 @@ const BookingPage = () => {
       navigate('/dashboard');
     }
   }, [service, cartItems, user, navigate]);
+
+  // Detect group/team services (created by admin as "Group Service")
+  const isGroupService = Boolean(
+    service &&
+    (service.service_type === 'group' ||
+      service.serviceType === 'group' ||
+      String(service.service_type || service.serviceType || '').toLowerCase() === 'group')
+  );
+
+  const liveServiceRating = React.useMemo(() => {
+    const raw = service?.rating;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    // Clamp to 0..5
+    return Math.max(0, Math.min(5, n));
+  }, [service?.rating]);
+
+  const liveServiceReviewCount = React.useMemo(() => {
+    const raw = service?.review_count;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.floor(n);
+  }, [service?.review_count]);
+
+  const reviewsCarouselRef = useRef(null);
+
+  const reviewServiceId = React.useMemo(() => {
+    if (service?.id) return service.id;
+    if (service?.service_id) return service.service_id;
+    if (service?.serviceId) return service.serviceId;
+    if (Array.isArray(cartItems) && cartItems.length > 0) {
+      const first = cartItems[0] || {};
+      return first.id || first.service_id || first.serviceId || null;
+    }
+    return null;
+  }, [service?.id, service?.service_id, service?.serviceId, cartItems]);
+
+  useEffect(() => {
+    if (!reviewServiceId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setServiceReviewPreviewLoading(true);
+        setServiceReviewPreviewError('');
+        const resp = await apiService.getServiceReviews(reviewServiceId, 1, 12);
+        // Support both { data: { reviews } } and { reviews } shapes
+        const reviews =
+          (resp?.data?.reviews ?? resp?.reviews ?? []);
+        if (!cancelled) setServiceReviewPreview(Array.isArray(reviews) ? reviews : []);
+      } catch (e) {
+        if (!cancelled) setServiceReviewPreviewError(String(e?.message || 'Failed to load reviews'));
+      } finally {
+        if (!cancelled) setServiceReviewPreviewLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [reviewServiceId]);
+
+
+  const scrollReviews = (dir) => {
+    const el = reviewsCarouselRef.current;
+    if (!el) return;
+    const amount = Math.max(220, Math.round(el.clientWidth * 0.8));
+    el.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
+  };
+
+  const formatReviewDate = (iso) => {
+    try {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return '';
+    }
+  };
+
+  const getInitials = (name) => {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    const first = parts[0]?.[0] || '';
+    const second = parts[1]?.[0] || '';
+    const out = `${first}${second}`.toUpperCase();
+    return out || 'U';
+  };
+
+  // Group/team work should default to 2+ workers (team size) and never go below 2.
+  useEffect(() => {
+    if (isGroupService) {
+      setWorkersCount((prev) => Math.max(2, Number(prev) || 0));
+    } else {
+      // Reset "extra worker request" UI when switching back to individual services
+      setExtraWorkersRequested(0);
+      setExtraWorkersReason('');
+    }
+  }, [isGroupService]);
 
   // Ensure page opens at the top when navigating here
   useEffect(() => {
@@ -372,6 +475,11 @@ const BookingPage = () => {
       const total = calculateTotal();
       const chosenDurationMinutes = Math.round(Math.max(0.5, durationHours) * 60);
 
+      const workersForBooking = isGroupService ? Math.max(2, workersCount) : Math.max(1, workersCount);
+      const additionalRequirements = isGroupService && extraWorkersRequested > 0
+        ? `Extra workers requested: ${Math.max(0, extraWorkersRequested)}${extraWorkersReason?.trim() ? ` | Reason: ${extraWorkersReason.trim()}` : ''}`
+        : null;
+
       const singleBookingData = service ? {
         user_id: userProfile.id,
         service_id: service.id,
@@ -388,11 +496,13 @@ const BookingPage = () => {
         contact_phone: phone,
         contact_email: userProfile?.email || null,
         special_instructions: notes || null,
-        workers_count: Math.max(1, workersCount),
+        workers_count: workersForBooking,
+        ...(isGroupService ? { is_team_booking: true, team_size_required: workersForBooking } : {}),
+        ...(additionalRequirements ? { additional_requirements: additionalRequirements } : {}),
         duration_minutes: chosenDurationMinutes,
-        base_price: (service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * Math.max(1, workersCount),
-        service_fee: Math.round(((service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * Math.max(1, workersCount)) * 0.1),
-        tax_amount: Math.round((((service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * Math.max(1, workersCount)) + Math.round(((service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * Math.max(1, workersCount)) * 0.1)) * 0.18),
+        base_price: (service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * workersForBooking,
+        service_fee: Math.round(((service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * workersForBooking) * 0.1),
+        tax_amount: Math.round((((service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * workersForBooking) + Math.round(((service.offer_enabled && service.offer_price ? service.offer_price : service.price) * (chosenDurationMinutes / ((typeof service.duration === 'number' && service.duration > 0) ? service.duration : 60)) * workersForBooking) * 0.1)) * 0.18),
         total_amount: total,
         payment_method: paymentMethod,
         payment_status: 'pending',
@@ -1021,68 +1131,47 @@ const BookingPage = () => {
                               const qty = item.quantity || 1;
                               const lineTotal = unit * qty;
                               return (
-                                <div key={item.id} className="cart-item-card" style={{ 
-                                  border: '1px solid #e2e8f0', 
-                                  borderRadius: '12px', 
-                                  padding: '16px', 
-                                  marginBottom: '12px',
-                                  backgroundColor: '#f8fafc'
-                                }}>
-                                  <div className="cart-item-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                                    <div className="cart-item-icon" style={{ 
-                                      width: '40px', 
-                                      height: '40px', 
-                                      borderRadius: '8px', 
-                                      backgroundColor: '#e2e8f0',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      fontSize: '20px'
-                                    }}>
+                                <div key={item.id} className="booking-cart-item-card">
+                                  <div className="booking-cart-item-header">
+                                    <div className="booking-cart-item-icon">
                                       {item.icon_url ? (
-                                        <img src={item.icon_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+                                        <img src={item.icon_url} alt={item.name} />
                                       ) : (
-                                        <span>🔧</span>
+                                        <span className="booking-cart-item-icon-fallback">🔧</span>
                                       )}
                                     </div>
-                                    <div className="cart-item-info" style={{ flex: 1 }}>
-                                      <h5 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#0f172a' }}>
+                                    <div className="booking-cart-item-info">
+                                      <h5>
                                         {item.name}
                                       </h5>
                                       {item.description && (
-                                        <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#64748b', lineHeight: '1.4' }}>
+                                        <p>
                                           {item.description.length > 80 ? `${item.description.substring(0, 80)}...` : item.description}
                                         </p>
                                       )}
                                     </div>
-                                    <div className="cart-item-price" style={{ textAlign: 'right' }}>
-                                      <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
+                                    <div className="booking-cart-item-price">
+                                      <div className="booking-cart-item-total">
                                         ₹{lineTotal}
                                       </div>
                                       {qty > 1 && (
-                                        <div style={{ fontSize: '12px', color: '#64748b' }}>
+                                        <div className="booking-cart-item-unit">
                                           ₹{unit} × {qty}
                                         </div>
                                       )}
                                     </div>
                                   </div>
                                   
-                                  <div className="cart-item-details" style={{ 
-                                    display: 'flex', 
-                                    justifyContent: 'space-between', 
-                                    alignItems: 'center',
-                                    fontSize: '14px',
-                                    color: '#64748b'
-                                  }}>
-                                    <div className="cart-item-meta" style={{ display: 'flex', gap: '16px' }}>
+                                  <div className="booking-cart-item-details">
+                                    <div className="booking-cart-item-meta">
                                       {item.duration && (
-                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span>
                                           <Clock size={14} />
                                           {item.duration}
                                         </span>
                                       )}
                                       {item.category_name && (
-                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span>
                                           <Star size={14} />
                                           {item.category_name}
                                         </span>
@@ -1090,14 +1179,7 @@ const BookingPage = () => {
                                     </div>
                                     
                                     {hasOffer && (
-                                      <div className="offer-badge" style={{
-                                        backgroundColor: '#dcfce7',
-                                        color: '#166534',
-                                        padding: '4px 8px',
-                                        borderRadius: '6px',
-                                        fontSize: '12px',
-                                        fontWeight: 600
-                                      }}>
+                                      <div className="booking-offer-badge">
                                         Save ₹{item.price - item.offer_price}
                                       </div>
                                     )}
@@ -1238,7 +1320,7 @@ const BookingPage = () => {
                           >
                             <div className="enhanced-rating-stars">
                               {Array.from({ length: 5 }).map((_, i) => {
-                                const filled = i < Math.round(4.8);
+                                const filled = i < Math.round(liveServiceRating || 0);
                                 return (
                                   <Star key={i} size={18} style={{
                                     fill: filled ? '#f59e0b' : 'transparent',
@@ -1249,8 +1331,8 @@ const BookingPage = () => {
                               })}
                             </div>
                             <div className="rating-details">
-                              <span className="rating-number">4.8</span>
-                              <span className="rating-count">(127 reviews)</span>
+                              <span className="rating-number">{(liveServiceRating || 0).toFixed(1)}</span>
+                              <span className="rating-count">({liveServiceReviewCount || 0} reviews)</span>
                             </div>
                           </div>
                         </div>
@@ -1294,17 +1376,17 @@ const BookingPage = () => {
                         
                         <div className="price-divider"></div>
                         
-                        <div className="price-item total-price">
-                          <span className="price-label">Total Amount</span>
-                          <span className="price-value total">₹{total}</span>
-                        </div>
+                      <div className="price-item total-price">
+                        <span className="price-label">Total Amount</span>
+                        <span className="price-value total">₹{total}</span>
                       </div>
-                    </motion.div>
-                    </>
-                    )}
-                  </div>
-                </div>
+                    </div>
+                  </motion.div>
+                </>
               )}
+            </div>
+          </div>
+        )}
 
               {/* Step 2: Scheduling */}
               {currentStep === 2 && (
@@ -1423,7 +1505,7 @@ const BookingPage = () => {
                     <div className="form-group">
                       <label className="enhanced-label">
                         <User size={20} />
-                        Number of Workers Required
+                        {isGroupService ? 'Team Size Required' : 'Number of Workers Required'}
                       </label>
                       <div className="worker-selection-card">
                         <div className="worker-info">
@@ -1431,27 +1513,32 @@ const BookingPage = () => {
                             <User size={24} />
                           </div>
                           <div className="worker-details">
-                            <span className="worker-title">Service Workers</span>
-                            <span className="worker-description">Select how many professionals you need</span>
+                            <span className="worker-title">{isGroupService ? 'Team Members' : 'Service Workers'}</span>
+                            <span className="worker-description">
+                              {isGroupService ? 'Choose your initial team size (2+ required)' : 'Select how many professionals you need'}
+                            </span>
                           </div>
                         </div>
                         <div className="worker-controls">
                           <button 
                             type="button" 
                             className="worker-decrease-btn"
-                            onClick={() => setWorkersCount(Math.max(1, workersCount - 1))}
-                            disabled={workersCount <= 1}
+                            onClick={() => !isGroupService && setWorkersCount(Math.max(1, workersCount - 1))}
+                            disabled={isGroupService || workersCount <= 1}
                           >
                             <Minus size={20} />
                           </button>
                           <div className="worker-count-display">
                             <span className="worker-count">{workersCount}</span>
-                            <span className="worker-unit">{workersCount === 1 ? 'Worker' : 'Workers'}</span>
+                            <span className="worker-unit">
+                              {isGroupService ? (workersCount === 1 ? 'Member' : 'Members') : (workersCount === 1 ? 'Worker' : 'Workers')}
+                            </span>
                           </div>
                           <button 
                             type="button" 
                             className="worker-increase-btn"
-                            onClick={() => setWorkersCount(workersCount + 1)}
+                            onClick={() => !isGroupService && setWorkersCount(workersCount + 1)}
+                            disabled={isGroupService}
                           >
                             <Plus size={20} />
                           </button>
@@ -1460,14 +1547,76 @@ const BookingPage = () => {
                       <div className="worker-recommendations">
                         <div className="recommendation-item">
                           <CheckCircle size={16} />
-                          <span>1 worker: Standard service (cleaning, maintenance)</span>
+                          <span>{isGroupService ? '2 members: Standard team work' : '1 worker: Standard service (cleaning, maintenance)'}</span>
                         </div>
                         <div className="recommendation-item">
                           <CheckCircle size={16} />
-                          <span>2+ workers: Large spaces or complex tasks</span>
+                          <span>{isGroupService ? '3+ members: Larger spaces or complex tasks' : '2+ workers: Large spaces or complex tasks'}</span>
                         </div>
                       </div>
+                      {isGroupService && (
+                        <div className="worker-recommendations" style={{ marginTop: 12 }}>
+                          <div className="recommendation-item">
+                            <AlertCircle size={16} />
+                            <span>
+                              Need more workers later? Add an <strong>extra worker request</strong> below. The team/admin can approve it based on availability.
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
+
+                    {/* Group/team work: request extra workers (optional) */}
+                    {isGroupService && (
+                      <div className="form-group">
+                        <label className="enhanced-label">
+                          <Plus size={20} />
+                          Request Additional Workers (Optional)
+                        </label>
+                        <div className="worker-selection-card">
+                          <div className="worker-info">
+                            <div className="worker-icon">
+                              <User size={24} />
+                            </div>
+                            <div className="worker-details">
+                              <span className="worker-title">Extra Workers</span>
+                              <span className="worker-description">This will be sent as a request (not guaranteed)</span>
+                            </div>
+                          </div>
+                          <div className="worker-controls">
+                            <button
+                              type="button"
+                              className="worker-decrease-btn"
+                              onClick={() => setExtraWorkersRequested(Math.max(0, extraWorkersRequested - 1))}
+                              disabled={extraWorkersRequested <= 0}
+                            >
+                              <Minus size={20} />
+                            </button>
+                            <div className="worker-count-display">
+                              <span className="worker-count">{extraWorkersRequested}</span>
+                              <span className="worker-unit">{extraWorkersRequested === 1 ? 'Worker' : 'Workers'}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="worker-increase-btn"
+                              onClick={() => setExtraWorkersRequested(extraWorkersRequested + 1)}
+                            >
+                              <Plus size={20} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="form-group" style={{ marginTop: 10 }}>
+                          <label style={{ display: 'block', marginBottom: 6 }}>Reason (optional)</label>
+                          <textarea
+                            value={extraWorkersReason}
+                            onChange={(e) => setExtraWorkersReason(e.target.value)}
+                            rows={2}
+                            placeholder="e.g., heavy lifting, tight deadline, large area…"
+                            style={{ width: '100%', resize: 'vertical' }}
+                          />
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Additional Information Sections */}
                     <div className="form-group">
@@ -1511,18 +1660,86 @@ const BookingPage = () => {
                           <div className="provider-details">
                             <span className="provider-name">Verified Professional</span>
                             <span className="provider-rating">
-                              <Star size={14} fill="#f59e0b" />
-                              <Star size={14} fill="#f59e0b" />
-                              <Star size={14} fill="#f59e0b" />
-                              <Star size={14} fill="#f59e0b" />
-                              <Star size={14} fill="#f59e0b" />
-                              <span className="rating-text">4.8 (127 reviews)</span>
+                              {Array.from({ length: 5 }).map((_, i) => {
+                                const filled = i < Math.round(liveServiceRating || 0);
+                                return <Star key={i} size={14} fill={filled ? '#f59e0b' : 'transparent'} stroke="#f59e0b" />;
+                              })}
+                              <span className="rating-text">{(liveServiceRating || 0).toFixed(1)} ({liveServiceReviewCount || 0} reviews)</span>
                             </span>
                             <span className="provider-badges">
                               <span className="badge">✓ Verified</span>
                               <span className="badge">✓ Insured</span>
                               <span className="badge">✓ Background Checked</span>
                             </span>
+
+                            {/* Live review preview carousel */}
+                            <div className="reviews-preview">
+                              <div className="reviews-preview-header">
+                                <span className="reviews-preview-title">Latest Reviews</span>
+                                <div className="reviews-preview-actions">
+                                  <button type="button" className="reviews-nav" onClick={() => scrollReviews('left')} aria-label="Scroll reviews left">
+                                    ‹
+                                  </button>
+                                  <button type="button" className="reviews-nav" onClick={() => scrollReviews('right')} aria-label="Scroll reviews right">
+                                    ›
+                                  </button>
+                                </div>
+                              </div>
+
+                              {serviceReviewPreviewLoading ? (
+                                <div className="reviews-preview-empty">Loading reviews…</div>
+                              ) : serviceReviewPreviewError ? (
+                                <div className="reviews-preview-empty">{serviceReviewPreviewError}</div>
+                              ) : serviceReviewPreview.length === 0 ? (
+                                <div className="reviews-preview-empty">
+                                  {liveServiceReviewCount > 0 ? 'Unable to load reviews right now.' : 'No reviews yet'}
+                                </div>
+                              ) : (
+                                <div className="reviews-carousel" ref={reviewsCarouselRef}>
+                                  {serviceReviewPreview.map((r) => (
+                                    <div key={r.id} className="review-card-mini">
+                                      <div className="review-header-row">
+                                        <div className="reviewer-left">
+                                          <div className="review-avatar">{getInitials(r.customer_name)}</div>
+                                          <div className="reviewer-meta">
+                                            <div className="reviewer-name">{String(r.customer_name || 'Anonymous').toUpperCase()}</div>
+                                            <div className="review-rating-row">
+                                              <div className="review-stars">
+                                                {Array.from({ length: 5 }).map((_, i) => {
+                                                  const filled = i < Math.round(Number(r.rating || 0));
+                                                  return (
+                                                    <Star
+                                                      key={i}
+                                                      size={14}
+                                                      style={{
+                                                        fill: filled ? '#f59e0b' : 'transparent',
+                                                        stroke: '#f59e0b',
+                                                        strokeWidth: 2
+                                                      }}
+                                                    />
+                                                  );
+                                                })}
+                                              </div>
+                                              <span className="review-score">{Number(r.rating || 0).toFixed(1)} / 5</span>
+                                              <span className="review-verified-pill">Verified booking</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className="review-date">{formatReviewDate(r.created_at)}</div>
+                                      </div>
+
+                                      <div className="review-note">{r.note ? String(r.note) : '—'}</div>
+
+                                      <div className="review-footer-row">
+                                        <button type="button" className="review-view-all" onClick={handleOpenReviews}>
+                                          View all reviews
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>

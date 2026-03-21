@@ -721,6 +721,25 @@
   gap: 0.75rem;
 }
 
+.notification-btn-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.notification-btn-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #475569;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .notification-btn-label {
+    display: none;
+  }
+}
+
 .notification-btn {
   position: relative;
   padding: 0.875rem;
@@ -1139,6 +1158,22 @@
 
 .mark-all-read:hover {
   color: #2563eb;
+}
+
+.empty-notifications {
+  padding: 1.5rem;
+  text-align: center;
+  color: #64748b;
+}
+
+.empty-notifications p {
+  margin: 0.5rem 0 0.25rem;
+  font-weight: 500;
+  color: #334155;
+}
+
+.empty-notifications span {
+  font-size: 0.875rem;
 }
 
 .notifications-list {
@@ -2602,10 +2637,10 @@
 /* Schedule Calendar */
 .schedule-calendar {
   background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
+  border-radius: 18px;
+  padding: 1.75rem;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
   margin-bottom: 2rem;
 }
 
@@ -2702,35 +2737,139 @@
   color: #92400e;
 }
 
-/* Availability Settings */
-.availability-settings {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+/* Availability & Leave Layout */
+.schedule-layout {
+  display: grid;
+  /* Give more horizontal room to Availability so time columns align cleanly */
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 0.9fr);
+  gap: 1.5rem;
+  align-items: flex-start;
 }
 
-.availability-grid {
+@media (max-width: 1024px) {
+  .schedule-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Availability Settings */
+.availability-settings {
+  position: relative;
+  background: radial-gradient(circle at 10% 0%, rgba(59, 130, 246, 0.08) 0%, transparent 45%),
+              radial-gradient(circle at 90% 20%, rgba(34, 197, 94, 0.06) 0%, transparent 48%),
+              #ffffff;
+  border-radius: 22px;
+  padding: 2.1rem 2rem; /* make the card a bit bigger */
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow:
+    0 22px 60px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.availability-settings::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #6366f1, #22c55e);
+  opacity: 0.9;
+}
+
+.availability-settings:hover {
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow:
+    0 26px 70px rgba(15, 23, 42, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.availability-settings .section-header {
+  margin-top: 0.25rem;
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.availability-settings .section-header h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+ .availability-grid {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem; /* more breathing room between rows */
 }
 
 .availability-day {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
-  background: #f8fafc;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  padding: 1.25rem 1.5rem; /* make each row a bit taller/wider */
+  background: rgba(248, 250, 252, 0.92);
+  border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.availability-day:hover {
+  transform: translateY(-1px);
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(239, 246, 255, 0.65);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.07);
 }
 
 .day-name {
   font-weight: 600;
   color: #1e293b;
-  min-width: 100px;
+  min-width: 190px; /* give enough room for longest day + date */
+  flex-shrink: 0;   /* prevent squeezing into the toggle */
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.day-name-text {
+  white-space: nowrap;
+}
+
+.day-date-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.day-date-label {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.day-date-input {
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-size: 0.85rem;
+  color: #0f172a;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.day-date-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
 }
 
 .day-schedule {
@@ -2740,13 +2879,223 @@
 }
 
 .day-schedule input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.day-schedule input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 3px;
   width: 18px;
   height: 18px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
+  transition: left 0.18s ease;
+}
+
+.day-schedule input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, #3b82f6 0%, #22c55e 100%);
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.day-schedule input[type="checkbox"]:checked::after {
+  left: 22px;
+}
+
+.day-schedule input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.16);
 }
 
 .day-schedule span {
   color: #64748b;
   font-size: 0.9rem;
+}
+
+.day-time-visual {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.day-time-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: #111827;
+}
+
+.day-time-label svg {
+  color: #3b82f6;
+}
+
+.day-time-input {
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-size: 0.85rem;
+  min-width: 100px;
+  color: #0f172a;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.day-time-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+}
+
+/* per-day availability save button removed; using header-level save only */
+
+.time-separator {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.day-time-bar {
+  width: 140px;
+  height: 6px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.day-time-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #22c55e);
+}
+
+.availability-error {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: #b91c1c;
+  animation: availabilityErrorFade 0.2s ease-out;
+}
+
+@keyframes availabilityErrorFade {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Leave Panel */
+.leave-panel {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.leave-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.leave-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.leave-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.leave-field.full {
+  flex-basis: 100%;
+}
+
+.leave-field label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.leave-field input[type="date"],
+.leave-field textarea {
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.85rem;
+  color: #0f172a;
+  background: #f9fafb;
+}
+
+.leave-field textarea {
+  resize: vertical;
+  min-height: 44px;
+}
+
+.leave-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.leave-hint {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.leave-status-list {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.leave-status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+  font-size: 0.82rem;
+  color: #4b5563;
+}
+
+.leave-status-pill {
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.leave-status-pill.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.leave-status-empty {
+  font-size: 0.8rem;
+  color: #9ca3af;
 }
 
 .unavailable {
@@ -3460,11 +3809,22 @@ input:checked + .slider:before {
   min-height: 100vh;
 }
 
+.profile-tab-enhanced .content-header,
+.profile-tab-enhanced .profile-completion-banner,
+.profile-tab-enhanced .profile-form-enhanced {
+  max-width: 1120px;
+  margin: 0 auto 2rem auto;
+}
+
+.profile-tab-enhanced .profile-form-enhanced {
+  margin-bottom: 0;
+}
+
 .profile-tab-enhanced .content-header {
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   border-radius: 16px;
   padding: 2rem;
-  margin-bottom: 2rem;
+  margin-bottom: 2rem; /* kept for internal spacing before override above */
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
@@ -3811,17 +4171,41 @@ input:checked + .slider:before {
   letter-spacing: 0.025em;
 }
 
+.form-group-enhanced select {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 2px solid rgba(229, 231, 235, 0.8);
+  font-size: 0.9rem;
+  background: #ffffff;
+  color: #111827;
+  transition: all 0.2s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+.form-group-enhanced select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+  background: #ffffff;
+}
+
 .input-wrapper {
   position: relative;
   display: flex;
   align-items: center;
+  min-height: 52px; /* keep icon + input vertically balanced */
 }
 
 .input-wrapper svg {
   position: absolute;
+  top: 10%;
   left: 1rem;
   color: #6b7280;
   z-index: 1;
+  transform: translateY(-50%);
 }
 
 .input-wrapper input,
@@ -4084,6 +4468,12 @@ input:checked + .slider:before {
   font-size: 0.75rem;
   font-weight: 500;
   border: 1px solid #bbf7d0;
+}
+
+.completion-badge.incomplete {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fbbf24;
 }
 
 /* Section Actions */

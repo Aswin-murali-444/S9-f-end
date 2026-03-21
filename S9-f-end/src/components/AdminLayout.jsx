@@ -4,7 +4,7 @@ import { useInView } from 'react-intersection-observer';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Bell, Plus, LogOut, Shield, Activity, Server, Users, Settings, 
-  Target, IndianRupee, Star, PieChart, BarChart3, X, Sun, Moon, Eye
+  Target, IndianRupee, Star, PieChart, BarChart3, X, Sun, Moon, Eye, Calendar
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useSearch } from '../contexts/SearchContext';
@@ -26,6 +26,7 @@ const AdminLayout = ({ children }) => {
 
   const navItems = [
     { key: 'overview', label: 'Overview', icon: BarChart3, path: '/dashboard/admin' },
+    { key: 'bookings', label: 'Bookings', icon: Calendar, path: '/dashboard/admin?tab=bookings' },
     { key: 'users', label: 'User Management', icon: Users, path: '/dashboard/admin?tab=users' },
     { key: 'services', label: 'Services', icon: Settings, path: '/dashboard/admin?tab=services' },
     { key: 'allocation', label: 'Allocation', icon: Target, path: '/dashboard/admin?tab=allocation' },
@@ -46,6 +47,7 @@ const AdminLayout = ({ children }) => {
     }
     
     // For admin pages, determine based on path
+    if (location.pathname.includes('/admin/bookings')) return 'bookings';
     if (location.pathname.includes('/admin/add-user') || location.pathname.includes('/admin/users')) return 'users';
     if (location.pathname.includes('/admin/add-category') || location.pathname.includes('/admin/categories')) return 'services';
     if (location.pathname.includes('/admin/add-service') || location.pathname.includes('/admin/services')) return 'services';
@@ -69,6 +71,7 @@ const AdminLayout = ({ children }) => {
       const tab = urlParams.get('tab');
       const tabTitles = {
         'overview': 'Overview',
+        'bookings': 'Bookings',
         'users': 'User Management',
         'services': 'Services',
         'allocation': 'Allocation',
@@ -83,6 +86,7 @@ const AdminLayout = ({ children }) => {
     }
     
     // For admin pages, determine based on path
+    if (location.pathname.includes('/admin/bookings')) return 'Bookings';
     if (location.pathname.includes('/admin/add-service-provider')) return 'Add Service Provider';
     if (location.pathname.includes('/admin/add-category')) return 'Add Category';
     if (location.pathname.includes('/admin/add-service')) return 'Add Service';

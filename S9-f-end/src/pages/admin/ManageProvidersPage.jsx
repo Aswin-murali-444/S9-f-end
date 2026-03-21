@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, UserCheck, UserX, Mail, Phone, Filter, Download, Eye } from 'lucide-react';
+import { Search, UserCheck, UserX, Mail, Phone, Filter, Download, Eye, KeyRound } from 'lucide-react';
+import toast from 'react-hot-toast';
 import AdminLayout from '../../components/AdminLayout';
 import { apiService } from '../../services/api';
 import './AdminPages.css';
@@ -63,6 +64,22 @@ const ManageProvidersPage = () => {
       setProviders(prev => prev.map(p => p.id === userId ? { ...p, status: nextStatus } : p));
     } catch (e) {
       console.error('Failed to update status', e);
+    }
+  };
+
+  const [resendingId, setResendingId] = useState(null);
+  const resendCredentials = async (userId) => {
+    setResendingId(userId);
+    try {
+      const res = await apiService.resendProviderCredentials(userId, true);
+      if (res?.emailSent) toast.success('New credentials sent to provider email.');
+      else if (res?.tempPassword) toast.success(`Password reset. Share with provider: ${res.tempPassword}`);
+      else toast.success('Credentials updated.');
+    } catch (e) {
+      console.error('Failed to resend credentials', e);
+      toast.error(e?.message || 'Failed to resend credentials');
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -146,6 +163,9 @@ const ManageProvidersPage = () => {
                 <div className="spec-cell">{p.service_provider_details?.specialization || '—'}</div>
                 <div className="actions-cell">
                   <button className="btn-secondary small" onClick={() => window.location.assign(`/admin/users/${p.id}`)}><Eye size={14} /> View</button>
+                  <button className="btn-secondary small" onClick={() => resendCredentials(p.id)} disabled={resendingId === p.id} title="Reset password and email new credentials (fixes login issues)">
+                    <KeyRound size={14} /> {resendingId === p.id ? 'Sending…' : 'Resend credentials'}
+                  </button>
                   {p.status === 'active' ? (
                     <button className="btn-secondary small" onClick={() => changeStatus(p.id, 'suspended')}><UserX size={14} /> Suspend</button>
                   ) : (

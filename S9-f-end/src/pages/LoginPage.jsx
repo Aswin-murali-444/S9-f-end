@@ -24,8 +24,9 @@ const loginSchema = yup.object({
 });
 
 const LoginPage = () => {
-  const { login, signInWithGoogle, loading, isAuthenticated, user, isInitialized } = useAuth();
+  const { login, signInWithGoogle, loading = false, isAuthenticated = false, user = null, isInitialized = true } = useAuth();
   const navigate = useNavigate();
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const {
     register,
@@ -44,16 +45,16 @@ const LoginPage = () => {
 
   const watchedFields = watch();
 
-  // Clear form on component mount and prevent autofill
+  // Clear form and any stale flags on mount so the form always shows
   useEffect(() => {
-    // Clear form when component mounts
-    reset();
+    // Clear stale flags so we never get stuck on loading
+    localStorage.removeItem('just_logged_in');
+    setIsRedirecting(false);
     
-    // Force clear any autofilled values
+    reset();
     setTimeout(() => {
       const emailInput = document.querySelector('input[type="email"]');
       const passwordInput = document.querySelector('input[type="password"]');
-      
       if (emailInput) emailInput.value = '';
       if (passwordInput) passwordInput.value = '';
     }, 100);
@@ -71,24 +72,51 @@ const LoginPage = () => {
       console.log('🔐 Login result:', result);
       
       if (result.success) {
-        console.log('🚀 Login successful, forcing immediate redirect');
+        console.log('🚀 Login successful, preparing immediate redirect');
+        
+        // Set redirecting state immediately to prevent form from showing
+        setIsRedirecting(true);
         
         // Get the dashboard path from result or localStorage
         let targetPath = result.dashboardPath;
         if (!targetPath) {
-          targetPath = localStorage.getItem('dashboard_path') || '/dashboard/provider';
+          targetPath = localStorage.getItem('dashboard_path');
         }
         
-        // Force immediate redirect without any delay
-        console.log('🚀 Immediate redirect to:', targetPath);
-        window.location.replace(targetPath);
+        // Fallback to role-based path if still not set
+        if (!targetPath || targetPath === '/' || targetPath === '/dashboard') {
+          const userRole = localStorage.getItem('user_role');
+          if (userRole === 'service_provider') targetPath = '/dashboard/provider';
+          else if (userRole === 'customer') targetPath = '/dashboard/customer';
+          else if (userRole === 'admin') targetPath = '/dashboard/admin';
+          else if (userRole === 'supervisor') targetPath = '/dashboard/supervisor';
+          else if (userRole === 'driver') targetPath = '/dashboard/driver';
+          else targetPath = '/dashboard/provider'; // Default fallback
+        }
+        
+        // Set a flag to prevent PublicOnlyRoute from interfering
+        localStorage.setItem('just_logged_in', 'true');
+        
+        // Show success message
+        toast.success('Login successful! Redirecting...');
+        
+        // Use window.location.href for immediate hard redirect (no React Router delay)
+        // This prevents any render cycles that might show the login page
+        console.log('🚀 Immediate hard redirect to:', targetPath);
+        
+        // Small delay to ensure state is set, then redirect
+        setTimeout(() => {
+          window.location.href = targetPath;
+        }, 50);
         
       } else {
         console.error('❌ Login failed:', result.error);
+        setIsRedirecting(false);
         toast.error(result.error || 'Login failed');
       }
     } catch (error) {
       console.error('💥 Login error:', error);
+      setIsRedirecting(false);
       toast.error('Login failed. Please try again.');
     }
   };
@@ -112,25 +140,7 @@ const LoginPage = () => {
     return '';
   };
 
-  // Show loading screen only when app is initializing
-  if (!isInitialized) {
-    return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        color: 'white'
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', marginBottom: '10px' }}>Loading...</div>
-          <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>Please wait while we check your authentication</div>
-        </div>
-      </div>
-    );
-  }
-
+  // Always show the form - never show loading (redirect happens in background)
   return (
     <div className="login-container">
       <div className="login-content">

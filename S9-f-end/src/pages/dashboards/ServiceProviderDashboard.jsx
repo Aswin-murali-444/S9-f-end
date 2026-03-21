@@ -161,6 +161,20 @@ const ServiceProviderDashboard = () => {
   const [providerProfile, setProviderProfile] = useState(null);
   const [isLoadingProviderProfile, setIsLoadingProviderProfile] = useState(true);
 
+  // Helper: merge availability from DB onto local default so all weekdays stay present
+  const mergeAvailability = (baseAvailability, dbAvailability) => {
+    const base = baseAvailability || {};
+    const fromDb = dbAvailability && typeof dbAvailability === 'object' ? dbAvailability : {};
+    const merged = { ...base };
+    Object.entries(fromDb).forEach(([day, value]) => {
+      merged[day] = {
+        ...(base[day] || {}),
+        ...(value || {})
+      };
+    });
+    return merged;
+  };
+
   // Animation states
   const [isLoading, setIsLoading] = useState(true);
   const [animatedStats, setAnimatedStats] = useState({
@@ -297,13 +311,15 @@ const ServiceProviderDashboard = () => {
           
           // Update profile with service provider details from database
           console.log('Profile data from database:', profileData?.roleDetails);
+          const rd = profileData?.roleDetails || {};
+          const rateFromDetails = parseFloat(rd.hourly_rate) || parseFloat(rd.basic_pay) || 0;
           setProfile(prev => ({
             ...prev,
-            service_category: profileData?.roleDetails?.service_category_name || '',
-            service: profileData?.roleDetails?.service_name || '',
-            experience_years: profileData?.roleDetails?.experience_years || 0,
-            hourly_rate: parseFloat(profileData?.roleDetails?.basic_pay) || 0, // Using basic_pay field
-            availability: profileData?.roleDetails?.availability || prev.availability
+            service_category: rd.service_category_name || '',
+            service: rd.service_name || '',
+            experience_years: rd.experience_years || 0,
+            hourly_rate: rateFromDetails,
+            availability: mergeAvailability(prev.availability, rd.availability)
           }));
           
           // Profile completion check will be handled in useEffect after data is loaded
@@ -342,6 +358,188 @@ const ServiceProviderDashboard = () => {
     }
   };
 
+  // Fetch provider bank / UPI details used for salary payouts
+  const fetchBankDetails = async () => {
+    if (!user?.id) return;
+    try {
+      const response = await apiService.getProviderBankDetails(user.id);
+      if (response?.bankDetails) {
+        setBankDetails(prev => {
+          const next = { ...prev, ...response.bankDetails };
+          const errs = validateBankDetails(next);
+          setBankDetailsErrors(errs);
+          setIsPayoutComplete(Object.keys(errs).length === 0);
+          return next;
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch bank details:', error);
+    }
+  };
+
+  // Centralized validation for payout details – can be reused on change + submit
+  const validateBankDetails = (details) => {
+    const errors = {};
+    const pref = (details.payout_preference || 'upi').toLowerCase();
+
+    const rawName = details.account_holder_name || '';
+    const trimmedName = rawName.trim();
+    const upi = (details.upi_id || '').trim();
+    const acct = (details.bank_account_number || '').trim();
+    const ifsc = (details.bank_ifsc || '').trim();
+    const bankName = (details.bank_name || '').trim();
+
+    // Common validations
+    if (!trimmedName || trimmedName.length < 3) {
+      errors.account_holder_name = 'Please enter the account holder name (at least 3 letters).';
+    } else {
+      // Reject trailing/leading spaces beyond a single space separator
+      if (rawName !== trimmedName) {
+        errors.account_holder_name = 'Please remove extra spaces before or after the name.';
+      } else {
+        // Allow only letters and single spaces between words
+        const nameRegex = /^[A-Za-z]+(?: [A-Za-z]+)*$/;
+        if (!nameRegex.test(trimmedName)) {
+          errors.account_holder_name = 'Account holder name can contain only letters and single spaces (no numbers or special characters).';
+        }
+      }
+    }
+
+    // UPI validation when preference is UPI
+    if (pref === 'upi') {
+      if (!upi) {
+        errors.upi_id = 'UPI ID is required when payout preference is UPI.';
+      } else {
+        const upiRegex = /^[\w.\-]{2,}@[A-Za-z0-9]{2,}$/;
+        if (!upiRegex.test(upi)) {
+          errors.upi_id = 'Enter a valid UPI ID (e.g., yourphone@upi or name@bank).';
+        }
+      }
+    }
+
+    // Bank validations when preference is bank transfer
+    if (pref === 'bank') {
+      if (!acct) {
+        errors.bank_account_number = 'Bank account number is required when payout preference is Bank transfer.';
+      } else {
+        // Only numeric characters allowed, length 9–18
+        const acctRegex = /^[0-9]+$/;
+        if (!acctRegex.test(acct)) {
+          errors.bank_account_number = 'Bank account number must contain only digits (no spaces or special characters).';
+        } else if (acct.length < 9 || acct.length > 18) {
+          errors.bank_account_number = 'Bank account number must be between 9 and 18 digits long.';
+        }
+      }
+
+      if (!ifsc) {
+        errors.bank_ifsc = 'IFSC code is required when payout preference is Bank transfer.';
+      } else {
+        // Standard IFSC format: 4 letters, 0, then 6 letters/digits – no special characters
+        const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+        if (!ifscRegex.test(ifsc.toUpperCase())) {
+          errors.bank_ifsc = 'Enter a valid IFSC code (only letters and digits, e.g., BANK0XXXXXX).';
+        }
+      }
+
+      if (!bankName || bankName.length < 3) {
+        errors.bank_name = 'Please enter your bank / branch name.';
+      }
+    }
+
+    return errors;
+  };
+
+  // When user finishes typing IFSC, look up bank details from public API
+  const handleIfscBlur = async () => {
+    const rawIfsc = (bankDetails.bank_ifsc || '').trim().toUpperCase();
+    if (!rawIfsc) return;
+
+    // Quick format check – if invalid, don't hit API
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+    if (!ifscRegex.test(rawIfsc)) {
+      return;
+    }
+
+    try {
+      setIfscLookupLoading(true);
+      setIfscLookupInfo(null);
+
+      const res = await fetch(`https://ifsc.razorpay.com/${encodeURIComponent(rawIfsc)}`);
+      if (!res.ok) {
+        toast.error('Could not find bank details for this IFSC.');
+        return;
+      }
+
+      const data = await res.json();
+      setIfscLookupInfo(data);
+
+      // Auto-fill bank name if empty
+      if (data && (data.BANK || data.bank)) {
+        setBankDetails(prev => ({
+          ...prev,
+          bank_ifsc: rawIfsc,
+          bank_name: prev.bank_name || data.BANK || data.bank
+        }));
+      } else {
+        setBankDetails(prev => ({ ...prev, bank_ifsc: rawIfsc }));
+      }
+    } catch (error) {
+      console.error('IFSC lookup failed:', error);
+      toast.error('Failed to verify IFSC. Please check your network and try again.');
+    } finally {
+      setIfscLookupLoading(false);
+    }
+  };
+
+  const handleSaveBankDetails = async () => {
+    if (!user?.id) return;
+
+    // Validate current state before submitting
+    const errors = validateBankDetails(bankDetails);
+    setBankDetailsErrors(errors);
+    setIsPayoutComplete(Object.keys(errors).length === 0);
+
+    if (Object.keys(errors).length > 0) {
+      toast.error('Please fix the highlighted payout fields.');
+      return;
+    }
+
+    const trimmedName = (bankDetails.account_holder_name || '').trim();
+    const upi = (bankDetails.upi_id || '').trim();
+    const acct = (bankDetails.bank_account_number || '').trim();
+    const ifsc = (bankDetails.bank_ifsc || '').trim();
+    const bankName = (bankDetails.bank_name || '').trim();
+
+    setBankDetailsErrors(errors);
+
+    try {
+      setBankDetailsSaving(true);
+      await apiService.updateProviderBankDetails(user.id, {
+        ...bankDetails,
+        account_holder_name: trimmedName,
+        upi_id: upi || null,
+        bank_account_number: acct || null,
+        bank_ifsc: ifsc ? ifsc.toUpperCase() : null,
+        bank_name: bankName || null
+      });
+      toast.success('Salary payout details saved');
+      setIsPayoutComplete(true);
+    } catch (error) {
+      console.error('Failed to save bank details:', error);
+      toast.error('Failed to save salary payout details');
+    } finally {
+      setBankDetailsSaving(false);
+    }
+  };
+
+  // Sync profile.hourly_rate when providerProfile loads (provider_profiles.hourly_rate takes precedence)
+  useEffect(() => {
+    const rate = Number(providerProfile?.hourly_rate);
+    if (!isNaN(rate) && providerProfile) {
+      setProfile(prev => ({ ...prev, hourly_rate: rate }));
+    }
+  }, [providerProfile?.hourly_rate, providerProfile]);
+
   // Fetch bookings assigned to this service provider
   const fetchProviderBookings = async () => {
     if (!user?.id) return;
@@ -351,6 +549,7 @@ const ServiceProviderDashboard = () => {
       setJobsError(null);
       
       const response = await apiService.getProviderBookings(user.id, {
+        scope: 'upcoming',
         limit: 50,
         offset: 0
       });
@@ -426,6 +625,28 @@ const ServiceProviderDashboard = () => {
     }
   };
 
+  // Fetch provider leave / time off requests
+  const fetchLeaveRequests = async () => {
+    if (!user?.id) return;
+
+    try {
+      setLeaveLoading(true);
+      const res = await apiService.getProviderTimeOff(user.id);
+      if (res?.success && Array.isArray(res.data)) {
+        setLeaveRequests(res.data);
+      } else if (Array.isArray(res)) {
+        setLeaveRequests(res);
+      } else {
+        setLeaveRequests([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch leave requests:', error);
+      setLeaveRequests([]);
+    } finally {
+      setLeaveLoading(false);
+    }
+  };
+
   // Fetch team members
   const fetchTeamMembers = async () => {
     if (!user?.id) return;
@@ -459,45 +680,88 @@ const ServiceProviderDashboard = () => {
     }
   };
 
-  // Fetch earnings from completed bookings
+  // Fetch team assignments waiting for this provider's accept/decline
+  const fetchMyPendingTeamResponses = async () => {
+    if (!user?.id) return;
+    try {
+      setPendingTeamLoading(true);
+      const res = await apiService.getMyPendingTeamResponses(user.id);
+      const pending = res.pending || [];
+      setPendingTeamResponses(pending);
+
+      // Also fetch per-assignment acceptance details so we can show
+      // who has already accepted and who is still pending.
+      const detailsEntries = await Promise.all(
+        pending.map(async (item) => {
+          try {
+            const detail = await apiService.getAssignmentAcceptances(item.assignment_id);
+            return [item.assignment_id, detail];
+          } catch (err) {
+            console.error('Failed to fetch acceptance details for assignment', item.assignment_id, err);
+            return null;
+          }
+        })
+      );
+
+      const detailsMap = {};
+      for (const entry of detailsEntries) {
+        if (entry && entry[0]) {
+          const [id, detail] = entry;
+          detailsMap[id] = detail;
+        }
+      }
+      setTeamAcceptanceDetails(detailsMap);
+    } catch (error) {
+      console.error('Failed to fetch pending team responses:', error);
+      setPendingTeamResponses([]);
+      setTeamAcceptanceDetails({});
+    } finally {
+      setPendingTeamLoading(false);
+    }
+  };
+
+  // Fetch salary details and payout history from backend (booking_worker_payouts)
   const fetchEarnings = async () => {
     if (!user?.id) return;
     
     try {
       setEarningsLoading(true);
-      
-      // Get all bookings for this provider
-      const response = await apiService.getProviderBookings(user.id, {
-        limit: 100,
-        offset: 0
-      });
-      
-      // Filter completed bookings and format as earnings
-      const completedBookings = (response.bookings || []).filter(booking => 
-        booking.status === 'completed' || booking.status === 'confirmed'
-      );
-      
-      const formattedEarnings = completedBookings.map((booking, index) => ({
-        id: booking.id || index + 1,
-        customer: booking.customerName || booking.customer_name || 'Unknown Customer',
-        service: booking.serviceType || booking.service_name || booking.service_type || 'Service',
-        amount: booking.amount || booking.total_amount || 0,
-        date: booking.scheduledDate || booking.scheduled_date || booking.created_at 
-          ? new Date(booking.scheduledDate || booking.scheduled_date || booking.created_at).toLocaleDateString('en-IN', {
+      const response = await apiService.getProviderSalarySummary(user.id);
+
+      const payouts = response?.payouts || [];
+      const formatted = payouts.map((p, index) => ({
+        id: p.id || index + 1,
+        booking_id: p.booking_id,
+        amount: Number(p.worker_payout_amount) || 0,
+        total_amount: Number(p.total_amount) || 0,
+        company_commission_amount: Number(p.company_commission_amount) || 0,
+        date: p.paid_at
+          ? new Date(p.paid_at).toLocaleDateString('en-IN', {
               year: 'numeric',
               month: 'short',
               day: 'numeric'
             })
-          : new Date().toLocaleDateString('en-IN'),
-        status: booking.status === 'completed' ? 'completed' : 
-                booking.status === 'confirmed' ? 'pending' : 
-                booking.status || 'pending'
+          : '',
+        method: p.payout_method || 'auto',
+        reference: p.payout_reference || '',
+        status: p.payout_status || 'paid',
+        notes: p.notes || ''
       }));
-      
-      setEarnings(formattedEarnings);
+
+      setEarnings(formatted);
+      if (response?.summary) {
+        setSalarySummary(response.summary);
+      }
     } catch (error) {
-      console.error('Failed to fetch earnings:', error);
+      console.error('Failed to fetch salary summary:', error);
       setEarnings([]);
+      setSalarySummary({
+        totalEarned: 0,
+        monthEarned: 0,
+        pendingAmount: 0,
+        totalJobsPaid: 0,
+        totalJobsPending: 0
+      });
     } finally {
       setEarningsLoading(false);
     }
@@ -511,7 +775,9 @@ const ServiceProviderDashboard = () => {
     fetchMatchingBookings(); // Refresh matching bookings
     fetchProviderReviews(); // Refresh reviews
     fetchTeamMembers(); // Refresh team data
+    fetchMyPendingTeamResponses(); // Team jobs waiting for accept/decline
     fetchEarnings(); // Refresh earnings
+    fetchLeaveRequests(); // Refresh leave requests
   };
 
   // Loading effect
@@ -525,6 +791,7 @@ const ServiceProviderDashboard = () => {
     
     // Load provider profile
     fetchProviderProfile();
+    fetchBankDetails();
     
     // Load booking data
     fetchProviderBookings();
@@ -536,9 +803,17 @@ const ServiceProviderDashboard = () => {
     
     // Load earnings data
     fetchEarnings();
+    fetchLeaveRequests();
     
     return () => clearTimeout(timer);
   }, []);
+
+  // Load pending team responses when user is available
+  useEffect(() => {
+    if (user?.id) {
+      fetchMyPendingTeamResponses();
+    }
+  }, [user?.id]);
 
   // Fetch earnings when earnings tab is accessed (if not already loaded)
   useEffect(() => {
@@ -556,11 +831,19 @@ const ServiceProviderDashboard = () => {
   const [matchingJobs, setMatchingJobs] = useState([]);
   const [jobsError, setJobsError] = useState(null);
 
+  // Team job accept/decline: assignments waiting for this provider's response
+  const [pendingTeamResponses, setPendingTeamResponses] = useState([]);
+  const [pendingTeamLoading, setPendingTeamLoading] = useState(false);
+  const [respondingAssignmentId, setRespondingAssignmentId] = useState(null);
+  const [teamAcceptanceDetails, setTeamAcceptanceDetails] = useState({});
+
   // Use the real notifications system
   const { 
     notifications, 
     unreadCount, 
     loading: notificationsLoading,
+    fetchNotifications,
+    fetchUnreadCount,
     markAsRead, 
     markAllAsRead,
     dismissNotification,
@@ -569,6 +852,28 @@ const ServiceProviderDashboard = () => {
   } = useNotifications();
 
   const [earnings, setEarnings] = useState([]);
+  const [salarySummary, setSalarySummary] = useState({
+    totalEarned: 0,
+    monthEarned: 0,
+    pendingAmount: 0,
+    totalJobsPaid: 0,
+    totalJobsPending: 0
+  });
+  const [bankDetails, setBankDetails] = useState({
+    upi_id: '',
+    bank_account_number: '',
+    bank_ifsc: '',
+    bank_name: '',
+    account_holder_name: '',
+    payout_preference: 'upi'
+  });
+  const [bankDetailsSaving, setBankDetailsSaving] = useState(false);
+  const [bankDetailsErrors, setBankDetailsErrors] = useState({});
+  const [ifscLookupLoading, setIfscLookupLoading] = useState(false);
+  const [ifscLookupInfo, setIfscLookupInfo] = useState(null);
+  const [isPayoutComplete, setIsPayoutComplete] = useState(false);
+  // Once payout details are complete and saved, lock the form so workers cannot edit again
+  const isPayoutLocked = isPayoutComplete;
 
   const [ratings, setRatings] = useState([]);
   const [ratingStats, setRatingStats] = useState({
@@ -578,6 +883,13 @@ const ServiceProviderDashboard = () => {
   });
   const [teamMembers, setTeamMembers] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+
+  const [leaveStartDate, setLeaveStartDate] = useState('');
+  const [leaveEndDate, setLeaveEndDate] = useState('');
+  const [leaveReason, setLeaveReason] = useState('');
+  const [leaveSubmitting, setLeaveSubmitting] = useState(false);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [leaveLoading, setLeaveLoading] = useState(false);
 
   const [profile, setProfile] = useState({
     name: "",
@@ -606,6 +918,105 @@ const ServiceProviderDashboard = () => {
       emergency: true
     }
   });
+
+  const [availabilityErrors, setAvailabilityErrors] = useState({});
+
+  const validateAvailabilitySlot = (day, start, end) => {
+    let error = null;
+    if (start && (start < '08:00' || start > '17:00')) {
+      error = 'Start must be between 08:00 and 17:00';
+    } else if (end && (end < '08:00' || end > '17:00')) {
+      error = 'End must be between 08:00 and 17:00';
+    } else if (start && end && end <= start) {
+      error = 'End time must be after start time';
+    }
+    setAvailabilityErrors(prev => ({ ...prev, [day]: error }));
+    return !error;
+  };
+
+  const validateAvailabilityDate = (day, dateStr) => {
+    try {
+      if (!dateStr) {
+        // Allow empty date: treat as "no specific date" instead of blocking save
+        return true;
+      }
+      const d = new Date(dateStr + 'T00:00:00');
+      if (isNaN(d.getTime())) {
+        toast.error('Please select a valid date.');
+        return false;
+      }
+      // Enforce date between today and the next 7 days (inclusive)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const max = new Date(today);
+      max.setDate(max.getDate() + 7);
+      if (d < today) {
+        toast.error('You cannot select a past date.');
+        return false;
+      }
+      if (d > max) {
+        toast.error('You can only set availability within the coming 7 days.');
+        return false;
+      }
+
+      const jsDay = d.getDay(); // 0 = Sunday, 1 = Monday, ...
+      const expected = {
+        sunday: 0,
+        monday: 1,
+        tuesday: 2,
+        wednesday: 3,
+        thursday: 4,
+        friday: 5,
+        saturday: 6
+      }[day];
+      if (expected === undefined) return true;
+      if (jsDay !== expected) {
+        toast.error(`Selected date must be a ${day.charAt(0).toUpperCase() + day.slice(1)}.`);
+        return false;
+      }
+      return true;
+    } catch {
+      toast.error('Please select a valid date.');
+      return false;
+    }
+  };
+
+  const handleSubmitLeaveRequest = async () => {
+    if (!user?.id) {
+      toast.error('You must be logged in to submit leave.');
+      return;
+    }
+    if (!leaveStartDate) {
+      toast.error('Please select a start date.');
+      return;
+    }
+
+    try {
+      setLeaveSubmitting(true);
+      const payload = {
+        start_date: leaveStartDate,
+        end_date: leaveEndDate || leaveStartDate,
+        reason: leaveReason.trim() || null
+      };
+      const res = await apiService.createProviderTimeOff(user.id, payload);
+      toast.success('Leave request submitted.');
+
+      if (res?.data) {
+        setLeaveRequests(prev => [res.data, ...(prev || [])]);
+      } else {
+        fetchLeaveRequests();
+      }
+
+      setLeaveStartDate('');
+      setLeaveEndDate('');
+      setLeaveReason('');
+    } catch (error) {
+      console.error('Failed to submit leave request:', error);
+      toast.error(error?.message || 'Failed to submit leave request');
+    } finally {
+      setLeaveSubmitting(false);
+    }
+  };
 
   // State for profile completion progress
   const [profileCompletionStep, setProfileCompletionStep] = useState(1);
@@ -689,21 +1100,47 @@ const ServiceProviderDashboard = () => {
     }
   };
 
+  const handleSaveAvailability = async () => {
+    if (!user?.id) {
+      toast.error('You must be logged in to save availability.');
+      return;
+    }
+    // Basic validation: ensure each available day with a date is within allowed range
+    for (const [day, schedule] of Object.entries(profile.availability || {})) {
+      if (schedule?.available && schedule.date) {
+        if (!validateAvailabilityDate(day, schedule.date)) {
+          return;
+        }
+      }
+    }
+    try {
+      setProfileLoading(true);
+      await apiService.updateProviderAvailability(user.id, profile.availability);
+      toast.success('Availability updated successfully.');
+    } catch (error) {
+      console.error('Failed to update availability:', error);
+      toast.error(error?.message || 'Failed to update availability');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  // Hourly rate: prefer provider_profiles.hourly_rate, then roleDetails.hourly_rate/basic_pay
+  const displayHourlyRate = Number(providerProfile?.hourly_rate) || Number(profile?.hourly_rate) || 0;
   const stats = [
     { label: "Active Requests", value: animatedRequests.toString(), icon: Calendar, color: "#4f9cf9", change: "+3" },
     { label: "Completed Jobs", value: animatedJobs.toString(), icon: CheckCircle, color: "#8b5cf6", change: "+5" },
     { label: "Client Rating", value: animatedRating.toFixed(1), icon: Star, color: "#f59e0b", change: "+0.2" },
-    { label: "Hourly Rate", value: `₹${profile.hourly_rate.toLocaleString('en-IN')}`, icon: RupeeSymbol, color: "#059669", change: "Current" }
+    { label: "Hourly Rate", value: `₹${displayHourlyRate.toLocaleString('en-IN')}`, icon: RupeeSymbol, color: "#059669", change: displayHourlyRate > 0 ? "Current" : "Not set" }
   ];
 
   const navigationItems = [
     { key: 'home', label: 'Overview', icon: Home },
     { key: 'jobs', label: 'My Jobs', icon: Briefcase },
-    { key: 'earnings', label: 'Earnings', icon: RupeeSymbol },
-    { key: 'schedule', label: 'Schedule', icon: Calendar },
+    { key: 'earnings', label: 'Salary & Payments', icon: RupeeSymbol },
+    { key: 'schedule', label: 'Schedule & Leave', icon: Calendar },
     { key: 'profile', label: 'Profile', icon: User, incomplete: isProfileCheckReady ? !isProfileComplete : false },
     { key: 'reviews', label: 'Reviews', icon: Star },
-    { key: 'analytics', label: 'Analytics', icon: BarChart3 },
     { key: 'settings', label: 'Settings', icon: Settings }
   ];
 
@@ -784,8 +1221,18 @@ const ServiceProviderDashboard = () => {
   const handleAcceptJob = async (jobId) => {
     setActionLoading(true);
     try {
+      if (!user?.id) {
+        toast.error('User not authenticated. Please log in again.');
+        return;
+      }
+      if (!jobId) {
+        toast.error('Invalid job ID.');
+        return;
+      }
+      console.log('Accepting job:', { jobId, userId: user.id });
       // Assign booking to this provider
-      await apiService.assignBooking(jobId, user.id);
+      const result = await apiService.assignBooking(jobId, user.id);
+      console.log('Job assignment result:', result);
       
       // Update local state - move from matching jobs to assigned jobs
       setMatchingJobs(prev => prev.filter(job => job.id !== jobId));
@@ -797,9 +1244,28 @@ const ServiceProviderDashboard = () => {
       toast.success('Job accepted successfully!');
     } catch (error) {
       console.error('Failed to accept job:', error);
-      toast.error('Failed to accept job. Please try again.');
+      const errorMessage = error?.message || error?.error || 'Failed to accept job. Please try again.';
+      const errorDetails = error?.details ? ` Details: ${error.details}` : '';
+      toast.error(errorMessage + errorDetails);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // Team job: accept or decline a team assignment
+  const handleRespondToTeamJob = async (assignmentId, accept) => {
+    if (!user?.id) return;
+    setRespondingAssignmentId(assignmentId);
+    try {
+      await apiService.respondToTeamAssignment(assignmentId, user.id, accept);
+      setPendingTeamResponses((prev) => prev.filter((p) => p.assignment_id !== assignmentId));
+      fetchProviderBookings();
+      toast.success(accept ? 'You have accepted this team job.' : 'You have declined this team job.');
+    } catch (error) {
+      console.error('Failed to respond to team job:', error);
+      toast.error(error?.message || error?.error || 'Failed to update. Please try again.');
+    } finally {
+      setRespondingAssignmentId(null);
     }
   };
 
@@ -1056,15 +1522,19 @@ const ServiceProviderDashboard = () => {
                 <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
               </button>
               
-              <button 
-                className="notification-btn"
-                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-              >
-                <Bell size={18} />
-                {unreadCount > 0 && (
-                  <span className="notification-badge">{unreadCount}</span>
-                )}
-              </button>
+              <div className="notification-btn-wrap" title="Notifications – team jobs and alerts">
+                <button 
+                  className="notification-btn"
+                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  aria-label="Open notifications"
+                >
+                  <Bell size={18} />
+                  {unreadCount > 0 && (
+                    <span className="notification-badge">{unreadCount}</span>
+                  )}
+                </button>
+                <span className="notification-btn-label">Notifications</span>
+              </div>
               {isNotificationsOpen && (
                 <div className="notifications-dropdown">
                   <div className="notifications-header">
@@ -1084,7 +1554,7 @@ const ServiceProviderDashboard = () => {
                       <div className="empty-notifications">
                         <Bell size={32} />
                         <p>No new notifications</p>
-                        <span>You're all caught up!</span>
+                        <span>Team job alerts and booking updates will appear here</span>
                       </div>
                     ) : (
                       notifications.slice(0, 6).map(item => (
@@ -1415,6 +1885,129 @@ const ServiceProviderDashboard = () => {
                 </div>
               </div>
 
+              {/* Team jobs: admin assigned your team – accept or decline */}
+              {pendingTeamResponses.length > 0 && (
+                <div className="content-section" style={{ marginTop: '1.5rem' }}>
+                  <div className="section-header" style={{ alignItems: 'center', gap: '0.5rem' }}>
+                    <Users size={22} style={{ color: 'var(--primary, #4f9cf9)' }} />
+                    <h2>Team jobs – action required</h2>
+                  </div>
+                  <p className="section-subtitle" style={{ marginBottom: '1rem', color: '#64748b' }}>
+                    Admin assigned your team to the job(s) below. View the details and <strong>Accept</strong> or <strong>Decline</strong>.
+                  </p>
+                  <div className="jobs-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
+                    {pendingTeamResponses.map((item) => (
+                      <motion.div
+                        key={item.assignment_id}
+                        className="job-card available"
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
+                        style={{ borderLeft: '4px solid var(--primary, #4f9cf9)' }}
+                      >
+                        <div className="job-header" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <h3 style={{ margin: 0 }}>{item.team_name || 'Team job'}</h3>
+                          <span className="status-badge" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+                            Pending your response
+                          </span>
+                        </div>
+                        <div className="job-details-grid" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
+                          <div className="detail-item">
+                            <CalendarDays size={16} />
+                            {item.scheduled_date} at {item.scheduled_time || '—'}
+                          </div>
+                          {item.service_address && (
+                            <div className="detail-item">
+                              <MapPin size={16} />
+                              {item.service_address}
+                            </div>
+                          )}
+                        </div>
+                        {teamAcceptanceDetails[item.assignment_id]?.acceptances?.length > 0 && (
+                          <div
+                            className="team-acceptance-summary"
+                            style={{
+                              marginTop: '0.75rem',
+                              padding: '0.75rem',
+                              borderRadius: '0.5rem',
+                              backgroundColor: '#f9fafb'
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '0.5rem'
+                              }}
+                            >
+                              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#0f172a' }}>
+                                Team members for this job
+                              </span>
+                              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                {(() => {
+                                  const members = teamAcceptanceDetails[item.assignment_id].acceptances || [];
+                                  const acceptedCount = members.filter((m) => m.status === 'accepted').length;
+                                  const total = members.length;
+                                  return `${acceptedCount}/${total || '—'} accepted`;
+                                })()}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                              {teamAcceptanceDetails[item.assignment_id].acceptances.map((m) => (
+                                <span
+                                  key={m.user_id}
+                                  style={{
+                                    fontSize: '0.78rem',
+                                    padding: '0.2rem 0.5rem',
+                                    borderRadius: '999px',
+                                    backgroundColor:
+                                      m.status === 'accepted'
+                                        ? 'rgba(16, 185, 129, 0.1)'
+                                        : m.status === 'declined'
+                                        ? 'rgba(239, 68, 68, 0.08)'
+                                        : 'rgba(250, 204, 21, 0.08)',
+                                    color:
+                                      m.status === 'accepted'
+                                        ? '#047857'
+                                        : m.status === 'declined'
+                                        ? '#b91c1c'
+                                        : '#92400e'
+                                  }}
+                                >
+                                  {(m.full_name && m.full_name.trim()) || 'Team member'} —{' '}
+                                  {toTitleCase(m.status || 'pending')}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div className="job-actions" style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            className="btn-accept"
+                            onClick={() => handleRespondToTeamJob(item.assignment_id, true)}
+                            disabled={respondingAssignmentId === item.assignment_id}
+                          >
+                            {respondingAssignmentId === item.assignment_id ? <LoadingSpinner size="small" /> : <CheckCircle size={16} />}
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-decline"
+                            onClick={() => handleRespondToTeamJob(item.assignment_id, false)}
+                            disabled={respondingAssignmentId === item.assignment_id}
+                          >
+                            {respondingAssignmentId === item.assignment_id ? <LoadingSpinner size="small" /> : <X size={16} />}
+                            Decline
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Matching Jobs - Jobs that match your specialization */}
               {matchingJobs.length > 0 && (
                 <div className="content-section">
@@ -1726,6 +2319,100 @@ const ServiceProviderDashboard = () => {
                 </div>
               </div>
 
+              {/* Team jobs: admin assigned your team – accept or decline (Jobs tab) */}
+              {pendingTeamResponses.length > 0 && (
+                <div className="content-section" style={{ marginBottom: '1.5rem' }}>
+                  <div className="section-header" style={{ alignItems: 'center', gap: '0.5rem' }}>
+                    <Users size={22} style={{ color: 'var(--primary, #4f9cf9)' }} />
+                    <h2>Team jobs – action required</h2>
+                  </div>
+                  <p className="section-subtitle" style={{ marginBottom: '0.75rem', color: '#64748b', fontSize: '0.9rem' }}>
+                    Admin assigned your team to these jobs. Accept or decline below.
+                  </p>
+                  <div className="jobs-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
+                    {pendingTeamResponses.map((item) => (
+                      <div key={item.assignment_id} className="job-card available" style={{ borderLeft: '4px solid var(--primary, #4f9cf9)' }}>
+                        <div className="job-header" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <h3 style={{ margin: 0 }}>{item.team_name || 'Team job'}</h3>
+                          <span className="status-badge" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>Pending your response</span>
+                        </div>
+                        <div className="job-details-grid" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
+                          <div className="detail-item"><CalendarDays size={16} /> {item.scheduled_date} at {item.scheduled_time || '—'}</div>
+                          {item.service_address && <div className="detail-item"><MapPin size={16} /> {item.service_address}</div>}
+                        </div>
+                        {teamAcceptanceDetails[item.assignment_id]?.acceptances?.length > 0 && (
+                          <div
+                            className="team-acceptance-summary"
+                            style={{
+                              marginTop: '0.75rem',
+                              padding: '0.75rem',
+                              borderRadius: '0.5rem',
+                              backgroundColor: '#f9fafb'
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '0.5rem'
+                              }}
+                            >
+                              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#0f172a' }}>
+                                Team members for this job
+                              </span>
+                              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                {(() => {
+                                  const members = teamAcceptanceDetails[item.assignment_id].acceptances || [];
+                                  const acceptedCount = members.filter((m) => m.status === 'accepted').length;
+                                  const total = members.length;
+                                  return `${acceptedCount}/${total || '—'} accepted`;
+                                })()}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                              {teamAcceptanceDetails[item.assignment_id].acceptances.map((m) => (
+                                <span
+                                  key={m.user_id}
+                                  style={{
+                                    fontSize: '0.78rem',
+                                    padding: '0.2rem 0.5rem',
+                                    borderRadius: '999px',
+                                    backgroundColor:
+                                      m.status === 'accepted'
+                                        ? 'rgba(16, 185, 129, 0.1)'
+                                        : m.status === 'declined'
+                                        ? 'rgba(239, 68, 68, 0.08)'
+                                        : 'rgba(250, 204, 21, 0.08)',
+                                    color:
+                                      m.status === 'accepted'
+                                        ? '#047857'
+                                        : m.status === 'declined'
+                                        ? '#b91c1c'
+                                        : '#92400e'
+                                  }}
+                                >
+                                  {(m.full_name && m.full_name.trim()) || 'Team member'} —{' '}
+                                  {toTitleCase(m.status || 'pending')}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div className="job-actions" style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                          <button type="button" className="btn-accept" onClick={() => handleRespondToTeamJob(item.assignment_id, true)} disabled={respondingAssignmentId === item.assignment_id}>
+                            {respondingAssignmentId === item.assignment_id ? <LoadingSpinner size="small" /> : <CheckCircle size={16} />} Accept
+                          </button>
+                          <button type="button" className="btn-decline" onClick={() => handleRespondToTeamJob(item.assignment_id, false)} disabled={respondingAssignmentId === item.assignment_id}>
+                            {respondingAssignmentId === item.assignment_id ? <LoadingSpinner size="small" /> : <X size={16} />} Decline
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="jobs-list">
                 {jobsLoading ? (
                   <div className="loading-placeholder" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
@@ -1888,8 +2575,13 @@ const ServiceProviderDashboard = () => {
             >
               <div className="content-header earnings-header-enhanced">
                 <div className="header-title-section">
-                  <h1 className="earnings-title">Earnings & Payments</h1>
-                  <p className="earnings-subtitle">Track your income and payment history</p>
+                  <h1 className="earnings-title">Salary & Payments</h1>
+                  <p className="earnings-subtitle">See your credited salary and manage payout details</p>
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <span className={`completion-badge ${isPayoutComplete ? '' : 'incomplete'}`}>
+                      {isPayoutComplete ? 'Payout details saved' : 'Payout details incomplete – add your UPI / bank info'}
+                    </span>
+                  </div>
                 </div>
                 <div className="header-actions earnings-actions">
                   <motion.button 
@@ -1944,13 +2636,13 @@ const ServiceProviderDashboard = () => {
                         <div className="icon-glow"></div>
                       </div>
                       <div className="summary-content">
-                        <h3>Total Earnings</h3>
+                        <h3>Total Salary Credited (All Time)</h3>
                         <div className="summary-amount earnings-amount-main">
-                          ₹{earnings.reduce((sum, earning) => sum + (earning.amount || 0), 0).toLocaleString('en-IN')}
+                          ₹{Number(salarySummary.totalEarned || 0).toLocaleString('en-IN')}
                         </div>
                         <div className="summary-change positive earnings-change">
                           <TrendingUp size={14} />
-                          {earnings.length > 0 ? `${earnings.filter(e => e.status === 'completed').length} completed` : 'No earnings yet'}
+                          {salarySummary.totalJobsPaid || 0} jobs paid
                         </div>
                       </div>
                       <div className="card-decoration"></div>
@@ -1968,11 +2660,13 @@ const ServiceProviderDashboard = () => {
                         <div className="icon-glow"></div>
                       </div>
                       <div className="summary-content">
-                        <h3>Completed Jobs</h3>
-                        <div className="summary-amount">{jobs.filter(j => j.status === 'completed').length}</div>
+                        <h3>This Month's Salary</h3>
+                        <div className="summary-amount">
+                          ₹{Number(salarySummary.monthEarned || 0).toLocaleString('en-IN')}
+                        </div>
                         <div className="summary-change positive earnings-change">
                           <CheckCircle size={14} />
-                          {earnings.filter(e => e.status === 'completed').length} paid
+                          {salarySummary.totalJobsPaid || 0} jobs paid
                         </div>
                       </div>
                       <div className="card-decoration"></div>
@@ -1990,17 +2684,205 @@ const ServiceProviderDashboard = () => {
                         <div className="icon-glow"></div>
                       </div>
                       <div className="summary-content">
-                        <h3>Average Rating</h3>
-                        <div className="summary-amount">{ratingStats.averageRating > 0 ? ratingStats.averageRating.toFixed(1) : 'N/A'}</div>
-                        <div className="summary-change positive earnings-change">
-                          <Star size={14} />
-                          {ratingStats.totalReviews} reviews
+                        <h3>Pending Amount</h3>
+                        <div className="summary-amount">
+                          ₹{Number(salarySummary.pendingAmount || 0).toLocaleString('en-IN')}
+                        </div>
+                        <div className="summary-change earnings-change">
+                          <Activity size={14} />
+                          {salarySummary.totalJobsPending || 0} jobs pending
                         </div>
                       </div>
                       <div className="card-decoration"></div>
                     </motion.div>
                   </motion.div>
 
+                  {/* Salary payout details (bank / UPI) */}
+                  <motion.div 
+                    className="content-section"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: 0.4 }}
+                  >
+                    <div className="section-header">
+                      <div>
+                        <h2>Salary payout details</h2>
+                        <p className="section-subtitle">
+                          Add your preferred UPI ID or bank account so that credited salary can be tracked properly.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="form-grid-enhanced">
+                      <div className="form-group-enhanced">
+                        <label>Payout preference</label>
+                        <select
+                          value={bankDetails.payout_preference || 'upi'}
+                          disabled={isPayoutLocked}
+                          onChange={(e) => {
+                            if (isPayoutLocked) return;
+                            const next = { ...bankDetails, payout_preference: e.target.value };
+                            setBankDetails(next);
+                            const errs = validateBankDetails(next);
+                            setBankDetailsErrors(errs);
+                            setIsPayoutComplete(Object.keys(errs).length === 0);
+                          }}
+                        >
+                          <option value="upi">UPI</option>
+                          <option value="bank">Bank transfer</option>
+                        </select>
+                        <span className="help-text">
+                          Choose how you usually receive your salary outside the app.
+                        </span>
+                      </div>
+                      <div className="form-group-enhanced">
+                        <label>UPI ID</label>
+                        <div className="input-wrapper">
+                          <Smartphone size={16} />
+                          <input
+                            type="text"
+                            placeholder="yourphone@upi or name@bank"
+                            value={bankDetails.upi_id || ''}
+                            disabled={isPayoutLocked}
+                            onChange={(e) => {
+                              if (isPayoutLocked) return;
+                              const next = { ...bankDetails, upi_id: e.target.value };
+                              setBankDetails(next);
+                              const errs = validateBankDetails(next);
+                              setBankDetailsErrors(errs);
+                              setIsPayoutComplete(Object.keys(errs).length === 0);
+                            }}
+                            className={bankDetailsErrors.upi_id ? 'error' : ''}
+                          />
+                        </div>
+                        {bankDetailsErrors.upi_id ? (
+                          <span className="error-text">{bankDetailsErrors.upi_id}</span>
+                        ) : (
+                          <span className="help-text">
+                            Required if payout preference is UPI.
+                          </span>
+                        )}
+                      </div>
+                      <div className="form-group-enhanced">
+                        <label>Account holder name</label>
+                        <div className="input-wrapper">
+                          <User size={16} />
+                          <input
+                            type="text"
+                            placeholder="Name as per bank account"
+                            value={bankDetails.account_holder_name || ''}
+                            disabled={isPayoutLocked}
+                            onChange={(e) => {
+                              if (isPayoutLocked) return;
+                              const next = { ...bankDetails, account_holder_name: e.target.value };
+                              setBankDetails(next);
+                              const errs = validateBankDetails(next);
+                              setBankDetailsErrors(errs);
+                              setIsPayoutComplete(Object.keys(errs).length === 0);
+                            }}
+                            className={bankDetailsErrors.account_holder_name ? 'error' : ''}
+                          />
+                        </div>
+                        {bankDetailsErrors.account_holder_name && (
+                          <span className="error-text">{bankDetailsErrors.account_holder_name}</span>
+                        )}
+                      </div>
+                      <div className="form-group-enhanced">
+                        <label>Bank account number</label>
+                        <div className="input-wrapper">
+                          <Key size={16} />
+                          <input
+                            type="text"
+                            placeholder="Account number"
+                            value={bankDetails.bank_account_number || ''}
+                            disabled={isPayoutLocked}
+                            onChange={(e) => {
+                              if (isPayoutLocked) return;
+                              const next = { ...bankDetails, bank_account_number: e.target.value };
+                              setBankDetails(next);
+                              const errs = validateBankDetails(next);
+                              setBankDetailsErrors(errs);
+                              setIsPayoutComplete(Object.keys(errs).length === 0);
+                            }}
+                            className={bankDetailsErrors.bank_account_number ? 'error' : ''}
+                          />
+                        </div>
+                        {bankDetailsErrors.bank_account_number && (
+                          <span className="error-text">{bankDetailsErrors.bank_account_number}</span>
+                        )}
+                      </div>
+                      <div className="form-group-enhanced">
+                        <label>IFSC code</label>
+                        <div className="input-wrapper">
+                          <Globe size={16} />
+                          <input
+                            type="text"
+                            placeholder="BANK0000000"
+                            value={bankDetails.bank_ifsc || ''}
+                            disabled={isPayoutLocked}
+                            onChange={(e) => {
+                              if (isPayoutLocked) return;
+                              const next = { ...bankDetails, bank_ifsc: e.target.value.toUpperCase() };
+                              setBankDetails(next);
+                              const errs = validateBankDetails(next);
+                              setBankDetailsErrors(errs);
+                              setIsPayoutComplete(Object.keys(errs).length === 0);
+                            }}
+                            onBlur={isPayoutLocked ? undefined : handleIfscBlur}
+                            className={bankDetailsErrors.bank_ifsc ? 'error' : ''}
+                          />
+                        </div>
+                        {bankDetailsErrors.bank_ifsc && (
+                          <span className="error-text">{bankDetailsErrors.bank_ifsc}</span>
+                        )}
+                        {!bankDetailsErrors.bank_ifsc && (
+                          <span className="help-text">
+                            {ifscLookupLoading
+                              ? 'Checking bank details…'
+                              : ifscLookupInfo && (ifscLookupInfo.BANK || ifscLookupInfo.bank)
+                                ? `Bank detected: ${(ifscLookupInfo.BANK || ifscLookupInfo.bank)}${ifscLookupInfo.BRANCH ? ` • ${ifscLookupInfo.BRANCH}` : ''}`
+                                : 'Enter a valid IFSC code to auto-detect your bank.'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="form-group-enhanced">
+                        <label>Bank name</label>
+                        <div className="input-wrapper">
+                          <Home size={16} />
+                          <input
+                            type="text"
+                            placeholder="Bank / branch name"
+                            value={bankDetails.bank_name || ''}
+                            disabled={isPayoutLocked}
+                            onChange={(e) => {
+                              if (isPayoutLocked) return;
+                              const next = { ...bankDetails, bank_name: e.target.value };
+                              setBankDetails(next);
+                              const errs = validateBankDetails(next);
+                              setBankDetailsErrors(errs);
+                              setIsPayoutComplete(Object.keys(errs).length === 0);
+                            }}
+                            className={bankDetailsErrors.bank_name ? 'error' : ''}
+                          />
+                        </div>
+                        {bankDetailsErrors.bank_name && (
+                          <span className="error-text">{bankDetailsErrors.bank_name}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="section-actions">
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={handleSaveBankDetails}
+                        disabled={bankDetailsSaving || isPayoutLocked}
+                      >
+                        {bankDetailsSaving ? <LoadingSpinner size="small" /> : <Save size={16} />}
+                        {bankDetailsSaving ? 'Saving…' : 'Save payout details'}
+                      </button>
+                    </div>
+                  </motion.div>
+
+                  {/* Salary history table */}
                   <motion.div 
                     className="earnings-table enhanced-table"
                     initial={{ opacity: 0, y: 20 }}
@@ -2009,27 +2891,27 @@ const ServiceProviderDashboard = () => {
                   >
                     <div className="table-header enhanced-header">
                       <div className="header-cell">
-                        <User size={16} />
-                        Customer
-                      </div>
-                      <div className="header-cell">
-                        <Package size={16} />
-                        Service
+                        <FileText size={16} />
+                        Booking
                       </div>
                       <div className="header-cell">
                         <Calendar size={16} />
-                        Date
+                        Paid on
                       </div>
                       <div className="header-cell">
                         <RupeeSymbol size={16} />
-                        Amount
+                        Salary (you)
+                      </div>
+                      <div className="header-cell">
+                        <RupeeSymbol size={16} />
+                        Job total
                       </div>
                       <div className="header-cell">
                         <Activity size={16} />
                         Status
                       </div>
                       <div className="header-cell">
-                        Actions
+                        Method
                       </div>
                     </div>
                     {earnings.length === 0 ? (
@@ -2043,9 +2925,9 @@ const ServiceProviderDashboard = () => {
                           <RupeeSymbol size={64} />
                           <div className="empty-icon-glow"></div>
                         </div>
-                        <h3 className="empty-title">No earnings data available</h3>
+                        <h3 className="empty-title">No salary data available</h3>
                         <p className="empty-description">
-                          Earnings will appear here once you complete jobs and receive payments.
+                          Salary entries will appear here once jobs are completed and payouts are credited.
                         </p>
                         <motion.button 
                           className="btn-primary empty-action-btn"
@@ -2068,52 +2950,41 @@ const ServiceProviderDashboard = () => {
                             transition={{ duration: 0.3, delay: 0.6 + (index * 0.05) }}
                             whileHover={{ x: 5, backgroundColor: '#f8fafc' }}
                           >
-                            <div className="table-cell customer-cell">
-                              <div className="customer-avatar">
-                                {earning.customer.charAt(0).toUpperCase()}
-                              </div>
-                              <span className="customer-name">{earning.customer}</span>
-                            </div>
-                            <div className="table-cell service-cell">
-                              <Package size={14} className="cell-icon" />
-                              {earning.service}
+                            <div className="table-cell">
+                              <FileText size={14} className="cell-icon" />
+                              <span>{earning.booking_id || '—'}</span>
                             </div>
                             <div className="table-cell date-cell">
                               <Calendar size={14} className="cell-icon" />
-                              {earning.date}
+                              {earning.date || '—'}
                             </div>
                             <div className="table-cell earning-amount enhanced-amount">
                               <RupeeSymbol size={16} className="rupee-icon-inline" />
-                              {earning.amount.toLocaleString('en-IN')}
+                              {Number(earning.amount || 0).toLocaleString('en-IN')}
                             </div>
-                            <div className={`table-cell earning-status enhanced-status ${earning.status}`}>
-                              <span className={`status-badge enhanced-badge ${earning.status}`}>
-                                {earning.status === 'completed' ? (
-                                  <>
-                                    <CheckCircle size={12} />
-                                    Paid
-                                  </>
-                                ) : earning.status === 'pending' ? (
+                            <div className="table-cell">
+                              <RupeeSymbol size={16} className="rupee-icon-inline" />
+                              {Number(earning.total_amount || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div className={`table-cell earning-status enhanced-status ${earning.status || 'paid'}`}>
+                              <span className={`status-badge enhanced-badge ${earning.status || 'paid'}`}>
+                                {earning.status === 'pending' ? (
                                   <>
                                     <Clock size={12} />
                                     Pending
                                   </>
                                 ) : (
-                                  earning.status
+                                  <>
+                                    <CheckCircle size={12} />
+                                    Paid
+                                  </>
                                 )}
                               </span>
                             </div>
-                            <div className="table-cell actions-cell">
-                              <motion.button 
-                                className="btn-receipt"
-                                disabled={earning.status !== 'completed'}
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
-                                title="Download Receipt"
-                              >
-                                <Receipt size={16} />
-                                <span>Receipt</span>
-                              </motion.button>
+                            <div className="table-cell">
+                              <span className="text-muted">
+                                {earning.method || 'auto'}
+                              </span>
                             </div>
                           </motion.div>
                         ))}
@@ -2129,13 +3000,11 @@ const ServiceProviderDashboard = () => {
           {activeTab === 'schedule' && (
             <div className="tab-content">
               <div className="content-header">
-                <h1>Schedule & Availability</h1>
-                <div className="header-actions">
-                  <button className="btn-primary" onClick={() => setIsAvailabilityModalOpen(true)} disabled={profileLoading}>
-                    <CalendarPlus size={16} />
-                    Set Availability
-                  </button>
+                <div className="header-left">
+                  <h1>Schedule, Availability & Leave</h1>
+                  <p>Plan your working hours and upcoming leave in one place</p>
                 </div>
+                {/* No header-level action; Save button is anchored to Availability card below */}
               </div>
 
               <div className="schedule-calendar">
@@ -2165,36 +3034,216 @@ const ServiceProviderDashboard = () => {
                 </div>
               </div>
 
-              <div className="availability-settings">
-                <div className="section-header">
-                  <h3>Availability Settings</h3>
+              <div className="schedule-layout">
+                <div className="availability-settings">
+                  <div className="section-header">
+                    <h3>Availability Settings</h3>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={handleSaveAvailability}
+                      disabled={profileLoading}
+                    >
+                      <CalendarPlus size={16} />
+                      <span style={{ marginLeft: 6 }}>Save availability</span>
+                    </button>
+                  </div>
+                  <div className="availability-grid">
+                    {Object.entries(profile.availability).map(([day, schedule]) => (
+                      <div key={day} className="availability-day">
+                        <div className="day-name">
+                          <span className="day-name-text">
+                            {day.charAt(0).toUpperCase() + day.slice(1)}
+                          </span>
+                          <div className="day-date-inline">
+                            <span className="day-date-label">Date</span>
+                            <input
+                              type="date"
+                              className="day-date-input"
+                              value={schedule.date || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                if (!validateAvailabilityDate(day, value)) {
+                                  return;
+                                }
+                                setProfile(prev => ({
+                                  ...prev,
+                                  availability: {
+                                    ...prev.availability,
+                                    [day]: { ...schedule, date: value }
+                                  }
+                                }));
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="day-schedule">
+                          <input 
+                            type="checkbox" 
+                            checked={schedule.available}
+                            onChange={() => {
+                              setProfile(prev => ({
+                                ...prev,
+                                availability: {
+                                  ...prev.availability,
+                                  [day]: { ...schedule, available: !schedule.available }
+                                }
+                              }));
+                            }}
+                          />
+                          {schedule.available ? (
+                            <div className="day-time-visual">
+                                <span className="day-time-label">
+                                  <Clock size={14} />
+                                  <input
+                                    type="time"
+                                    className="day-time-input"
+                                    min="08:00"
+                                    max="17:00"
+                                    value={schedule.start}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      if (!validateAvailabilitySlot(day, value, schedule.end)) {
+                                        return;
+                                      }
+                                      setProfile(prev => ({
+                                        ...prev,
+                                        availability: {
+                                          ...prev.availability,
+                                          [day]: { ...schedule, start: value }
+                                        }
+                                      }));
+                                    }}
+                                  />
+                                  <span className="time-separator">to</span>
+                                  <input
+                                    type="time"
+                                    className="day-time-input"
+                                    min="08:00"
+                                    max="17:00"
+                                    value={schedule.end}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      if (!validateAvailabilitySlot(day, schedule.start, value)) {
+                                        return;
+                                      }
+                                      setProfile(prev => ({
+                                        ...prev,
+                                        availability: {
+                                          ...prev.availability,
+                                          [day]: { ...schedule, end: value }
+                                        }
+                                      }));
+                                    }}
+                                  />
+                                </span>
+                                <div className="day-time-bar">
+                                  <div className="day-time-bar-fill" />
+                                </div>
+                                {availabilityErrors[day] && (
+                                  <div className="availability-error">
+                                    {availabilityErrors[day]}
+                                  </div>
+                                )}
+                              </div>
+                          ) : (
+                            <span className="unavailable">Unavailable</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="availability-grid">
-                  {Object.entries(profile.availability).map(([day, schedule]) => (
-                    <div key={day} className="availability-day">
-                      <div className="day-name">{day.charAt(0).toUpperCase() + day.slice(1)}</div>
-                      <div className="day-schedule">
-                        <input 
-                          type="checkbox" 
-                          checked={schedule.available}
-                          onChange={() => {
-                            setProfile(prev => ({
-                              ...prev,
-                              availability: {
-                                ...prev.availability,
-                                [day]: { ...schedule, available: !schedule.available }
-                              }
-                            }));
-                          }}
+
+                <div className="leave-panel">
+                  <div className="section-header">
+                    <h3>Leave Requests</h3>
+                  </div>
+                  <div className="leave-form">
+                    <div className="leave-row">
+                      <div className="leave-field">
+                        <label>From</label>
+                        <input
+                          type="date"
+                          value={leaveStartDate}
+                          onChange={(e) => setLeaveStartDate(e.target.value)}
                         />
-                        {schedule.available ? (
-                          <span>{schedule.start} - {schedule.end}</span>
-                        ) : (
-                          <span className="unavailable">Unavailable</span>
-                        )}
+                      </div>
+                      <div className="leave-field">
+                        <label>To</label>
+                        <input
+                          type="date"
+                          value={leaveEndDate}
+                          min={leaveStartDate || undefined}
+                          onChange={(e) => setLeaveEndDate(e.target.value)}
+                        />
                       </div>
                     </div>
-                  ))}
+                    <div className="leave-row">
+                      <div className="leave-field full">
+                        <label>Reason (optional)</label>
+                        <textarea
+                          rows={2}
+                          placeholder="Explain why you need leave..."
+                          value={leaveReason}
+                          onChange={(e) => setLeaveReason(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="leave-actions">
+                      <button
+                        className="btn-primary leave-submit-btn"
+                        type="button"
+                        onClick={handleSubmitLeaveRequest}
+                        disabled={leaveSubmitting || !leaveStartDate}
+                      >
+                        {leaveSubmitting ? 'Submitting...' : 'Submit Leave Request'}
+                      </button>
+                      <span className="leave-hint">
+                        Leave requests will be reviewed by the admin. Status will appear below.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="leave-status-list">
+                    <div className="leave-status-header">
+                      <span>Recent Leave Status</span>
+                    </div>
+                    {leaveLoading ? (
+                      <p className="leave-status-empty">Loading leave requests...</p>
+                    ) : (leaveRequests.length === 0 ? (
+                      <p className="leave-status-empty">
+                        No leave requests yet. Once you submit a request, it will show up here with its status.
+                      </p>
+                    ) : (
+                      <ul className="leave-status-items">
+                        {leaveRequests.slice(0, 5).map((leave) => {
+                          const sameDay = leave.start_date === leave.end_date;
+                          const rangeLabel = sameDay
+                            ? leave.start_date
+                            : `${leave.start_date} → ${leave.end_date}`;
+                          const statusLabel = (leave.status || 'pending')
+                            .charAt(0)
+                            .toUpperCase() + (leave.status || 'pending').slice(1);
+                          return (
+                            <li key={leave.id} className={`leave-status-item ${leave.status || 'pending'}`}>
+                              <div className="leave-status-dates">{rangeLabel}</div>
+                              <div className="leave-status-meta">
+                                <span className={`leave-status-pill ${leave.status || 'pending'}`}>
+                                  {statusLabel}
+                                </span>
+                                {leave.reason && (
+                                  <span className="leave-status-reason">
+                                    {leave.reason}
+                                  </span>
+                                )}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

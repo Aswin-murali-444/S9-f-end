@@ -974,12 +974,12 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   animation: backdropFadeIn 0.3s ease-out;
 }
 
@@ -990,6 +990,12 @@
   to {
     opacity: 1;
   }
+}
+
+/* Ensure transparent backdrop on customer dashboard review modal */
+.customer-dashboard .modal-backdrop {
+  background: rgba(15, 23, 42, 0.22) !important; /* soft dark, not pure black */
+  backdrop-filter: blur(14px) !important;        /* strong blur for glass effect */
 }
 
 /* Modal header improvements */
@@ -1258,7 +1264,9 @@
 .customer-dashboard,
 .admin-dashboard {
   min-height: 100vh;
-  background: linear-gradient(135deg, #4f9cf9 0%, #3b82f6 100%);
+  background: radial-gradient(circle at top left, #e0f2fe 0%, transparent 40%),
+              radial-gradient(circle at top right, #e5e7eb 0%, transparent 45%),
+              #f3f4f6;
   position: relative;
   overflow-x: hidden;
 }
@@ -1377,51 +1385,15 @@
   transform: translateY(-1px);
 }
 
-/* Main Content Layout */
-.dashboard-content {
-  display: flex;
-  flex: 1;
-  gap: 0;
-  position: relative;
-}
-
-/* Sidebar Styles */
-.dashboard-sidebar {
-  width: 280px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  border-right: 1px solid rgba(226, 232, 240, 0.8);
-  padding: 2rem 0;
-  position: sticky;
-  top: 0; /* stick within content, below the blue stats band */
-  height: fit-content;
-  max-height: calc(100vh - 0px);
-  overflow-y: auto;
-}
-
-/* Main Content Wrapper */
-.dashboard-layout {
-  display: flex;
-  width: 100%;
-  align-items: flex-start; /* ensure sidebar aligns like other pages */
-}
-
-/* Main Content Area */
-.tab-content {
-  flex: 1;
-  padding: 2rem;
-  min-height: calc(100vh - 80px);
-  background: #ffffff;
-}
-
-.sidebar-nav {
+/* Sidebar navigation styles scoped to customer dashboard */
+.dashboard-sidebar .sidebar-nav {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   padding: 0 1.5rem;
 }
 
-.nav-item {
+.dashboard-sidebar .nav-item {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -1437,18 +1409,18 @@
   width: 100%;
 }
 
-.nav-item:hover {
-  background: rgba(79, 156, 249, 0.1);
+.dashboard-sidebar .nav-item:hover {
+  background: rgba(79, 156, 249, 0.08);
   color: #4f9cf9;
 }
 
-.nav-item.active {
+.dashboard-sidebar .nav-item.active {
   background: #4f9cf9;
-  color: white;
+  color: #ffffff;
   box-shadow: 0 4px 16px rgba(79, 156, 249, 0.3);
 }
 
-.nav-item span {
+.dashboard-sidebar .nav-item span {
   font-size: 0.9rem;
 }
 
@@ -2116,42 +2088,6 @@
 }
 
 /* Responsive Design */
-@media (max-width: 1024px) {
-  .dashboard-sidebar {
-    width: 100%;
-    position: static;
-  }
-}
-
-@media (max-width: 768px) {
-  .dashboard-sidebar {
-    width: 100%;
-    position: static;
-    top: 0;
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid rgba(226, 232, 240, 0.8);
-  }
-  
-  .sidebar-nav {
-    flex-direction: row;
-    overflow-x: auto;
-    padding: 1rem 1.5rem;
-    -webkit-overflow-scrolling: touch;
-  }
-  
-  .nav-item {
-    white-space: nowrap;
-    min-width: auto;
-    padding: 0.75rem 1rem;
-  }
-
-  .tab-content {
-    margin-left: 0;
-    padding: 1rem;
-  }
-}
-
 @media (max-width: 768px) {
   .dashboard-header {
     padding: 1rem;
@@ -2700,6 +2636,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  animation: billsFadeIn 0.4s ease-out;
 }
 
 .bill-item {
@@ -2712,12 +2649,42 @@
   border: 1px solid #e2e8f0;
   transition: all 0.2s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  position: relative;
+  overflow: hidden;
 }
 
 .bill-item:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   border-color: #cbd5e1;
+}
+
+.bill-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #4f46e5, #0ea5e9);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.bill-item:hover::before {
+  opacity: 1;
+}
+
+.bill-item:nth-child(1) {
+  animation: billItemIn 0.35s ease-out 0.02s both;
+}
+
+.bill-item:nth-child(2) {
+  animation: billItemIn 0.35s ease-out 0.06s both;
+}
+
+.bill-item:nth-child(3) {
+  animation: billItemIn 0.35s ease-out 0.1s both;
 }
 
 .bill-info {
@@ -2789,15 +2756,15 @@
 }
 
 .billing-header h3 {
-  font-size: 1.8rem;
+  font-size: 1.9rem;
   font-weight: 700;
-  color: #1e293b;
-  margin: 0 0 8px 0;
+  color: #0f172a;
+  margin: 0 0 6px 0;
 }
 
 .billing-header p {
-  font-size: 1rem;
-  color: #64748b;
+  font-size: 0.95rem;
+  color: #6b7280;
   margin: 0;
 }
 
@@ -2829,12 +2796,15 @@
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-radius: 10px;
   border: 1px solid #e2e8f0;
-  transition: all 0.2s ease;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  position: relative;
+  overflow: hidden;
 }
 
 .stat-item:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  border-color: rgba(148, 163, 184, 0.7);
 }
 
 .stat-icon {
@@ -2899,6 +2869,28 @@
   background: #f1f5f9;
 }
 
+@keyframes billsFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes billItemIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .activity-icon {
   flex-shrink: 0;
 }
@@ -2948,12 +2940,29 @@
   background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
   border-radius: 10px;
   border: 1px solid #d1fae5;
-  transition: all 0.2s ease;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  position: relative;
+  overflow: hidden;
 }
 
 .history-item:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.6);
+}
+
+.history-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top left, rgba(45, 212, 191, 0.18), transparent 55%);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  pointer-events: none;
+}
+
+.history-item:hover::before {
+  opacity: 1;
 }
 
 .history-icon {
@@ -4805,6 +4814,159 @@ mark.search-match {
 .review-modal-body {
   padding: 2.5rem;
   background: #ffffff;
+}
+
+/* Existing reviews inside review modal */
+.existing-reviews-section {
+  margin-bottom: 1.75rem;
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+}
+
+.existing-reviews-section .section-header h6 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.existing-reviews-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.existing-reviews-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.existing-reviews-count {
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.existing-reviews-more-btn {
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 999px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.existing-reviews-more-btn:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.existing-reviews-loading,
+.existing-reviews-error,
+.existing-reviews-empty {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.existing-reviews-error {
+  color: #b91c1c;
+}
+
+.existing-reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.existing-review-card {
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.existing-review-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.existing-review-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.existing-review-avatar span {
+  transform: translateY(0.5px);
+}
+
+.existing-review-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.existing-review-name-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.existing-review-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.existing-review-stars {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.1rem;
+  flex-wrap: wrap;
+}
+
+.existing-review-rating {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.existing-review-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.08);
+  border-radius: 999px;
+  padding: 0.1rem 0.4rem;
+  margin-left: 0.25rem;
+}
+
+.existing-review-note {
+  font-size: 0.8rem;
+  color: #4b5563;
+  line-height: 1.4;
+  margin-top: 0.15rem;
 }
 
 /* Professional Scrollbar for Review Modal */

@@ -36,6 +36,11 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [fieldValidation, setFieldValidation] = useState({});
+  const [wageRequestData, setWageRequestData] = useState({
+    requestedRate: '',
+    reason: ''
+  });
+  const [wageRequestLoading, setWageRequestLoading] = useState(false);
 
   useEffect(() => {
     if (providerId) {
@@ -257,6 +262,53 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
     }
   };
 
+  const handleWageRequestChange = (field, value) => {
+    setWageRequestData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const submitWageRequest = async () => {
+    if (!providerId) {
+      toast.error('Provider ID missing. Please reload the page.');
+      return;
+    }
+
+    const requestedRate = parseFloat(wageRequestData.requestedRate);
+    const currentRate = parseFloat(displayProfileData?.hourly_rate) || 0;
+
+    if (!requestedRate || !Number.isFinite(requestedRate) || requestedRate <= 0) {
+      toast.error('Please enter a valid hourly rate greater than 0.');
+      return;
+    }
+
+    if (requestedRate <= currentRate) {
+      toast.error('Requested hourly rate must be greater than your current rate.');
+      return;
+    }
+
+    if (requestedRate - currentRate > maxAllowedIncrease) {
+      toast.error(`You can request at most ₹${maxAllowedIncrease} increase at a time.`);
+      return;
+    }
+
+    try {
+      setWageRequestLoading(true);
+      await apiService.createProviderWageRequest(providerId, {
+        requestedHourlyRate: requestedRate,
+        reason: wageRequestData.reason?.trim() || null
+      });
+      toast.success('Wage increase request sent to admin');
+      setWageRequestData({ requestedRate: '', reason: '' });
+    } catch (error) {
+      console.error('Error submitting wage request:', error);
+      toast.error(error?.message || 'Failed to submit wage request');
+    } finally {
+      setWageRequestLoading(false);
+    }
+  };
+
   const handleFieldCancel = (fieldName) => {
     setEditingField(null);
     setTempValues(prev => {
@@ -442,7 +494,17 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
   //   );
   // }
 
-  // Show profile form with default data if no profile data is available
+  if (!profileData) {
+    return (
+      <div className="editable-profile-sections">
+        <div className="profile-loading-message">
+          <span>Loading profile data...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Show profile form with a safe fallback shape
   const displayProfileData = profileData || {
     status: 'inactive',
     first_name: '',
@@ -458,8 +520,23 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
     hourly_rate: 0
   };
 
-  // Check if profile status is active
-  const isProfileActive = displayProfileData.status === 'active';
+  // Wage request derived values (relative to current hourly rate)
+  const currentHourlyRate = Number(displayProfileData?.hourly_rate) || 0;
+  const requestedHourlyRate = Number(wageRequestData.requestedRate) || 0;
+  const wageIncrease =
+    requestedHourlyRate > currentHourlyRate ? requestedHourlyRate - currentHourlyRate : 0;
+  const wageIncreasePercent =
+    requestedHourlyRate > currentHourlyRate && currentHourlyRate > 0
+      ? ((wageIncrease / currentHourlyRate) * 100).toFixed(1)
+      : null;
+  const isRequestedBelowOrEqualCurrent =
+    requestedHourlyRate > 0 && requestedHourlyRate <= currentHourlyRate;
+  const maxAllowedIncrease = 200;
+  const isIncreaseTooLarge = wageIncrease > maxAllowedIncrease;
+
+  // Treat pending/verified/active profiles as fully set up for inline editing
+  const editableStatuses = ['pending', 'active', 'verified'];
+  const isProfileActive = editableStatuses.includes(displayProfileData.status);
 
   if (!isProfileActive) {
     return (
@@ -692,7 +769,80 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
               <small className="help-text">Specific service from your profile</small>
             </div>
             {renderEditableField('years_of_experience', 'Years of Experience', Award, 'number', '0')}
-            {renderEditableField('hourly_rate', 'Hourly Rate (₹)', DollarSign, 'number', '0')}
+            <div className="form-group-enhanced">
+              <label>Hourly Rate (₹)</label>
+              <div className="input-wrapper">
+                <div className="icon-container">
+                  <DollarSign size={20} />
+                </div>
+                <input
+                  type="number"
+                  value={displayProfileData?.hourly_rate ?? 0}
+                  readOnly
+                  className="readonly-input"
+                />
+              </div>
+              <small className="help-text">
+                Your current hourly rate is managed by the admin team. Use the panel below to request an update.
+              </small>
+              <div className="wage-request-card">
+                <div className="wage-request-header">
+                  <span className="wage-request-title">Request wage increase</span>
+                  <span className="wage-request-chip">
+                    Current: ₹{displayProfileData?.hourly_rate ?? 0}/hr
+                  </span>
+                </div>
+                <div className="wage-request-body">
+                  <div className="wage-request-field">
+                    <label>Requested new rate (₹)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Enter requested new hourly rate"
+                      value={wageRequestData.requestedRate}
+                      onChange={(e) => handleWageRequestChange('requestedRate', e.target.value)}
+                      className={`wage-request-input${isRequestedBelowOrEqualCurrent ? ' wage-request-input-error' : ''}`}
+                    />
+                    <div className="wage-request-meta">
+                      {isRequestedBelowOrEqualCurrent && requestedHourlyRate > 0 ? (
+                        <span className="wage-request-error">
+                          New rate must be higher than your current rate (₹{currentHourlyRate.toFixed(2)}).
+                        </span>
+                      ) : null}
+                      {!isRequestedBelowOrEqualCurrent && wageIncreasePercent && requestedHourlyRate > 0 ? (
+                        <span className="wage-request-hint">
+                          Increase of ₹{wageIncrease.toFixed(2)} (+{wageIncreasePercent}%)
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="wage-request-field">
+                    <label>Reason (optional)</label>
+                    <textarea
+                      placeholder="Add a short note about your experience, certifications, or performance."
+                      value={wageRequestData.reason}
+                      onChange={(e) => handleWageRequestChange('reason', e.target.value)}
+                      className="editable-textarea"
+                      rows={2}
+                    />
+                  </div>
+                  <div className="wage-request-actions">
+                    <button
+                      type="button"
+                      className="btn-primary wage-request-btn"
+                      onClick={submitWageRequest}
+                      disabled={wageRequestLoading}
+                    >
+                      {wageRequestLoading ? 'Sending...' : 'Send Request'}
+                    </button>
+                  </div>
+                </div>
+                <p className="wage-request-footnote">
+                  Requests are reviewed by an admin. You will receive a notification once a decision is made.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 

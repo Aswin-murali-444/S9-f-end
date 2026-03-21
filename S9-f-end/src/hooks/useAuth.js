@@ -534,17 +534,31 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       console.log('🔍 Attempting Supabase login for:', credentials.email);
-      console.log('🔍 Supabase client status:', {
-        url: supabase.supabaseUrl,
-        hasKey: !!supabase.supabaseKey
-      });
       
-      const { data, error } = await supabase.auth.signInWithPassword({
+      let { data, error } = await supabase.auth.signInWithPassword({
         email: credentials.email,
         password: credentials.password,
       });
       
-      console.log('🔍 Supabase login response:', { data: !!data, error: error?.message });
+      // Fallback: when Supabase says invalid credentials, try backend login (fixes orphaned users)
+      if (error && (error.message === 'Invalid login credentials' || error.message?.includes('Invalid login'))) {
+        console.log('🔄 Supabase Auth failed, trying backend login fallback...');
+        try {
+          const backendRes = await apiService.login({ email: credentials.email, password: credentials.password });
+          if (backendRes?.authFixed) {
+            console.log('✅ Backend fixed Auth, retrying Supabase login...');
+            const retry = await supabase.auth.signInWithPassword({ email: credentials.email, password: credentials.password });
+            if (retry.error) throw retry.error;
+            data = retry.data;
+            error = null;
+          }
+        } catch (backendErr) {
+          console.error('❌ Backend login fallback failed:', backendErr);
+          toast.error(backendErr?.message || 'Invalid login credentials');
+          return { success: false, error: backendErr?.message || 'Invalid login credentials' };
+        }
+      }
+      
       if (error) {
         console.error('❌ Login error details:', error);
         toast.error(error.message || 'Login failed');
@@ -779,22 +793,24 @@ export const AuthProvider = ({ children }) => {
 
         // Persist and navigate according to role
         const dashboardPath = roleToDashboardPath(mappedRole);
+        
+        // Set all localStorage values synchronously before returning
         localStorage.setItem('dashboard_path', dashboardPath);
         localStorage.setItem('user_role', mappedRole);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('isAuthenticated', 'true');
         
         // Also set the authentication state immediately
         setUser(data.user);
         setIsAuthenticated(true);
         
-        // Store auth state in localStorage for immediate access
-        localStorage.setItem('user', JSON.stringify(data.user));
-        localStorage.setItem('isAuthenticated', 'true');
-        
         console.log('🔍 Auth state after login:', {
           userSet: !!data.user,
           isAuthenticatedSet: true,
           userEmail: data.user.email,
-          userID: data.user.id
+          userID: data.user.id,
+          mappedRole,
+          dashboardPath
         });
         
         // Verify the state was set correctly (use storage-backed values to avoid stale state)
@@ -802,11 +818,15 @@ export const AuthProvider = ({ children }) => {
           try {
             const storageUser = localStorage.getItem('user');
             const storageAuth = localStorage.getItem('isAuthenticated');
+            const storagePath = localStorage.getItem('dashboard_path');
+            const storageRole = localStorage.getItem('user_role');
             console.log('🔍 Auth state verification:', {
               reactUser: true, // we just set it above
               reactAuth: true,
               storageUser: !!storageUser,
-              storageAuth
+              storageAuth,
+              storagePath,
+              storageRole
             });
           } catch (_) {}
         }, 100);
@@ -825,8 +845,8 @@ export const AuthProvider = ({ children }) => {
           userId: data.user.id 
         });
         
-        toast.success('Login successful!');
-        
+        // Return immediately with all necessary data
+        // Note: Toast will be shown in LoginPage to avoid double toasts
         return { success: true, user: data.user, role: mappedRole, dashboardPath };
       }
     } catch (error) {

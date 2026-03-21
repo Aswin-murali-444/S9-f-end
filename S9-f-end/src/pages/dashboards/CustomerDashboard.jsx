@@ -84,6 +84,7 @@ import './AIAssistant.css';
 import invoiceService from '../../services/invoiceService';
 import { apiService } from '../../services/api';
 import { supabase } from '../../lib/supabase';
+import aiAssistantService from '../../services/aiAssistantService';
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
@@ -96,7 +97,7 @@ const CustomerDashboard = () => {
     initialReviewService = location.state?.openReviewService || JSON.parse(localStorage.getItem('openReviewService')) || null;
     initialFromBooking = location.state?.reviewFrom === 'booking' || localStorage.getItem('reviewFromBooking') === '1';
   } catch {}
-  const { user, logout } = useAuth();
+  const { user, logout, getCompleteUserProfile } = useAuth();
   const toastManager = useToast();
   const { isOnline, wasOffline, resetOfflineFlag } = useNetworkStatus();
   
@@ -157,6 +158,12 @@ const CustomerDashboard = () => {
   const [reviewAnswers, setReviewAnswers] = useState({});
   const [reviewNote, setReviewNote] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [serviceReviews, setServiceReviews] = useState([]);
+  const [serviceReviewsLoading, setServiceReviewsLoading] = useState(false);
+  const [serviceReviewsError, setServiceReviewsError] = useState(null);
+  const [serviceReviewsPage, setServiceReviewsPage] = useState(1);
+  const [serviceReviewsHasMore, setServiceReviewsHasMore] = useState(false);
+  const [serviceReviewsTotal, setServiceReviewsTotal] = useState(0);
   // Open review modal when navigated with state from BookingPage
   useEffect(() => {
     const stateService = location.state?.openReviewService;
@@ -258,6 +265,30 @@ const CustomerDashboard = () => {
   // Services from database
   const [services, setServices] = useState([]);
   const [servicesLoading, setServicesLoading] = useState(false);
+  // ML: personalized service recommendations
+  const [recommendedServices, setRecommendedServices] = useState([]);
+  const [recommendedLoading, setRecommendedLoading] = useState(false);
+  const [recommendedError, setRecommendedError] = useState(null);
+
+  // Cold-start onboarding (first-time customer)
+  const [onboardingCheckLoading, setOnboardingCheckLoading] = useState(true);
+  const [onboardingRequired, setOnboardingRequired] = useState(false);
+  const [onboardingAnchorServiceId, setOnboardingAnchorServiceId] = useState(null);
+  const [preferredServiceIds, setPreferredServiceIds] = useState([]);
+  const [surveyIssueAnswers, setSurveyIssueAnswers] = useState([]);
+  const [surveyUrgency, setSurveyUrgency] = useState('normal');
+  const [onboardingSubmitting, setOnboardingSubmitting] = useState(false);
+  const [dbUserId, setDbUserId] = useState(null);
+
+  const onboardingIssueOptions = [
+    { id: 'plumbing', label: 'Water leakage / pipe or tap issue', keywords: ['plumb', 'leak', 'pipe', 'tap', 'drain'] },
+    { id: 'electrical', label: 'Power problem / wiring / switch issue', keywords: ['electrical', 'wiring', 'switch', 'power', 'voltage', 'earth leakage'] },
+    { id: 'appliance', label: 'Home appliance not working (AC, etc.)', keywords: ['ac', 'appliance', 'repair', 'service'] },
+    { id: 'cleaning', label: 'Home deep cleaning / hygiene need', keywords: ['clean', 'hygiene', 'sanitize', 'housekeeping'] },
+    { id: 'pest', label: 'Pest/insect problem', keywords: ['pest', 'termite', 'cockroach', 'mosquito', 'insect'] },
+    { id: 'carpentry', label: 'Furniture / wood / fitting issue', keywords: ['carpenter', 'wood', 'furniture', 'door', 'window', 'blind', 'curtain'] },
+    { id: 'painting', label: 'Wall/paint/interior finishing issue', keywords: ['paint', 'wall', 'interior', 'finish'] }
+  ];
 
   const [bookingHistory, setBookingHistory] = useState([]);
   const [bills, setBills] = useState([]);
@@ -422,7 +453,7 @@ const CustomerDashboard = () => {
 
   // Handle service booking with team notification
   const handleServiceBooking = (service) => {
-    if (isPestControlService(service.name, service.category_name || 'General')) {
+    if (isTeamServiceForDisplay(service)) {
       toastManager.info(
         'Team Service Notice: This pest control service will be handled by our specialized team of professionals for the best results.',
         { duration: 6000 }
@@ -442,80 +473,6 @@ const CustomerDashboard = () => {
     }
   };
 
-  // Add mock bookings for testing team service features
-  const addMockBookings = () => {
-    const mockBookings = [
-      {
-        id: 'mock-booking-1',
-        service_name: 'Pest Control Service',
-        category_name: 'Home Maintenance',
-        scheduled_date: new Date().toISOString().split('T')[0],
-        scheduled_time: '10:00 AM',
-        total_amount: 1500,
-        base_price: 1000, // Base price per person for pest control
-        payment_status: 'completed',
-        booking_status: 'completed',
-        payment_method: 'Credit Card',
-        is_team_booking: true,
-        service_address: '123 Main Street, Mumbai',
-        contact_email: user?.email || 'customer@example.com'
-      },
-      {
-        id: 'mock-booking-2',
-        service_name: 'Termite Control',
-        category_name: 'Pest Control',
-        scheduled_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        scheduled_time: '2:00 PM',
-        total_amount: 2000,
-        base_price: 1200, // Base price per person for termite control
-        payment_status: 'pending',
-        booking_status: 'confirmed',
-        payment_method: null,
-        is_team_booking: true,
-        service_address: '456 Park Avenue, Delhi',
-        contact_email: user?.email || 'customer@example.com'
-      },
-      {
-        id: 'mock-booking-3',
-        service_name: 'Mosquito Net Installation',
-        category_name: 'Home Maintenance',
-        scheduled_date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        scheduled_time: '11:00 AM',
-        total_amount: 800,
-        base_price: 800,
-        payment_status: 'completed',
-        booking_status: 'completed',
-        payment_method: 'UPI',
-        is_team_booking: false, // This should NOT show as team service
-        service_address: '789 Garden Road, Bangalore',
-        contact_email: user?.email || 'customer@example.com'
-      },
-      {
-        id: 'mock-booking-4',
-        service_name: 'Fumigation Service',
-        category_name: 'Pest Control',
-        scheduled_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        scheduled_time: '3:00 PM',
-        total_amount: 3000,
-        base_price: 1500, // Base price per person for fumigation
-        payment_status: 'completed',
-        booking_status: 'in_progress',
-        payment_method: 'Credit Card',
-        is_team_booking: true,
-        service_address: '321 Commercial Street, Chennai',
-        contact_email: user?.email || 'customer@example.com'
-      }
-    ];
-
-    // Generate team data for team bookings
-    const bookingsWithTeamData = mockBookings.map(booking => generateMockTeamData(booking));
-    
-    // Add to existing bookings
-    setBookings(prevBookings => [...prevBookings, ...bookingsWithTeamData]);
-    
-    console.log('Mock bookings added:', bookingsWithTeamData);
-    toastManager.success('Mock team service bookings added for testing!');
-  };
   const generateMockTeamData = (booking) => {
     if (!booking.is_team_booking) return booking;
     
@@ -568,7 +525,7 @@ const CustomerDashboard = () => {
     };
   };
 
-  // Check if service is pest control (team service)
+  // Check if service is a team / group service based on name/category
   const isPestControlService = (serviceName, categoryName) => {
     const serviceText = `${serviceName} ${categoryName}`.toLowerCase();
     
@@ -578,14 +535,41 @@ const CustomerDashboard = () => {
       return false;
     }
     
-    // Only consider these as team services (actual pest control/elimination services)
-    const teamServiceKeywords = ['pest control', 'exterminator', 'extermination', 'rodent control', 'insect control', 'bug control', 'termite control', 'cockroach control', 'pest treatment', 'fumigation'];
+    // Only consider these as team services (actual pest control/elimination services,
+    // or other work that normally needs a team such as partition work)
+    const teamServiceKeywords = [
+      'pest control',
+      'exterminator',
+      'extermination',
+      'rodent control',
+      'insect control',
+      'bug control',
+      'termite control',
+      'cockroach control',
+      'pest treatment',
+      'fumigation',
+      'partition work',
+      'glass partition',
+      'office partition',
+      'wall partition'
+    ];
     const isTeamService = teamServiceKeywords.some(keyword => serviceText.includes(keyword));
     
     // Debug logging
     console.log(`Service: ${serviceName}, Category: ${categoryName}, Is Team Service: ${isTeamService}`);
     
     return isTeamService;
+  };
+
+  // Helper: determine if a given service object should be treated as a team/group service
+  // Prefer explicit service_type === 'group', but fall back to name/category heuristic.
+  const isTeamServiceForDisplay = (service) => {
+    if (!service) return false;
+    if (service.service_type === 'group') return true;
+    return isPestControlService(
+      service.name,
+      service.category_name || service.category || 'General'
+    );
   };
 
   // Debug function to log booking data
@@ -995,6 +979,182 @@ const CustomerDashboard = () => {
     
     console.log('Calculated stats:', stats);
     return stats;
+  };
+
+  // Check if the user is "new/cold-start" (no preferred services yet).
+  useEffect(() => {
+    if (!user?.id) return;
+    let isCancelled = false;
+    setOnboardingCheckLoading(true);
+    setOnboardingRequired(false);
+
+    const check = async () => {
+      try {
+        const complete = await getCompleteUserProfile?.();
+        setDbUserId(complete?.id || user.id);
+        const customerDetails = complete?.customer_details
+          ? (Array.isArray(complete.customer_details) ? complete.customer_details[0] : complete.customer_details)
+          : null;
+
+        const preferred = customerDetails?.preferred_services;
+        const preferredArray = Array.isArray(preferred) ? preferred : (preferred ? [preferred] : []);
+
+        // If user already has preferences, no modal needed.
+        if (preferredArray.length > 0) return;
+
+        const doneKey = `onboarding_done_${user.id}`;
+        const alreadyDone = localStorage.getItem(doneKey) === '1';
+        if (!alreadyDone) setOnboardingRequired(true);
+      } catch (e) {
+        // If we cannot read preferences, don't block the user.
+        console.warn('Onboarding check failed:', e?.message || e);
+      } finally {
+        if (!isCancelled) setOnboardingCheckLoading(false);
+      }
+    };
+
+    check();
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id, getCompleteUserProfile]);
+
+  // Load ML-based personalized service recommendations for the logged-in customer.
+  // We delay this until onboarding preference check is complete (and onboarding modal is not required).
+  useEffect(() => {
+    if (!user?.id) return;
+    if (onboardingCheckLoading) return;
+    if (onboardingRequired) return;
+
+    let isCancelled = false;
+    const fetchRecommendations = async () => {
+      try {
+        setRecommendedLoading(true);
+        setRecommendedError(null);
+        const resp = await apiService.getServiceRecommendations(user.id, {
+          limit: 6,
+          currentServiceId: onboardingAnchorServiceId || null
+        });
+        const recs = resp?.recommendations || [];
+        if (!isCancelled) setRecommendedServices(Array.isArray(recs) ? recs : []);
+      } catch (e) {
+        console.error('Failed to load service recommendations:', e);
+        if (!isCancelled) setRecommendedError(e?.message || 'Failed to load recommendations');
+      } finally {
+        if (!isCancelled) setRecommendedLoading(false);
+      }
+    };
+
+    fetchRecommendations();
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id, onboardingCheckLoading, onboardingRequired, onboardingAnchorServiceId]);
+
+  const togglePreferredService = (serviceId) => {
+    setPreferredServiceIds((prev) => {
+      const id = String(serviceId);
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      return [...prev, id];
+    });
+  };
+
+  const toggleSurveyIssueAnswer = (issueId) => {
+    setSurveyIssueAnswers((prev) => {
+      if (prev.includes(issueId)) return prev.filter((x) => x !== issueId);
+      return [...prev, issueId];
+    });
+  };
+
+  const autoSelectServicesFromSurvey = () => {
+    if (!Array.isArray(services) || services.length === 0) return;
+    if (!Array.isArray(surveyIssueAnswers) || surveyIssueAnswers.length === 0) {
+      toast.error('Select at least one problem area in the survey first.');
+      return;
+    }
+
+    const selectedIssueDefs = onboardingIssueOptions.filter((opt) => surveyIssueAnswers.includes(opt.id));
+    const keywordPool = selectedIssueDefs.flatMap((opt) => opt.keywords || []);
+
+    const scored = services
+      .map((svc) => {
+        const hay = `${svc?.name || ''} ${svc?.description || ''} ${svc?.category || ''}`.toLowerCase();
+        let score = 0;
+        keywordPool.forEach((kw) => {
+          if (hay.includes(String(kw).toLowerCase())) score += 1;
+        });
+
+        // Slightly prioritize shorter-duration services for urgent needs.
+        if (surveyUrgency === 'urgent') {
+          const d = String(svc?.duration || '').toLowerCase();
+          if (d.includes('30') || d.includes('45') || d.includes('1 hour') || d.includes('60')) score += 0.4;
+        }
+
+        return { id: String(svc.id), score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    const topIds = scored.slice(0, 6).map((x) => x.id);
+    if (topIds.length === 0) {
+      toast.error('No exact service match found. Please pick services manually below.');
+      return;
+    }
+
+    setPreferredServiceIds(topIds);
+    toast.success('Survey analyzed. Suggested services selected for you.');
+  };
+
+  const handleOnboardingSubmit = async () => {
+    if (!user?.id) return;
+    if (preferredServiceIds.length === 0) {
+      toast.error('Please select at least one service preference.');
+      return;
+    }
+
+    try {
+      setOnboardingSubmitting(true);
+
+      const { error } = await supabase
+        .from('customer_details')
+        .upsert(
+          {
+            id: dbUserId || user.id,
+            preferred_services: preferredServiceIds
+          },
+          { onConflict: 'id' }
+        );
+
+      if (error) throw error;
+
+      localStorage.setItem(`onboarding_done_${user.id}`, '1');
+
+      // Use the first selected service as the anchor so recommendations become personalized immediately.
+      setOnboardingAnchorServiceId(preferredServiceIds[0]);
+      setOnboardingRequired(false);
+      setPreferredServiceIds([]);
+      setSurveyIssueAnswers([]);
+      setSurveyUrgency('normal');
+
+      toast.success('Preferences saved. Getting recommendations…');
+    } catch (e) {
+      console.error('Onboarding preference save failed:', e?.message || e);
+      toast.error('Failed to save preferences. Try again.');
+      // Keep modal open on failure.
+    } finally {
+      setOnboardingSubmitting(false);
+    }
+  };
+
+  const handleOnboardingSkip = () => {
+    if (!user?.id) return;
+    localStorage.setItem(`onboarding_done_${user.id}`, '1');
+    setOnboardingRequired(false);
+    setPreferredServiceIds([]);
+    setSurveyIssueAnswers([]);
+    setSurveyUrgency('normal');
+    setOnboardingAnchorServiceId(null);
+    toast.success('Skipping preferences. Showing popular recommendations.');
   };
 
   // Load services and categories from database
@@ -1743,13 +1903,50 @@ const CustomerDashboard = () => {
     setImagePreview(null);
   };
 
+  // Load existing reviews for a service (paged, Amazon/Flipkart style)
+  const loadServiceReviews = async (service, page = 1, append = false) => {
+    const serviceId = service?.service_id || service?.id;
+    if (!serviceId) return;
+
+    setServiceReviewsLoading(true);
+    setServiceReviewsError(null);
+    try {
+      const pageSize = 6;
+      const response = await apiService.getServiceReviews(serviceId, page, pageSize);
+      const payload = response?.data || response || {};
+      const reviewsData = payload.reviews || [];
+      const pagination = payload.pagination || {};
+
+      setServiceReviews(prev =>
+        append ? [...prev, ...reviewsData] : reviewsData
+      );
+      setServiceReviewsPage(page);
+      setServiceReviewsTotal(pagination.total || reviewsData.length);
+      const totalLoaded = (append ? serviceReviews.length : 0) + reviewsData.length;
+      setServiceReviewsHasMore(totalLoaded < (pagination.total || totalLoaded));
+    } catch (err) {
+      console.error('Failed to load service reviews:', err);
+      setServiceReviewsError(err.message || 'Failed to load reviews');
+      setServiceReviews([]);
+      setServiceReviewsHasMore(false);
+      setServiceReviewsTotal(0);
+    } finally {
+      setServiceReviewsLoading(false);
+    }
+  };
+
   // Review modal handlers
   const handleOpenReviewModal = (service) => {
     setReviewService(service);
     setReviewRating(0);
     setReviewAnswers({});
     setReviewNote('');
+    setServiceReviews([]);
+    setServiceReviewsPage(1);
+    setServiceReviewsHasMore(false);
+    setServiceReviewsTotal(0);
     setIsReviewModalOpen(true);
+    loadServiceReviews(service);
   };
 
   const handleCloseReviewModal = () => {
@@ -1774,15 +1971,23 @@ const CustomerDashboard = () => {
     setIsSubmittingReview(true);
     
     try {
-      // Here you would typically send the review to your backend
-      console.log('Review submitted:', {
-        service: reviewService,
+      const serviceId = reviewService?.service_id || reviewService?.id;
+      // For now only use an explicit booking_id if it exists to avoid invalid FK values
+      const bookingId = reviewService?.booking_id || null;
+
+      if (!serviceId) {
+        throw new Error('Unable to determine service for review.');
+      }
+
+      await apiService.submitServiceReview({
+        serviceId,
+        bookingId,
         rating: reviewRating,
-        answers: reviewAnswers,
         note: reviewNote,
-        timestamp: new Date().toISOString()
+        answers: reviewAnswers,
+        authUserId: user?.id
       });
-      
+
       // Show success message and close modal
       toastManager.success(
         `Thank you for your ${reviewRating}-star review! Your feedback helps other customers make informed decisions.`,
@@ -1800,7 +2005,7 @@ const CustomerDashboard = () => {
       
     } catch (error) {
       console.error('Error submitting review:', error);
-      toastManager.error('Failed to submit review. Please try again.');
+      toastManager.error(error.message || 'Failed to submit review. Please try again.');
     } finally {
       setIsSubmittingReview(false);
     }
@@ -2080,6 +2285,232 @@ const CustomerDashboard = () => {
         />
       )}
 
+      {/* Cold-start onboarding modal (first-time customer) */}
+      {!onboardingCheckLoading && onboardingRequired && (
+        <div
+          onClick={(e) => e.preventDefault()}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(15, 23, 42, 0.62)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.25rem'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(820px, 100%)',
+              background: 'white',
+              borderRadius: 20,
+              boxShadow: '0 30px 80px rgba(2,6,23,0.35)',
+              border: '1px solid #e2e8f0',
+              overflow: 'hidden'
+            }}
+          >
+            <div style={{ padding: '1.15rem 1.4rem', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 45%, #1e40af 100%)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', marginBottom: 6 }}>
+                Personalized Onboarding
+              </div>
+              <h3 style={{ margin: 0, color: 'white', fontSize: '1.2rem', fontWeight: 800 }}>
+                Tell us your problem, we suggest the right service
+              </h3>
+              <p style={{ margin: '0.45rem 0 0', color: 'rgba(255,255,255,0.92)', fontSize: '0.92rem', lineHeight: 1.45 }}>
+                Select the services you’re interested in. We’ll use this to personalize your first recommendations.
+              </p>
+            </div>
+
+            <div style={{ padding: '1.1rem 1.4rem 1.3rem' }}>
+              {services.length === 0 ? (
+                <div style={{ color: '#64748b', fontWeight: 700, padding: '0.75rem 0.25rem' }}>
+                  Loading available services…
+                </div>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 14,
+                      padding: '0.95rem',
+                      marginBottom: '1rem'
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 10, fontSize: '0.95rem' }}>
+                      Quick survey: What problems do you need help with?
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {onboardingIssueOptions.map((opt) => {
+                        const selected = surveyIssueAnswers.includes(opt.id);
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => toggleSurveyIssueAnswer(opt.id)}
+                            style={{
+                              border: selected ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                              background: selected ? 'linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)' : 'white',
+                              color: selected ? '#1d4ed8' : '#334155',
+                              borderRadius: 999,
+                              padding: '0.4rem 0.8rem',
+                              fontSize: '0.79rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              boxShadow: selected ? '0 2px 8px rgba(37, 99, 235, 0.25)' : 'none',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <span style={{ color: '#334155', fontWeight: 700, fontSize: '0.83rem' }}>Urgency</span>
+                      <select
+                        value={surveyUrgency}
+                        onChange={(e) => setSurveyUrgency(e.target.value)}
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 10, padding: '0.38rem 0.62rem', fontWeight: 600, color: '#0f172a', background: 'white' }}
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="urgent">Urgent (ASAP)</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={autoSelectServicesFromSurvey}
+                        style={{
+                          background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: 999,
+                          padding: '0.42rem 0.9rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 12px rgba(29, 78, 216, 0.35)'
+                        }}
+                      >
+                        Suggest Services from Survey
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.85rem' }}>
+                    {preferredServiceIds.length > 0 ? (
+                      preferredServiceIds.map((sid) => {
+                        const svc = services.find((s) => String(s.id) === String(sid));
+                        return (
+                          <span
+                            key={sid}
+                            style={{
+                              background: 'linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%)',
+                              border: '1px solid #bfdbfe',
+                              color: '#1d4ed8',
+                              borderRadius: 999,
+                              padding: '0.28rem 0.72rem',
+                              fontSize: '0.8rem',
+                              fontWeight: 700
+                            }}
+                          >
+                            {svc?.name || sid}
+                          </span>
+                        );
+                      })
+                    ) : (
+                      <span style={{ color: '#64748b', fontWeight: 600, fontSize: '0.88rem' }}>
+                        Choose at least one service to continue.
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ maxHeight: 260, overflowY: 'auto', paddingRight: 6 }}>
+                    {services.map((svc) => {
+                      const sid = String(svc.id);
+                      const checked = preferredServiceIds.includes(sid);
+                      return (
+                        <label
+                          key={sid}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            padding: '0.58rem 0.72rem',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: 12,
+                            marginBottom: 8,
+                            cursor: 'pointer',
+                            background: checked ? '#eff6ff' : 'white',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => togglePreferredService(sid)}
+                          />
+                          <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.9rem' }}>{svc.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {onboardingSubmitting ? (
+                <div style={{ marginTop: '0.85rem', color: '#2563eb', fontWeight: 700 }}>
+                  Saving your preferences…
+                </div>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: '1.05rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={handleOnboardingSkip}
+                    style={{
+                      background: 'white',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 999,
+                      padding: '0.64rem 1rem',
+                      fontWeight: 700,
+                      color: '#334155',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Skip for now
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleOnboardingSubmit}
+                    style={{
+                      background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                      border: 'none',
+                      borderRadius: 999,
+                      padding: '0.64rem 1.12rem',
+                      fontWeight: 800,
+                      color: 'white',
+                      cursor: 'pointer',
+                      boxShadow: '0 8px 18px rgba(37, 99, 235, 0.35)',
+                      transition: 'all 0.2s ease'
+                    }}
+                    disabled={onboardingSubmitting || services.length === 0}
+                  >
+                    Save & Get Recommendations
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* No Services Available Message */}
       {!servicesLoading && categories.length === 1 && categories[0]?.services?.length === 0 && (
         <div style={{
@@ -2246,39 +2677,6 @@ const CustomerDashboard = () => {
                   </div>
                 )}
               </div>
-
-              {/* Team Booking Test Button */}
-              <button 
-                className="test-team-btn"
-                onClick={addMockBookings}
-                style={{
-                  padding: '8px 16px',
-                  background: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '0.875rem',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  transition: 'all 0.3s ease',
-                  boxShadow: '0 2px 8px rgba(14, 165, 233, 0.3)',
-                  marginRight: '16px'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 4px 12px rgba(14, 165, 233, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 2px 8px rgba(14, 165, 233, 0.3)';
-                }}
-              >
-                <Users size={16} />
-              
-              </button>
 
               {/* User Profile */}
               <div className="user-profile-container">
@@ -2586,10 +2984,17 @@ const CustomerDashboard = () => {
                                   >
                                     <div className="stars">
                                       {[...Array(5)].map((_, i) => (
-                                        <Star key={i} size={14} fill={i < Math.floor(service.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
+                                        <Star
+                                          key={i}
+                                          size={14}
+                                          fill={i < Math.round(service.rating || 0) ? '#fbbf24' : '#e5e7eb'}
+                                          color="#fbbf24"
+                                        />
                                       ))}
                                     </div>
-                                    <span className="rating-text">{(service.rating || 4.2).toFixed(1)} ({service.review_count || Math.floor(Math.random() * 50) + 10} reviews)</span>
+                                    <span className="rating-text">
+                                      {(service.rating || 0).toFixed(1)} ({service.review_count || 0} reviews)
+                                    </span>
                                     <span className="review-hint">Click to review</span>
                                   </div>
                               </div>
@@ -2677,7 +3082,7 @@ const CustomerDashboard = () => {
                                     <span>{service.duration}</span>
                                   </div>
                                 )}
-                                {isPestControlService(service.name, selectedCategory.name) && (
+                                {isTeamServiceForDisplay(service) && (
                                   <div className="team-service-indicator">
                                     <Users size={12} />
                                     <span>Team Service</span>
@@ -2700,10 +3105,17 @@ const CustomerDashboard = () => {
                                 >
                                   <div className="stars">
                                     {[...Array(5)].map((_, i) => (
-                                      <Star key={i} size={14} fill={i < Math.floor(service.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
+                                      <Star
+                                        key={i}
+                                        size={14}
+                                        fill={i < Math.round(service.rating || 0) ? '#fbbf24' : '#e5e7eb'}
+                                        color="#fbbf24"
+                                      />
                                     ))}
                                   </div>
-                                  <span className="rating-text">{(service.rating || 4.2).toFixed(1)} ({service.review_count || Math.floor(Math.random() * 50) + 10} reviews)</span>
+                                  <span className="rating-text">
+                                    {(service.rating || 0).toFixed(1)} ({service.review_count || 0} reviews)
+                                  </span>
                                   <span className="review-hint">Click to review</span>
                                 </div>
                               </div>
@@ -2868,56 +3280,108 @@ const CustomerDashboard = () => {
                         </p>
                     </div>
                       
-                      <div className="categories-search-bar" style={{
-                        display: 'flex',
-                        justifyContent: 'center'
-                      }}>
-                        <div className="search-container" style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          background: 'white',
-                          borderRadius: '50px',
-                          padding: '0.5rem',
-                          boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
-                          maxWidth: '500px',
-                          width: '100%'
-                        }}>
-                          <div style={{
-                            padding: '0.75rem',
-                            color: '#64748b'
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                        <div className="categories-search-bar" style={{ display: 'flex', justifyContent: 'center' }}>
+                          <div className="search-container" style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            background: 'white',
+                            borderRadius: '50px',
+                            padding: '0.5rem',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+                            maxWidth: '500px',
+                            width: '100%'
                           }}>
-                        <Search size={20} />
+                            <div style={{ padding: '0.75rem', color: '#64748b' }}>
+                              <Search size={20} />
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Search categories and services..."
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              className="categories-search-input"
+                              style={{
+                                flex: 1,
+                                border: 'none',
+                                outline: 'none',
+                                fontSize: '1rem',
+                                padding: '0.5rem 0',
+                                background: 'transparent',
+                                color: '#1e293b',
+                                fontWeight: '500'
+                              }}
+                            />
+                            <button
+                              style={{
+                                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                                border: 'none',
+                                borderRadius: '25px',
+                                padding: '0.75rem 1.5rem',
+                                color: 'white',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              Search
+                            </button>
                           </div>
-                          <input
-                            type="text"
-                            placeholder="Search categories and services..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="categories-search-input"
-                            style={{
-                              flex: 1,
-                              border: 'none',
-                              outline: 'none',
-                              fontSize: '1rem',
-                              padding: '0.5rem 0',
-                              background: 'transparent',
-                              color: '#1e293b',
-                              fontWeight: '500'
-                            }}
-                          />
-                          <button style={{
-                            background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                            border: 'none',
-                            borderRadius: '25px',
-                            padding: '0.75rem 1.5rem',
-                            color: 'white',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}>
-                          Search
-                        </button>
                         </div>
+
+                        {/* ML suggestions row, aligned near the search bar */}
+                        {recommendedServices && recommendedServices.length > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                maxWidth: '640px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>
+                                  Recommended for you
+                                </span>
+                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                  Powered by smart matching (ML)
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                {recommendedServices.slice(0, 5).map((rec) => (
+                                  <button
+                                    key={rec.serviceId || rec.id || rec.name}
+                                    onClick={() => setSearchQuery(rec.name)}
+                                    style={{
+                                      background: '#f1f5f9',
+                                      border: '1px solid #e2e8f0',
+                                      borderRadius: '999px',
+                                      padding: '0.4rem 0.9rem',
+                                      fontSize: '0.75rem',
+                                      color: '#475569',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = '#3b82f6';
+                                      e.currentTarget.style.color = 'white';
+                                      e.currentTarget.style.borderColor = '#3b82f6';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = '#f1f5f9';
+                                      e.currentTarget.style.color = '#475569';
+                                      e.currentTarget.style.borderColor = '#e2e8f0';
+                                    }}
+                                  >
+                                    {rec.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -3021,168 +3485,7 @@ const CustomerDashboard = () => {
                         </div>
                       </div>
 
-                      {/* Professional Category Services Search */}
-                      <div className="category-services-search" style={{
-                        marginTop: '2rem',
-                        marginBottom: '2rem'
-                      }}>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0',
-                          padding: '0',
-                          backgroundColor: '#fff',
-                          border: '2px solid #e2e8f0',
-                          borderRadius: '16px',
-                          maxWidth: '500px',
-                          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-                          transition: 'all 0.3s ease',
-                          overflow: 'hidden'
-                        }}
-                        onFocus={(e) => {
-                          e.currentTarget.style.borderColor = '#3b82f6';
-                          e.currentTarget.style.boxShadow = '0 4px 20px rgba(59, 130, 246, 0.15)';
-                        }}
-                        onBlur={(e) => {
-                          e.currentTarget.style.borderColor = '#e2e8f0';
-                          e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.08)';
-                        }}>
-                          <div style={{
-                            padding: '1rem 1.25rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                            flex: 1
-                          }}>
-                            <Search size={20} color="#64748b" />
-                          <input
-                            type="text"
-                              placeholder="Search professional services, providers, or specialties..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            style={{
-                              border: 'none',
-                              outline: 'none',
-                              flex: 1,
-                                fontSize: '0.95rem',
-                              color: '#1e293b',
-                                fontWeight: '500',
-                                backgroundColor: 'transparent'
-                            }}
-                          />
-                        </div>
-                          {searchQuery.trim() && (
-                            <button
-                              onClick={() => setSearchQuery('')}
-                              style={{
-                                padding: '1rem 1.25rem',
-                                border: 'none',
-                                backgroundColor: 'transparent',
-                                color: '#64748b',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                transition: 'color 0.2s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.target.style.color = '#ef4444';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.target.style.color = '#64748b';
-                              }}
-                            >
-                              <X size={18} />
-                            </button>
-                          )}
-                          <div style={{
-                            padding: '1rem 1.25rem',
-                            borderLeft: '1px solid #f1f5f9',
-                            backgroundColor: '#f8fafc'
-                          }}>
-                            <button
-                              style={{
-                                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                                border: 'none',
-                                borderRadius: '10px',
-                                padding: '0.75rem 1.5rem',
-                                color: 'white',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                fontSize: '0.875rem',
-                                transition: 'all 0.2s ease',
-                                boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.target.style.transform = 'translateY(-1px)';
-                                e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.4)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.target.style.transform = 'translateY(0)';
-                                e.target.style.boxShadow = '0 2px 8px rgba(59, 130, 246, 0.3)';
-                              }}
-                            >
-                              Search
-                            </button>
-                          </div>
-                        </div>
-                        
-                        {/* Search suggestions */}
-                        {searchQuery.trim().length >= 2 && (
-                          <div style={{
-                            marginTop: '1rem',
-                            padding: '1rem',
-                            backgroundColor: '#fff',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '12px',
-                            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-                            maxWidth: '500px'
-                          }}>
-                            <div style={{
-                              fontSize: '0.875rem',
-                              color: '#64748b',
-                              marginBottom: '0.5rem',
-                              fontWeight: '600'
-                            }}>
-                              Search Suggestions
-                            </div>
-                            <div style={{
-                              display: 'flex',
-                              flexWrap: 'wrap',
-                              gap: '0.5rem'
-                            }}>
-                              {['Professional', 'Certified', 'Expert', 'Premium', 'Quality'].map((suggestion) => (
-                                <button
-                                  key={suggestion}
-                                  onClick={() => setSearchQuery(suggestion)}
-                                  style={{
-                                    background: '#f1f5f9',
-                                    border: '1px solid #e2e8f0',
-                                    borderRadius: '20px',
-                                    padding: '0.5rem 1rem',
-                                    fontSize: '0.75rem',
-                                    color: '#475569',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s ease'
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    e.target.style.background = '#3b82f6';
-                                    e.target.style.color = 'white';
-                                    e.target.style.borderColor = '#3b82f6';
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.target.style.background = '#f1f5f9';
-                                    e.target.style.color = '#475569';
-                                    e.target.style.borderColor = '#e2e8f0';
-                                  }}
-                                >
-                                  {suggestion}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
+                      {/* (ML suggestions are now rendered alongside the hero search bar above) */}
                       <div className="category-services-grid" style={{
                         display: 'grid',
                         gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
@@ -3367,7 +3670,7 @@ const CustomerDashboard = () => {
                                           <span>{service.duration}</span>
                                         </motion.div>
                                         )}
-                                        {isPestControlService(service.name, viewingCategory.name) && (
+                                        {isTeamServiceForDisplay(service) && (
                                           <motion.div
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
@@ -3516,14 +3819,14 @@ const CustomerDashboard = () => {
                                       color: '#92400e', 
                                       fontWeight: '600' 
                                         }}>
-                                      {(service.rating || 4.2).toFixed(1)}
+                                      {(service.rating || 0).toFixed(1)}
                                         </span>
                                         <span style={{ 
                                           fontSize: '0.75rem', 
                                       color: '#a16207', 
                                       fontWeight: '500'
                                         }}>
-                                      ({service.review_count || Math.floor(Math.random() * 50) + 10} reviews)
+                                      ({service.review_count || 0} reviews)
                                         </span>
                                   </motion.div>
                                   
@@ -4147,7 +4450,12 @@ const CustomerDashboard = () => {
                                     >
                                       <div style={{ display: 'flex', gap: '2px' }}>
                                         {[...Array(5)].map((_, i) => (
-                                          <Star key={i} size={14} fill={i < Math.floor(service.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} color="#fbbf24" />
+                                          <Star
+                                            key={i}
+                                            size={14}
+                                            fill={i < Math.round(service.rating || 0) ? '#fbbf24' : '#e5e7eb'}
+                                            color="#fbbf24"
+                                          />
                                         ))}
                                       </div>
                                       <span style={{ 
@@ -4155,7 +4463,7 @@ const CustomerDashboard = () => {
                                         color: '#64748b', 
                                         fontWeight: '500' 
                                       }}>
-                                        {(service.rating || 4.2).toFixed(1)} ({service.review_count || Math.floor(Math.random() * 50) + 10} reviews)
+                                        {(service.rating || 0).toFixed(1)} ({service.review_count || 0} reviews)
                                       </span>
                                       <span style={{ 
                                         fontSize: '0.75rem', 
@@ -4479,16 +4787,16 @@ const CustomerDashboard = () => {
                                   <div className="rating-item">
                                     <div className="stars">
                                       {[...Array(5)].map((_, i) => (
-                                        <Star 
+                                      <Star 
                                           key={i} 
                                           size={12} 
-                                          fill={i < Math.floor(item.rating || 4.2) ? '#fbbf24' : '#e5e7eb'} 
+                                          fill={i < Math.round(item.rating || 0) ? '#fbbf24' : '#e5e7eb'} 
                                           color="#fbbf24" 
                                         />
                                       ))}
                                     </div>
                                     <span className="rating-text">
-                                      {(item.rating || 4.2).toFixed(1)} ({item.review_count || Math.floor(Math.random() * 50) + 10})
+                                      {(item.rating || 0).toFixed(1)} ({item.review_count || 0})
                                     </span>
                                   </div>
                                 </div>
@@ -4827,22 +5135,7 @@ const CustomerDashboard = () => {
                                       {/* Action Buttons */}
                                       <div className="item-action-buttons">
                                         <button 
-                                          style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            width: '36px',
-                                            height: '36px',
-                                            background: isInWishlist(item.id) 
-                                              ? 'linear-gradient(135deg, #dc2626, #b91c1c)' 
-                                              : 'linear-gradient(135deg, #fecaca, #fca5a5)',
-                                            color: isInWishlist(item.id) ? 'white' : '#dc2626',
-                                            border: 'none',
-                                            borderRadius: '10px',
-                                            cursor: 'pointer',
-                                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                                            fontSize: '16px'
-                                          }}
+                                          className={`wishlist-btn ${isInWishlist(item.id) ? 'wishlist-active' : ''}`}
                                           onClick={(e) => { 
                                             e.stopPropagation(); 
                                             if (wishlistLoading) return;
@@ -4851,7 +5144,8 @@ const CustomerDashboard = () => {
                                           disabled={wishlistLoading}
                                           title={isInWishlist(item.id) ? 'Remove from wishlist' : 'Add to wishlist'}
                                         >
-                                          {isInWishlist(item.id) ? '❤️' : '🤍'}
+                                          <Heart size={14} />
+                                          <span>{isInWishlist(item.id) ? 'Saved' : 'Wishlist'}</span>
                                         </button>
                                         
                                         <button 
@@ -4862,7 +5156,7 @@ const CustomerDashboard = () => {
                                           }}
                                         >
                                           <Calendar size={14} color="currentColor" />
-                                          Book Now
+                                          <span>Book Now</span>
                                         </button>
                                       </div>
                                     </div>
@@ -5638,6 +5932,12 @@ const CustomerDashboard = () => {
                                       <span className="detail-value">{selectedOrder.team_size_required} members</span>
                                     </div>
                                   )}
+                                  {selectedOrder.additional_requirements && String(selectedOrder.additional_requirements).toLowerCase().includes('extra workers requested') && (
+                                    <div className="detail-item">
+                                      <span className="detail-label">Extra Workers Request:</span>
+                                      <span className="detail-value">{selectedOrder.additional_requirements}</span>
+                                    </div>
+                                  )}
                                   {selectedOrder.team_leader_name && (
                                     <div className="detail-item">
                                       <span className="detail-label">Team Leader:</span>
@@ -5737,13 +6037,6 @@ const CustomerDashboard = () => {
                   <div className="billing-header">
                     <h3>Billing & Payments</h3>
                     <p>Track your invoices, payment history, and service analytics</p>
-                    <button 
-                      className="btn-secondary"
-                      onClick={addMockBookings}
-                      style={{ marginTop: '10px', fontSize: '0.875rem' }}
-                    >
-                      🧪 Add Test Team Bookings
-                    </button>
               </div>
               
                   <div className="content-grid">
@@ -5778,16 +6071,40 @@ const CustomerDashboard = () => {
                             debugBookingData(booking);
                             
                             return (
-                            <div key={booking.id} className="bill-item">
+                            <motion.div 
+                              key={booking.id} 
+                              className="bill-item"
+                              layout
+                              whileHover={{ y: -2, scale: 1.01 }}
+                              whileTap={{ scale: 0.99 }}
+                            >
                               <div className="bill-info">
                                 <div className="bill-main">
                                   <h5>INV-{booking.id.slice(-8).toUpperCase()}</h5>
                                   <p>{booking.service_name}</p>
                                 </div>
                                 <div className="bill-details">
-                                  <span>Date: {new Date(booking.scheduled_date).toLocaleDateString('en-IN')}</span>
-                                  <span>Time: {booking.scheduled_time}</span>
-                                  {booking.payment_method && <span>Paid via: {booking.payment_method}</span>}
+                                  <span>
+                                    Date: {booking.scheduled_date
+                                      ? new Date(booking.scheduled_date).toLocaleDateString('en-IN', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric'
+                                        })
+                                      : 'N/A'}
+                                  </span>
+                                  {booking.scheduled_time && (
+                                    <span>Time: {booking.scheduled_time}</span>
+                                  )}
+                                  {booking.payment_method && (
+                                    <span>Method: {booking.payment_method}</span>
+                                  )}
+                                  {booking.payment_reference && (
+                                    <span>Ref: {booking.payment_reference}</span>
+                                  )}
+                                  {booking.booking_status && (
+                                    <span>Booking: {booking.booking_status}</span>
+                                  )}
                                   {booking.is_team_booking && (
                                     <div className="team-info" style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', padding: '8px 12px', background: 'linear-gradient(135deg, #f0f9ff, #e0f2fe)', border: '1px solid #0ea5e9', borderRadius: '8px', fontSize: '0.875rem', visibility: 'visible', opacity: 1, zIndex: 10, position: 'relative' }}>
                                       <span className="team-badge" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#0ea5e9', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', visibility: 'visible', opacity: 1 }}>
@@ -5799,6 +6116,11 @@ const CustomerDashboard = () => {
                                       )}
                                       {booking.team_size_required && (
                                         <span className="team-size" style={{ color: '#0284c7', fontWeight: 500, fontSize: '0.8rem', visibility: 'visible', opacity: 1, display: 'block' }}>{booking.team_size_required} members</span>
+                                      )}
+                                      {booking.additional_requirements && String(booking.additional_requirements).toLowerCase().includes('extra workers requested') && (
+                                        <span className="team-size" style={{ color: '#0369a1', fontWeight: 500, fontSize: '0.8rem', visibility: 'visible', opacity: 1, display: 'block' }}>
+                                          {booking.additional_requirements}
+                                        </span>
                                       )}
                                       {booking.team_leader_name && (
                                         <span className="team-leader" style={{ color: '#0369a1', fontWeight: 500, fontSize: '0.8rem', visibility: 'visible', opacity: 1, display: 'block' }}>Leader: {booking.team_leader_name}</span>
@@ -5818,7 +6140,9 @@ const CustomerDashboard = () => {
                               </div>
                               
                               <div className="bill-amount">
-                                <span className="amount">₹{(booking.calculated_price || booking.total_amount || 0).toFixed(2)}</span>
+                                <span className="amount">
+                                  ₹{(booking.calculated_price || booking.total_amount || 0).toFixed(2)}
+                                </span>
                                 <span 
                                   className="status-badge"
                                   style={{ backgroundColor: getStatusColor(booking.payment_status) }}
@@ -5845,7 +6169,7 @@ const CustomerDashboard = () => {
                                   </button>
                                 )}
                               </div>
-                            </div>
+                            </motion.div>
                             );
                           })
                         )}
@@ -5912,7 +6236,13 @@ const CustomerDashboard = () => {
                           <h5>Recent Activity</h5>
                           <div className="activity-list">
                             {bookings.slice(0, 3).map(booking => (
-                              <div key={booking.id} className="activity-item">
+                              <motion.div 
+                                key={booking.id} 
+                                className="activity-item"
+                                layout
+                                whileHover={{ y: -1, scale: 1.01 }}
+                                whileTap={{ scale: 0.99 }}
+                              >
                                 <div className="activity-icon">
                                   {booking.payment_status === 'completed' ? (
                                     <CheckCircle size={16} color="#10b981" />
@@ -5942,7 +6272,7 @@ const CustomerDashboard = () => {
                                     {booking.payment_status}
                                   </span>
                                 </div>
-                              </div>
+                              </motion.div>
                             ))}
                           </div>
                         </div>
@@ -5970,7 +6300,20 @@ const CustomerDashboard = () => {
                             </div>
                             <div className="history-content">
                               <h5>Average Rating</h5>
-                              <p>4.8/5.0</p>
+                              <p>
+                                {(() => {
+                                  const ratedBookings = bookings.filter(
+                                    b => typeof b.rating === 'number' && !isNaN(b.rating)
+                                  );
+                                  if (ratedBookings.length === 0) {
+                                    return 'No ratings yet';
+                                  }
+                                  const avg =
+                                    ratedBookings.reduce((sum, b) => sum + b.rating, 0) /
+                                    ratedBookings.length;
+                                  return `${avg.toFixed(1)}/5.0`;
+                                })()}
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -6446,6 +6789,105 @@ const CustomerDashboard = () => {
             </div>
 
             <form className="review-modal-body" onSubmit={handleReviewSubmit}>
+              {/* Existing Reviews */}
+              <div className="existing-reviews-section">
+                <div className="section-header existing-reviews-header">
+                  <div className="existing-reviews-title">
+                    <h6>Customer reviews</h6>
+                    {serviceReviewsTotal > 0 && (
+                      <span className="existing-reviews-count">
+                        {serviceReviewsTotal} review{serviceReviewsTotal !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  {serviceReviewsHasMore && !serviceReviewsLoading && (
+                    <button
+                      type="button"
+                      className="existing-reviews-more-btn"
+                      onClick={() => {
+                        if (reviewService) {
+                          loadServiceReviews(reviewService, serviceReviewsPage + 1, true);
+                        }
+                      }}
+                    >
+                      View more reviews
+                    </button>
+                  )}
+                </div>
+                {serviceReviewsLoading ? (
+                  <div className="existing-reviews-loading">
+                    <span>Loading reviews...</span>
+                  </div>
+                ) : serviceReviewsError ? (
+                  <div className="existing-reviews-error">
+                    <span>{serviceReviewsError}</span>
+                  </div>
+                ) : serviceReviews.length === 0 ? (
+                  <div className="existing-reviews-empty">
+                    <span>No reviews yet. Be the first to review this service.</span>
+                  </div>
+                ) : (
+                  <div className="existing-reviews-list">
+                    {serviceReviews.map((rev) => (
+                      <div key={rev.id} className="existing-review-card">
+                        <div className="existing-review-header">
+                          <div className="existing-review-avatar">
+                            <span>
+                              {(rev.customer_name || 'C')
+                                .split(' ')
+                                .filter(Boolean)
+                                .map(part => part[0])
+                                .join('')
+                                .slice(0, 2)
+                                .toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="existing-review-main">
+                            <div className="existing-review-name-row">
+                              <span className="existing-review-name">
+                                {rev.customer_name || 'Customer'}
+                              </span>
+                              {rev.created_at && (
+                                <span className="existing-review-date">
+                                  {new Date(rev.created_at).toLocaleDateString('en-IN', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })}
+                                </span>
+                              )}
+                            </div>
+                            <div className="existing-review-stars">
+                              {[...Array(5)].map((_, i) => (
+                                <Star
+                                  key={i}
+                                  size={12}
+                                  fill={i < Math.round(rev.rating || 0) ? '#fbbf24' : '#e5e7eb'}
+                                  color="#fbbf24"
+                                />
+                              ))}
+                              <span className="existing-review-rating">
+                                {(rev.rating || 0).toFixed(1)} / 5
+                              </span>
+                              <span className="existing-review-badge">
+                                Verified booking
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        {rev.note && (
+                          <div className="existing-review-note">
+                            {rev.note.length > 120
+                              ? `${rev.note.slice(0, 120)}…`
+                              : rev.note}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Service Info Card */}
               <div className="service-info-card">
                 <div className="service-icon">

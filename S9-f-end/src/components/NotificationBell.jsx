@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, X, CheckCircle, AlertCircle, Clock, Eye } from 'lucide-react';
+import { Bell, X, CheckCircle, AlertCircle, Clock, Eye, IndianRupee } from 'lucide-react';
 import { apiService } from '../services/api';
 import './NotificationBell.css';
 
@@ -9,6 +9,7 @@ const NotificationBell = ({ adminUserId }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
+  const [wageRequestStatuses, setWageRequestStatuses] = useState({});
 
   useEffect(() => {
     if (adminUserId) {
@@ -37,6 +38,36 @@ const NotificationBell = ({ adminUserId }) => {
       console.error('Failed to fetch unread count:', error);
     }
   };
+
+  // Keep wageRequestStatuses in sync with current notifications
+  useEffect(() => {
+    const wageNotifs = notifications.filter(
+      (n) => n.type === 'wage_increase_request' && n?.metadata?.wage_request_id
+    );
+    if (!wageNotifs.length) return;
+
+    const fetchStatuses = async () => {
+      const updates = {};
+      await Promise.all(
+        wageNotifs.map(async (n) => {
+          const reqId = n.metadata.wage_request_id;
+          try {
+            const res = await apiService.getWageRequest(reqId);
+            if (res?.success && res.data?.status) {
+              updates[reqId] = res.data.status;
+            }
+          } catch (err) {
+            console.warn('Failed to fetch wage request status for', reqId, err);
+          }
+        })
+      );
+      if (Object.keys(updates).length) {
+        setWageRequestStatuses((prev) => ({ ...prev, ...updates }));
+      }
+    };
+
+    fetchStatuses();
+  }, [notifications]);
 
   const markAsRead = async (notificationId) => {
     setActionLoading(prev => ({ ...prev, [notificationId]: 'read' }));
@@ -141,6 +172,34 @@ const NotificationBell = ({ adminUserId }) => {
     return `${Math.floor(diffInMinutes / 1440)}d ago`;
   };
 
+  const handleWageRequestDecision = async (notification, decision) => {
+    const wageRequestId = notification?.metadata?.wage_request_id;
+    if (!wageRequestId) {
+      console.warn('No wage_request_id found on notification metadata');
+      return;
+    }
+    setActionLoading(prev => ({ ...prev, [notification.id]: decision }));
+    try {
+      await apiService.decideWageRequest(wageRequestId, {
+        decision,
+        adminUserId: adminUserId || null,
+        comment: null,
+        newHourlyRate: undefined
+      });
+      // Update local status map so buttons reflect new state without full reload
+      setWageRequestStatuses(prev => ({
+        ...prev,
+        [wageRequestId]: decision === 'approve' ? 'approved' : 'rejected'
+      }));
+      // Refresh unread count so badge reflects latest state
+      await fetchUnreadCount();
+    } catch (error) {
+      console.error('Failed to process wage request decision:', error);
+    } finally {
+      setActionLoading(prev => ({ ...prev, [notification.id]: null }));
+    }
+  };
+
   return (
     <div className="notification-bell-container">
       <button 
@@ -178,7 +237,7 @@ const NotificationBell = ({ adminUserId }) => {
           </div>
 
           <div className="notification-list">
-            {loading ? (
+              {loading ? (
               <div className="notification-loading">
                 <div className="spinner"></div>
                 Loading notifications...
@@ -189,58 +248,108 @@ const NotificationBell = ({ adminUserId }) => {
                 <p>No notifications</p>
               </div>
             ) : (
-              notifications.map((notification) => (
-                <div 
-                  key={notification.id}
-                  className={`notification-item ${notification.status === 'unread' ? 'unread' : ''}`}
-                >
-                  <div className="notification-content">
-                    <div className="notification-icon">
-                      {getNotificationIcon(notification.type)}
-                    </div>
-                    <div className="notification-details">
-                      <h4>{notification.title}</h4>
-                      <p>{notification.message}</p>
-                      {notification.sender && (
-                        <p className="sender-info">
-                          From: {notification.sender.email} ({notification.sender.role})
-                        </p>
-                      )}
-                      <span className="notification-time">
-                        {formatTime(notification.created_at)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="notification-actions">
-                    {notification.status === 'unread' && (
-                      <button 
-                        className="mark-read-btn"
-                        onClick={() => markAsRead(notification.id)}
-                        title="Mark as read"
-                        disabled={actionLoading[notification.id]}
-                      >
-                        {actionLoading[notification.id] === 'read' ? (
-                          <div className="mini-spinner"></div>
-                        ) : (
-                          <Eye size={14} />
+              notifications.map((notification) => {
+                const isWageRequest = notification.type === 'wage_increase_request';
+                const meta = notification.metadata || {};
+                const currentRate = Number(meta.current_hourly_rate) || null;
+                const requestedRate = Number(meta.requested_hourly_rate) || null;
+                const diff =
+                  currentRate != null && requestedRate != null
+                    ? requestedRate - currentRate
+                    : null;
+                const requestStatus = meta.wage_request_id
+                  ? wageRequestStatuses[meta.wage_request_id]
+                  : undefined;
+                const isResolvedWage =
+                  isWageRequest && requestStatus && requestStatus !== 'pending';
+                return (
+                  <div 
+                    key={notification.id}
+                    className={`notification-item ${notification.status === 'unread' ? 'unread' : ''} ${isWageRequest ? 'wage-request-banner' : ''}`}
+                  >
+                    <div className="notification-content">
+                      <div className="notification-icon">
+                        {isWageRequest ? <IndianRupee size={16} /> : getNotificationIcon(notification.type)}
+                      </div>
+                      <div className="notification-details">
+                        <h4>{notification.title}</h4>
+                        <p>{notification.message}</p>
+                        {isWageRequest && (currentRate != null && requestedRate != null) && (
+                          <p className="provider-info">
+                            Current: ₹{currentRate.toFixed(2)} · Requested: ₹{requestedRate.toFixed(2)}
+                            {diff != null && diff > 0 ? ` (Δ ₹${diff.toFixed(2)})` : ''}
+                          </p>
                         )}
-                      </button>
-                    )}
-                    <button 
-                      className="dismiss-btn"
-                      onClick={() => dismissNotification(notification.id)}
-                      title="Dismiss"
-                      disabled={actionLoading[notification.id]}
-                    >
-                      {actionLoading[notification.id] === 'dismiss' ? (
-                        <div className="mini-spinner"></div>
+                        {notification.sender && !isWageRequest && (
+                          <p className="sender-info">
+                            From: {notification.sender.email} ({notification.sender.role})
+                          </p>
+                        )}
+                        <span className="notification-time">
+                          {formatTime(notification.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="notification-actions">
+                      {isWageRequest ? (
+                        <>
+                          <button
+                            className="wage-approve-btn"
+                            onClick={() => handleWageRequestDecision(notification, 'approve')}
+                            disabled={isResolvedWage || !!actionLoading[notification.id]}
+                          >
+                            {isResolvedWage
+                              ? 'Approved'
+                              : actionLoading[notification.id] === 'approve'
+                                ? 'Approving...'
+                                : 'Accept'}
+                          </button>
+                          <button
+                            className="wage-reject-btn"
+                            onClick={() => handleWageRequestDecision(notification, 'reject')}
+                            disabled={isResolvedWage || !!actionLoading[notification.id]}
+                          >
+                            {isResolvedWage && notification.status === 'dismissed'
+                              ? 'Resolved'
+                              : actionLoading[notification.id] === 'reject'
+                                ? 'Rejecting...'
+                                : 'Reject'}
+                          </button>
+                        </>
                       ) : (
-                        <X size={14} />
+                        <>
+                          {notification.status === 'unread' && (
+                            <button 
+                              className="mark-read-btn"
+                              onClick={() => markAsRead(notification.id)}
+                              title="Mark as read"
+                              disabled={actionLoading[notification.id]}
+                            >
+                              {actionLoading[notification.id] === 'read' ? (
+                                <div className="mini-spinner"></div>
+                              ) : (
+                                <Eye size={14} />
+                              )}
+                            </button>
+                          )}
+                          <button 
+                            className="dismiss-btn"
+                            onClick={() => dismissNotification(notification.id)}
+                            title="Dismiss"
+                            disabled={actionLoading[notification.id]}
+                          >
+                            {actionLoading[notification.id] === 'dismiss' ? (
+                              <div className="mini-spinner"></div>
+                            ) : (
+                              <X size={14} />
+                            )}
+                          </button>
+                        </>
                       )}
-                    </button>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

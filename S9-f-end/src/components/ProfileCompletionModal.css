@@ -1,17 +1,22 @@
 /* Profile Completion Modal Styles */
 .profile-completion-overlay {
   position: fixed;
+  inset: 0;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
   background: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 9999;
   padding: 1rem;
+  box-sizing: border-box;
   animation: fadeIn 0.3s ease-out;
 }
 
@@ -1940,6 +1945,15 @@ input[type="number"] {
   grid-column: 1 / -1;
 }
 
+/* Ensure Aadhaar manual entry inputs have dark, readable text */
+.aadhaar-info-grid .form-input,
+.aadhaar-info-grid input.form-input,
+.aadhaar-info-grid select.form-input,
+.aadhaar-info-grid textarea.form-input {
+  color: #1e293b !important;
+  background-color: #ffffff !important;
+}
+
 .info-item label {
   font-size: 0.8rem;
   font-weight: 600;
@@ -2027,6 +2041,7 @@ input[type="number"] {
   font-size: 0.875rem;
   transition: all 0.2s ease;
   background: white;
+  color: #1e293b;
   width: 100%;
 }
 

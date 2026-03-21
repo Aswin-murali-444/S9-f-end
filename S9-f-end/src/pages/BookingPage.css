@@ -281,6 +281,137 @@
   opacity: 0.7;
 }
 
+/* Booking page multi-service cart cards */
+.booking-cart-item-card {
+  border-radius: 16px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  background: radial-gradient(circle at top left, #eff6ff 0%, #f8fafc 45%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.booking-cart-item-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 55%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+.booking-cart-item-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+  border-color: rgba(129, 140, 248, 0.7);
+}
+
+.booking-cart-item-card:hover::before {
+  opacity: 1;
+}
+
+.booking-cart-item-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.booking-cart-item-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #e0f2fe, #dbeafe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+}
+
+.booking-cart-item-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.booking-cart-item-icon-fallback {
+  font-size: 20px;
+}
+
+.booking-cart-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.booking-cart-item-info h5 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.booking-cart-item-info p {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.booking-cart-item-price {
+  text-align: right;
+}
+
+.booking-cart-item-total {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.booking-cart-item-unit {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.booking-cart-item-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.booking-cart-item-meta {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.booking-cart-item-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.booking-offer-badge {
+  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+  color: #166534;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.25);
+}
+
 .notifications-list {
   padding: 8px 0;
 }
@@ -2758,6 +2889,195 @@ textarea {
   font-size: 0.875rem;
   color: #64748b;
   margin-left: 0.25rem;
+}
+
+.reviews-preview {
+  margin-top: 0.75rem;
+}
+
+.reviews-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.reviews-preview-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.reviews-preview-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.reviews-nav {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(2, 132, 199, 0.25);
+  background: rgba(255, 255, 255, 0.65);
+  color: #0369a1;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reviews-nav:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.reviews-preview-empty {
+  font-size: 0.8rem;
+  color: #64748b;
+  padding: 0.25rem 0;
+}
+
+.reviews-carousel {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding: 0.25rem 0.25rem 0.5rem;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.reviews-carousel::-webkit-scrollbar {
+  height: 6px;
+}
+
+.reviews-carousel::-webkit-scrollbar-thumb {
+  background: rgba(2, 132, 199, 0.25);
+  border-radius: 999px;
+}
+
+.review-card-mini {
+  min-width: min(520px, 92%);
+  max-width: min(520px, 92%);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  padding: 0.85rem 0.95rem;
+  scroll-snap-align: center;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(6px);
+}
+
+.review-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
+
+.reviewer-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.review-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+
+.reviewer-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.reviewer-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.review-date {
+  font-size: 0.85rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.review-rating-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.review-stars {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.review-score {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.review-verified-pill {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #16a34a;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.review-note {
+  font-size: 0.92rem;
+  color: #334155;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.6em;
+}
+
+.review-footer-row {
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.review-view-all {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #0369a1;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.review-view-all:hover {
+  text-decoration: underline;
 }
 
 .provider-badges {

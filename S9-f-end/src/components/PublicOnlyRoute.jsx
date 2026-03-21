@@ -4,8 +4,12 @@ import { useAuth } from '../hooks/useAuth';
 import LoadingSpinner from './LoadingSpinner';
 
 const PublicOnlyRoute = ({ children }) => {
-  const { isAuthenticated, isInitialized, user } = useAuth();
   const location = useLocation();
+  // Always call ALL hooks unconditionally (React rules of hooks)
+  const auth = useAuth();
+  const isAuthenticated = auth?.isAuthenticated ?? false;
+  const isInitialized = auth?.isInitialized ?? true;
+  const user = auth?.user ?? null;
   const [hasRedirected, setHasRedirected] = useState(false);
   const redirectTimeoutRef = useRef(null);
   const lastRedirectRef = useRef(null);
@@ -25,8 +29,20 @@ const PublicOnlyRoute = ({ children }) => {
     };
   }, []);
 
-  // Show loading while checking authentication
-  if (!isInitialized) {
+  // CRITICAL: For login page, always show the form - never show loading
+  if (location.pathname === '/login') {
+    localStorage.removeItem('just_logged_in'); // clear stale flag so form always shows
+    return children;
+  }
+
+  // Check both React state and localStorage for immediate auth state
+  const isAuthFromStorage = localStorage.getItem('isAuthenticated') === 'true';
+  const userFromStorage = localStorage.getItem('user');
+  const isAuthPage = location.pathname === '/register';
+  const justLoggedIn = localStorage.getItem('just_logged_in') === 'true';
+
+  // Show loading while checking authentication - but only for non-login pages
+  if (!isInitialized && !isAuthPage && location.pathname !== '/login') {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
         <LoadingSpinner size="large" />
@@ -34,20 +50,11 @@ const PublicOnlyRoute = ({ children }) => {
     );
   }
 
-  // Check both React state and localStorage for immediate auth state
-  const isAuthFromStorage = localStorage.getItem('isAuthenticated') === 'true';
-  const userFromStorage = localStorage.getItem('user');
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
-  
-  // Don't redirect if we're on login page and just logged in (let the form handle it)
-  if (location.pathname === '/login' && !isAuthenticated && !isAuthFromStorage) {
-    return children;
-  }
-
   // Prevent redirect loops by checking if we've already redirected
+  // Also skip redirect if we just logged in (let LoginPage handle it)
   if ((isAuthenticated && user) || (isAuthFromStorage && userFromStorage)) {
-    if (hasRedirected) {
-      return children; // Prevent infinite redirects
+    if (hasRedirected || justLoggedIn) {
+      return children; // Prevent infinite redirects or interference with login redirect
     }
 
     const currentUser = user || (userFromStorage ? JSON.parse(userFromStorage) : null);

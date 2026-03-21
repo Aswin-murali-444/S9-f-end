@@ -47,7 +47,20 @@ class ApiService {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error || `HTTP error! status: ${response.status}`);
+        const err = new Error(data?.error || `HTTP error! status: ${response.status}`);
+        // Attach extra metadata so callers can react based on status/details
+        err.status = response.status;
+        err.details = data?.details;
+        err.hint = data?.hint;
+        err.code = data?.code;
+        err.missingFields = data?.missingFields;
+        err.fieldValues = data?.fieldValues;
+        // Provide a lightweight response-like object for compatibility with code that expects error.response
+        err.response = {
+          status: response.status,
+          data
+        };
+        throw err;
       }
       return data;
     } catch (error) {
@@ -264,6 +277,18 @@ class ApiService {
     });
   }
 
+  // ML: personalized service recommendations for a user
+  async getServiceRecommendations(userId, { limit = 5, currentServiceId = null } = {}) {
+    const params = new URLSearchParams();
+    if (limit != null) params.set('limit', String(limit));
+    if (currentServiceId) params.set('currentServiceId', currentServiceId);
+    const q = params.toString();
+    const endpoint = q
+      ? `/services/user/${encodeURIComponent(userId)}/recommendations?${q}`
+      : `/services/user/${encodeURIComponent(userId)}/recommendations`;
+    return this.request(endpoint);
+  }
+
   async updateService(id, updates) {
     const { categoryId, name, description, iconBase64, iconFileName, iconMimeType, duration, price, offerPrice, offerPercentage, offerEnabled, serviceType, active } = updates;
     return this.request(`/services/${encodeURIComponent(id)}`, {
@@ -362,6 +387,14 @@ class ApiService {
     });
   }
 
+  async resendProviderCredentials(userId, sendEmail = true) {
+    return this.request(`/admin/providers/${userId}/resend-credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sendEmail })
+    });
+  }
+
   async listProviders() {
     return this.request('/admin/providers');
   }
@@ -378,6 +411,7 @@ class ApiService {
   async getProviderBookings(providerId, filters = {}) {
     const params = new URLSearchParams();
     if (filters.status) params.append('status', filters.status);
+    if (filters.scope) params.append('scope', filters.scope);
     if (filters.limit) params.append('limit', filters.limit);
     if (filters.offset) params.append('offset', filters.offset);
     
@@ -413,6 +447,17 @@ class ApiService {
     });
   }
 
+  // ML: recommended providers for a booking (for admin/assignment UIs)
+  async getRecommendedProviders(bookingId, topK = 5) {
+    const params = new URLSearchParams();
+    if (topK != null) params.set('topK', String(topK));
+    const q = params.toString();
+    const endpoint = q
+      ? `/bookings/${encodeURIComponent(bookingId)}/recommended-providers?${q}`
+      : `/bookings/${encodeURIComponent(bookingId)}/recommended-providers`;
+    return this.request(endpoint);
+  }
+
   // Payments (Razorpay)
   async createRazorpayOrder({ amount, currency = 'INR', receipt, notes }) {
     return this.request('/payments/create-order', {
@@ -440,6 +485,22 @@ class ApiService {
     return this.request('/payments/confirm-booking', {
       method: 'POST',
       body: JSON.stringify({ razorpay_order_id, razorpay_payment_id, razorpay_signature, bookings })
+    });
+  }
+
+  // Provider salary & payout APIs
+  async getProviderSalarySummary(providerId) {
+    return this.request(`/payments/provider/${encodeURIComponent(providerId)}/salary-summary`);
+  }
+
+  async getProviderBankDetails(providerId) {
+    return this.request(`/payments/provider/${encodeURIComponent(providerId)}/bank-details`);
+  }
+
+  async updateProviderBankDetails(providerId, details) {
+    return this.request(`/payments/provider/${encodeURIComponent(providerId)}/bank-details`, {
+      method: 'PUT',
+      body: JSON.stringify(details)
     });
   }
 
@@ -527,11 +588,14 @@ class ApiService {
     });
   }
 
-  async getAvailableTeamsForService(serviceId = null, categoryId = null) {
+  async getAvailableTeamsForService(serviceId = null, categoryId = null, options = {}) {
     const params = new URLSearchParams();
     if (serviceId) params.append('serviceId', serviceId);
     if (categoryId) params.append('categoryId', categoryId);
-    
+    if (options.scheduled_date) params.append('scheduled_date', options.scheduled_date);
+    if (options.scheduled_time) params.append('scheduled_time', options.scheduled_time);
+    if (options.exclude_booking_id) params.append('exclude_booking_id', options.exclude_booking_id);
+
     const queryString = params.toString();
     const endpoint = queryString ? `/team-bookings/available?${queryString}` : '/team-bookings/available';
     return this.request(endpoint);
@@ -549,12 +613,58 @@ class ApiService {
     return this.request(`/team-bookings/customer/${encodeURIComponent(userId)}/bookings`);
   }
 
+  // Team job: get assignments pending current user's accept/decline
+  async getMyPendingTeamResponses(userId) {
+    return this.request(`/team-bookings/my-pending-responses/${encodeURIComponent(userId)}`);
+  }
+
+  // Team job: accept or decline an assignment (user must be in assigned_members)
+  async respondToTeamAssignment(assignmentId, userId, accept, notes = null) {
+    return this.request(`/team-bookings/assignment/${encodeURIComponent(assignmentId)}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, accept, notes })
+    });
+  }
+
+  async getAssignmentAcceptances(assignmentId) {
+    return this.request(`/team-bookings/assignment/${encodeURIComponent(assignmentId)}/acceptances`);
+  }
+
   // Profile completion (NEW - for provider_profiles table)
   async completeServiceProviderProfile(profileData) {
     return this.request('/users/profile/complete-provider', {
       method: 'POST',
       body: JSON.stringify(profileData)
     });
+  }
+
+  getBaseUrl() {
+    const envBase = import.meta.env.VITE_API_URL;
+    if (envBase) return envBase.replace(/\/$/, '');
+    if (typeof window !== 'undefined' && (window.location?.hostname === 'localhost' || window.location?.hostname === '127.0.0.1')) {
+      return 'http://localhost:3001';
+    }
+    return '/api';
+  }
+
+  async aadhaarExtract(formData) {
+    const base = this.getBaseUrl();
+    const path = base.endsWith('/api') || base === '/api' ? '/aadhaar/extract' : '/api/aadhaar/extract';
+    const url = `${base.replace(/\/$/, '')}${path}`;
+    const res = await fetch(url, { method: 'POST', body: formData });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Aadhaar API failed: ${res.status}`);
+    return data;
+  }
+
+  async aadhaarExtractBoth(formData) {
+    const base = this.getBaseUrl();
+    const path = base.endsWith('/api') || base === '/api' ? '/aadhaar/extract-both' : '/api/aadhaar/extract-both';
+    const url = `${base.replace(/\/$/, '')}${path}`;
+    const res = await fetch(url, { method: 'POST', body: formData });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Aadhaar API failed: ${res.status}`);
+    return data;
   }
 
   // Upload provider profile picture
@@ -603,11 +713,75 @@ class ApiService {
     }
   }
 
+  // Create a wage increase request for a provider (worker dashboard)
+  async createProviderWageRequest(providerId, { requestedHourlyRate, reason }) {
+    return this.request(`/users/provider/${encodeURIComponent(providerId)}/wage-requests`, {
+      method: 'POST',
+      body: JSON.stringify({
+        requested_hourly_rate: requestedHourlyRate,
+        reason: reason || null
+      })
+    });
+  }
+
+  // Update availability for a provider (worker dashboard)
+  async updateProviderAvailability(providerId, availability) {
+    return this.request(`/users/provider/${encodeURIComponent(providerId)}/availability`, {
+      method: 'PUT',
+      body: JSON.stringify({ availability })
+    });
+  }
+
+  // Create a time off / leave request for a provider (worker dashboard)
+  async createProviderTimeOff(providerId, { start_date, end_date, reason }) {
+    return this.request(`/users/provider/${encodeURIComponent(providerId)}/time-off`, {
+      method: 'POST',
+      body: JSON.stringify({
+        start_date,
+        end_date,
+        reason: reason || null
+      })
+    });
+  }
+
+  // Get time off / leave requests for a provider (worker dashboard)
+  async getProviderTimeOff(providerId) {
+    return this.request(`/users/provider/${encodeURIComponent(providerId)}/time-off`);
+  }
+
   // Update provider profile status (Admin function)
   async updateProviderProfileStatus(providerId, status, reason = null) {
     return this.request(`/users/admin/profile/${providerId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status, reason })
+    });
+  }
+
+  // Admin: approve or reject a wage increase request
+  async decideWageRequest(requestId, { decision, adminUserId, comment, newHourlyRate } = {}) {
+    return this.request(`/admin/wage-requests/${encodeURIComponent(requestId)}/decision`, {
+      method: 'POST',
+      body: JSON.stringify({
+        decision,
+        adminUserId: adminUserId || null,
+        comment: comment || null,
+        new_hourly_rate: newHourlyRate
+      })
+    });
+  }
+
+  // Admin: get a single wage increase request
+  async getWageRequest(requestId) {
+    return this.request(`/admin/wage-requests/${encodeURIComponent(requestId)}`);
+  }
+
+  // Admin: approve or reject a provider leave request
+  async decideLeaveRequest(leaveId, { decision } = {}) {
+    return this.request(`/admin/leave-requests/${encodeURIComponent(leaveId)}/decision`, {
+      method: 'POST',
+      body: JSON.stringify({
+        decision
+      })
     });
   }
 
@@ -624,6 +798,46 @@ class ApiService {
   // Get live activity feed for admin dashboard
   async getAdminActivityFeed(limit = 50) {
     return this.request(`/admin/activity-feed?limit=${limit}`);
+  }
+
+  // Get overall rating summary for admin dashboard
+  async getAdminRatingSummary() {
+    return this.request('/admin/rating-summary');
+  }
+
+  // Get provider time off / leave for admin dashboard
+  async getAdminProviderTimeOff() {
+    return this.request('/admin/provider-time-off');
+  }
+
+  // Get provider availability (next 7 days) for admin dashboard
+  async getAdminProviderAvailability() {
+    return this.request('/admin/provider-availability');
+  }
+
+   // Get unified allocations (individual + team assignments) for admin Allocation tab
+  async getAdminAllocations(limit = 200) {
+    const params = new URLSearchParams();
+    if (limit != null) params.set('limit', limit);
+    const q = params.toString();
+    return this.request(q ? `/admin/allocations?${q}` : '/admin/allocations');
+  }
+
+  // Get billing summary for admin dashboard (customer payments + provider payouts + transactions)
+  async getAdminBillingSummary(limit = 200) {
+    const params = new URLSearchParams();
+    if (limit != null) params.set('limit', limit);
+    const q = params.toString();
+    return this.request(q ? `/admin/billing-summary?${q}` : '/admin/billing-summary');
+  }
+
+  // Get all bookings for admin (customer, service, who accepted, when)
+  async getAdminBookings(params = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.limit != null) searchParams.set('limit', params.limit);
+    if (params.status) searchParams.set('status', params.status);
+    const q = searchParams.toString();
+    return this.request(q ? `/admin/bookings?${q}` : '/admin/bookings');
   }
 
   // Notification methods
@@ -711,6 +925,18 @@ class ApiService {
 
   async getProviderRatingStats(providerId) {
     return this.request(`/reviews/provider/${providerId}/stats`);
+  }
+
+  async submitServiceReview(payload) {
+    return this.request('/reviews/service', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async getServiceReviews(serviceId, page = 1, limit = 20) {
+    const params = new URLSearchParams({ page, limit });
+    return this.request(`/reviews/service/${encodeURIComponent(serviceId)}?${params}`);
   }
 
   // Team and provider details

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, 
@@ -55,15 +56,7 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
     || (typeof process !== 'undefined' && process.env && process.env.REACT_APP_GOOGLE_MAPS_API_KEY)
     || 'AIzaSyCoPzRJLAmma54BBOyF4AhZ2ZIqGvak8CA';
 
-  // Aadhaar Extraction API configuration (robust fallback to dev proxy)
-  const API_BASE = (import.meta.env.VITE_API_URL && String(import.meta.env.VITE_API_URL).trim()) || '';
-  const NORMALIZED_API_BASE = API_BASE ? API_BASE.replace(/\/+$/, '') : '';
-  const AADHAAR_API_URL = NORMALIZED_API_BASE
-    ? `${NORMALIZED_API_BASE}/api/aadhaar/extract`
-    : 'http://localhost:3001/api/aadhaar/extract';
-  const AADHAAR_BOTH_API_URL = NORMALIZED_API_BASE
-    ? `${NORMALIZED_API_BASE}/api/aadhaar/extract-both`
-    : 'http://localhost:3001/api/aadhaar/extract-both';
+  // Aadhaar uses apiService for correct API base URL
 
   // Helper function to convert file to base64
   const fileToBase64 = (file) => {
@@ -72,6 +65,51 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
       reader.readAsDataURL(file);
       reader.onload = () => resolve(reader.result);
       reader.onerror = error => reject(error);
+    });
+  };
+
+  // Groq vision is stricter about supported image formats than the backend upload.
+  // Convert Aadhaar images to JPEG in the browser when the user uploads PNG/WebP/etc.
+  const convertImageToJpegFile = async (file, quality = 0.92) => {
+    if (!file) return file;
+    if (file.type === 'image/jpeg') return file;
+
+    const dataUrl = await fileToBase64(file);
+
+    // Ensure FileReader result is a string data URL
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+      throw new Error('Invalid image data');
+    }
+
+    const img = new Image();
+    img.src = dataUrl;
+    await new Promise((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = (e) => reject(e);
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas not supported');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob(
+        (b) => resolve(b),
+        'image/jpeg',
+        quality
+      );
+    });
+
+    if (!blob) throw new Error('Failed to convert image to JPEG');
+
+    const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
+    return new File([blob], `${nameWithoutExt}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: file.lastModified
     });
   };
 
@@ -303,34 +341,14 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
       setLocationError('');
       setLocationMessage('');
       
-      // Use backend proxy for Aadhaar extraction
-      const formData = new FormData();
-      formData.append('image', file);
-      formData.append('side', side);
+      const fd = new FormData();
+      fd.append('image', file);
+      fd.append('side', side);
       
-      console.log('Calling backend Aadhaar API:', AADHAAR_API_URL);
-      
-      const response = await fetch(AADHAAR_API_URL, {
-        method: 'POST',
-        body: formData
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        // Use the specific error message from the backend if available
-        const errorMessage = errorData.error || `API request failed: ${response.status} ${response.statusText}`;
-        throw new Error(errorMessage);
-      }
-      
-      console.log('API response status:', response.status);
-      
-      const result = await response.json();
+      const result = await apiService.aadhaarExtract(fd);
       console.log('Aadhaar extraction response:', result);
       
-      if (!result.success) {
-        throw new Error(result.error || 'Extraction failed');
-      }
-      
+      if (!result.success) throw new Error(result.error || 'Extraction failed');
       const extractedData = result.data;
       
       // Format date if only year is provided
@@ -395,14 +413,11 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
       console.log('Error message:', error.message);
       let errorMessage = `Failed to extract details from Aadhaar ${side} side.`;
       
-      if (error.message.includes('Payment required') || error.message.includes('Payment Required') || error.message.includes('OpenRouter account requires payment')) {
-        if (error.message.includes('OpenRouter account requires payment')) {
-          errorMessage = 'OpenRouter account requires payment. Please add credits to your OpenRouter account or enter your details manually below.';
-          setLocationMessage('💡 You can add credits to your OpenRouter account or manually fill in your Aadhaar details in the form fields.');
-        } else {
-          errorMessage = 'Aadhaar extraction service requires payment. Please enter your details manually below.';
-          setLocationMessage('💡 You can manually fill in your Aadhaar details in the form fields.');
-        }
+      if (error.message.includes('Payment required') || error.message.includes('Payment Required') || 
+          error.message.includes('OpenRouter account requires payment') || 
+          error.message.includes('Insufficient credits') || error.message.includes('no credits')) {
+        errorMessage = 'OpenRouter account has no credits. Please add credits at openrouter.ai/settings/credits or enter your Aadhaar details manually below.';
+        setLocationMessage('💡 You can add credits to your OpenRouter account or manually fill in your Aadhaar details in the form fields.');
         setManualAadhaarEntry(true);
       } else if (error.message.includes('not configured') || error.message.includes('not properly configured') || error.message.includes('OpenRouter API key is not configured')) {
         errorMessage = 'Aadhaar extraction service is not configured. Please enter your details manually below.';
@@ -420,7 +435,7 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
       
       setLocationError(errorMessage);
       if (!error.message.includes('Payment required') && !error.message.includes('Payment Required') && 
-          !error.message.includes('OpenRouter account requires payment') &&
+          !error.message.includes('OpenRouter account requires payment') && !error.message.includes('no credits') &&
           !error.message.includes('not configured') && !error.message.includes('not properly configured') && 
           !error.message.includes('OpenRouter API key is not configured')) {
         setLocationMessage('');
@@ -441,23 +456,12 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
       setLocationError('');
       setLocationMessage('');
 
-      const formData = new FormData();
-      formData.append('front', frontFile);
-      formData.append('back', backFile);
+      const fd = new FormData();
+      fd.append('front', frontFile);
+      fd.append('back', backFile);
 
-      console.log('Calling backend Aadhaar BOTH API:', AADHAAR_BOTH_API_URL);
-      const response = await fetch(AADHAAR_BOTH_API_URL, { method: 'POST', body: formData });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        // Use the specific error message from the backend if available
-        const errorMessage = errorData.error || `API request failed: ${response.status} ${response.statusText}`;
-        throw new Error(errorMessage);
-      }
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.error || 'Combined extraction failed');
-      }
-
+      const result = await apiService.aadhaarExtractBoth(fd);
+      if (!result.success) throw new Error(result.error || 'Combined extraction failed');
       const extracted = result.data || {};
 
       // Format date if only year is provided
@@ -516,14 +520,11 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
       console.log('Error message:', error.message);
       
       // Check if it's a payment/API issue
-      if (error.message.includes('Payment required') || error.message.includes('Payment Required') || error.message.includes('OpenRouter account requires payment')) {
-        if (error.message.includes('OpenRouter account requires payment')) {
-          setLocationError('OpenRouter account requires payment. Please add credits to your OpenRouter account or enter your details manually below.');
-          setLocationMessage('💡 You can add credits to your OpenRouter account or manually fill in your Aadhaar details in the form fields.');
-        } else {
-          setLocationError('Aadhaar extraction service requires payment. Please enter your details manually below.');
-          setLocationMessage('💡 You can manually fill in your Aadhaar details in the form fields.');
-        }
+      if (error.message.includes('Payment required') || error.message.includes('Payment Required') || 
+          error.message.includes('OpenRouter account requires payment') || 
+          error.message.includes('Insufficient credits') || error.message.includes('no credits')) {
+        setLocationError('OpenRouter account has no credits. Please add credits at openrouter.ai/settings/credits or enter your Aadhaar details manually below.');
+        setLocationMessage('💡 You can add credits to your OpenRouter account or manually fill in your Aadhaar details in the form fields.');
         setManualAadhaarEntry(true);
       } else if (error.message.includes('not configured') || error.message.includes('not properly configured') || error.message.includes('OpenRouter API key is not configured')) {
         setLocationError('Aadhaar extraction service is not configured. Please enter your details manually below.');
@@ -610,44 +611,63 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
     if (!user?.id) return;
     
     try {
-      // Fetch user profile data including service provider details
-      const profileData = await apiService.getUserProfile(user.id);
+      // Fetch user profile (user_profiles + service_provider_details) and provider_profiles
+      const [profileData, providerProfileRes] = await Promise.all([
+        apiService.getUserProfile(user.id),
+        apiService.getProviderProfile(user.id).catch(() => ({ data: null }))
+      ]);
+      const pp = providerProfileRes?.data;
+      const roleDetails = profileData?.roleDetails || {};
+      // Prefer any non-zero hourly rate, then fall back to basic_pay
+      const resolvedHourlyRate =
+        parseFloat(pp?.hourly_rate) ||
+        parseFloat(roleDetails.hourly_rate) ||
+        parseFloat(roleDetails.basic_pay) ||
+        0;
       
-      if (profileData) {
+      if (profileData || pp) {
         setFormData(prev => ({
           ...prev,
-          // Personal Information
-          first_name: profileData.profile?.first_name || user.first_name || '',
-          last_name: profileData.profile?.last_name || user.last_name || '',
-          phone: profileData.profile?.phone || user.phone || '',
+          // Personal Information: user_profiles first, then provider_profiles
+          first_name: pp?.first_name || profileData?.profile?.first_name || user.first_name || '',
+          last_name: pp?.last_name || profileData?.profile?.last_name || user.last_name || '',
+          phone: pp?.phone || profileData?.profile?.phone || user.phone || '',
           email: user.email || '',
           
           // Service Provider Details
-          specialization: profileData.roleDetails?.specialization || '',
-          service_category_id: profileData.roleDetails?.service_category_id || '',
-          service_category_name: profileData.roleDetails?.service_category_name || '',
-          service_id: profileData.roleDetails?.service_id || '',
-          service_name: profileData.roleDetails?.service_name || '',
-          experience_years: profileData.roleDetails?.experience_years?.toString() || '',
-          hourly_rate: profileData.roleDetails?.basic_pay?.toString() || '',
-          years_of_experience: profileData.profile?.years_of_experience?.toString() || profileData.roleDetails?.experience_years?.toString() || '',
+          specialization: profileData?.roleDetails?.specialization || pp?.specialization || '',
+          service_category_id: profileData?.roleDetails?.service_category_id || pp?.service_category_id || '',
+          service_category_name: profileData?.roleDetails?.service_category_name || '',
+          service_id: profileData?.roleDetails?.service_id || pp?.service_id || '',
+          service_name: profileData?.roleDetails?.service_name || '',
+          experience_years: (profileData?.roleDetails?.experience_years ?? pp?.years_of_experience ?? pp?.experience_years)?.toString() || '',
+          hourly_rate: resolvedHourlyRate ? resolvedHourlyRate.toString() : '',
+          years_of_experience: (pp?.years_of_experience ?? profileData?.profile?.years_of_experience ?? profileData?.roleDetails?.experience_years)?.toString() || '',
           
-          // Location Information
-          address: profileData.profile?.address || '',
-          city: profileData.profile?.city || '',
-          state: profileData.profile?.state || '',
-          pincode: profileData.profile?.pincode || '',
-          location_latitude: profileData.profile?.location_latitude || null,
-          location_longitude: profileData.profile?.location_longitude || null,
+          // Location Information: prefer provider_profiles (where we save)
+          address: pp?.address || profileData?.profile?.address || '',
+          city: pp?.city || profileData?.profile?.city || '',
+          state: pp?.state || profileData?.profile?.state || '',
+          pincode: pp?.pincode || profileData?.profile?.pincode || '',
+          location_latitude: pp?.location_latitude ?? profileData?.profile?.location_latitude ?? null,
+          location_longitude: pp?.location_longitude ?? profileData?.profile?.location_longitude ?? null,
           
           // Professional Information
-          bio: profileData.profile?.bio || '',
-          qualifications: Array.isArray(profileData.profile?.qualifications) ? profileData.profile.qualifications : (profileData.profile?.qualifications ? [profileData.profile.qualifications] : ['']),
-          certifications: Array.isArray(profileData.profile?.certifications) ? profileData.profile.certifications : (profileData.profile?.certifications ? [profileData.profile.certifications] : ['']),
-          languages: Array.isArray(profileData.profile?.languages) && profileData.profile.languages.length > 0 ? profileData.profile.languages : [''],
+          bio: pp?.bio || profileData?.profile?.bio || '',
+          qualifications: Array.isArray(pp?.qualifications) && pp.qualifications.length ? pp.qualifications : (Array.isArray(profileData?.profile?.qualifications) ? profileData.profile.qualifications : (profileData?.profile?.qualifications ? [profileData.profile.qualifications] : [''])),
+          certifications: Array.isArray(pp?.certifications) && pp.certifications.length ? pp.certifications : (Array.isArray(profileData?.profile?.certifications) ? profileData.profile.certifications : (profileData?.profile?.certifications ? [profileData.profile.certifications] : [''])),
+          languages: Array.isArray(pp?.languages) && pp.languages.length ? pp.languages : (Array.isArray(profileData?.profile?.languages) && profileData.profile.languages.length > 0 ? profileData.profile.languages : ['']),
+          
+          // Aadhaar (from provider_profiles if saved)
+          aadhaar_number: pp?.aadhaar_number || prev.aadhaar_number || '',
+          aadhaar_name: pp?.aadhaar_name || prev.aadhaar_name || '',
+          aadhaar_dob: pp?.aadhaar_dob || prev.aadhaar_dob || '',
+          aadhaar_gender: pp?.aadhaar_gender || prev.aadhaar_gender || '',
+          aadhaar_address: pp?.aadhaar_address || prev.aadhaar_address || '',
+          profile_photo_url: pp?.profile_photo_url || prev.profile_photo_url || '',
           
           // Availability
-          availability: profileData.roleDetails?.availability || prev.availability
+          availability: profileData?.roleDetails?.availability || prev.availability
         }));
       }
     } catch (error) {
@@ -1237,18 +1257,30 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
       toast.error('File size must be less than 5MB');
       return;
     }
+
+    // For Aadhaar images, convert to JPEG if needed (PNG/WebP often cause Groq "invalid image data").
+    let fileToStore = file;
+    if (field === 'aadhaar_front' || field === 'aadhaar_back') {
+      try {
+        fileToStore = await convertImageToJpegFile(file);
+      } catch (e) {
+        console.error('Aadhaar image conversion failed:', e);
+        toast.error('Please upload a valid Aadhaar image (JPEG preferred).');
+        return;
+      }
+    }
     
     if (field === 'profile_photo') {
       setIsUploadingProfilePhoto(true);
       try {
         // Ensure we have a valid file object
-        if (!file || !(file instanceof File)) {
+        if (!fileToStore || !(fileToStore instanceof File)) {
           toast.error('Please select a valid image file');
           return;
         }
         
         // Upload profile photo to Supabase storage
-        const result = await apiService.uploadProviderProfilePicture(file, user.id);
+        const result = await apiService.uploadProviderProfilePicture(fileToStore, user.id);
         
         if (result.publicUrl) {
           setFormData(prev => ({ 
@@ -1266,7 +1298,7 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
         setIsUploadingProfilePhoto(false);
       }
     } else {
-      setFormData(prev => ({ ...prev, [field]: file }));
+      setFormData(prev => ({ ...prev, [field]: fileToStore }));
       console.log('File set in form data:', field);
     }
     
@@ -1277,7 +1309,7 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
 
       // Track uploaded file and trigger combined extraction only when both sides exist
       setUploadedFiles(prev => {
-        const next = { ...prev, [side]: file };
+        const next = { ...prev, [side]: fileToStore };
         const hasBoth = next.front && next.back;
         if (!hasBoth) {
           setLocationMessage(`✅ Aadhaar ${side} side uploaded. Please upload the ${side === 'front' ? 'back' : 'front'} side to start extraction.`);
@@ -1330,10 +1362,13 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
         }
         break;
         
-      case 5: // Documents & Verification
+      case 5: // Documents & Verification - Aadhaar and profile photo are optional (validate format only when provided)
         ['profile_photo_url', 'aadhaar_number', 'aadhaar_name', 'aadhaar_dob', 'aadhaar_gender', 'aadhaar_address'].forEach(field => {
-          const error = validateField(field, formData[field]);
-          if (error) errors[field] = error;
+          const val = formData[field];
+          if (val && ((typeof val === 'string' && val.trim() !== '') || (Array.isArray(val) && val.length > 0))) {
+            const error = validateField(field, val);
+            if (error) errors[field] = error;
+          }
         });
         break;
     }
@@ -1419,12 +1454,18 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
       onClose();
     } catch (error) {
       console.error('Error completing profile:', error);
-      
-      // Check if it's a table not found error
+      const missing = error.missingFields;
       if (error.message && error.message.includes('Provider profiles table not found')) {
         toast.error('Database table not found. Please contact support to set up the database.');
+      } else if (missing && Array.isArray(missing) && missing.length > 0) {
+        toast.error(`Please fill in: ${missing.join(', ')}`);
+      } else if (error.message && error.message.includes('Service provider not found')) {
+        toast.error('Account not found. Please log out and log in again, then try completing your profile.');
+      } else if (error.details || error.hint) {
+        const extra = [error.details, error.hint].filter(Boolean).join('. ');
+        toast.error(`${error.message}${extra ? ': ' + extra : ''}`);
       } else {
-        toast.error('Failed to complete profile. Please try again.');
+        toast.error(error.message || 'Failed to complete profile. Please try again.');
       }
     } finally {
       setIsSubmitting(false);
@@ -1455,7 +1496,7 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
 
   if (!isOpen) return null;
 
-  return (
+  const modalContent = (
     <AnimatePresence>
       <motion.div
         className="profile-completion-overlay"
@@ -2357,6 +2398,8 @@ const ProfileCompletionModal = ({ isOpen, onClose, onComplete, user, onProfileUp
       </motion.div>
     </AnimatePresence>
   );
+
+  return createPortal(modalContent, document.body);
 };
 
 export default ProfileCompletionModal;

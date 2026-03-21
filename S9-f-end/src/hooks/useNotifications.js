@@ -181,8 +181,13 @@ export const useNotifications = () => {
 
   // Format time ago
   const formatTimeAgo = (dateString) => {
+    if (!dateString) return 'Recently';
     const now = new Date();
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      // Invalid date, try to parse or return fallback
+      return 'Recently';
+    }
     const diffInSeconds = Math.floor((now - date) / 1000);
 
     if (diffInSeconds < 60) {
@@ -208,6 +213,10 @@ export const useNotifications = () => {
         return '📋';
       case 'booking_assigned':
         return '👨‍🔧';
+      case 'team_job_assigned':
+        return '👥';
+      case 'team_job_available':
+        return '📢';
       case 'booking_confirmed':
         return '✅';
       case 'service_started':
@@ -226,6 +235,8 @@ export const useNotifications = () => {
         return '⏰';
       case 'promotion':
         return '🎁';
+      case 'provider_leave_decision':
+        return '🗓️';
       default:
         return '🔔';
     }
@@ -259,43 +270,8 @@ export const useNotifications = () => {
       fetchUnreadCount();
     } else {
       console.log('🔔 useNotifications: No user ID, skipping notification fetch');
-      // Set some demo notifications for testing
-      setNotifications([
-        {
-          id: 'demo-1',
-          type: 'booking_pending',
-          title: 'New Job Request',
-          message: 'You have a new service request for Garden Maintenance',
-          status: 'unread',
-          priority: 'medium',
-          time: '2 minutes ago',
-          createdAt: new Date().toISOString(),
-          metadata: {}
-        },
-        {
-          id: 'demo-2',
-          type: 'service_completed',
-          title: 'Service Completed',
-          message: 'Great job! Your recent service has been completed successfully.',
-          status: 'read',
-          priority: 'low',
-          time: '1 hour ago',
-          createdAt: new Date(Date.now() - 3600000).toISOString(),
-          metadata: {}
-        },
-        {
-          id: 'demo-3',
-          type: 'booking_assigned',
-          title: 'Job Assigned',
-          message: 'You have been assigned to a new Pest Control service',
-          status: 'unread',
-          priority: 'high',
-          time: '5 minutes ago',
-          createdAt: new Date(Date.now() - 300000).toISOString(),
-          metadata: {}
-        }
-      ]);
-      setUnreadCount(2);
+      setNotifications([]);
+      setUnreadCount(0);
     }
   }, [user?.id, fetchNotifications, fetchUnreadCount]);
 

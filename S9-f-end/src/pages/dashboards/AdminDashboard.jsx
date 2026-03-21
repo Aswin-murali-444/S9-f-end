@@ -56,7 +56,9 @@ import {
   X,
   Sun,
   Moon,
-  Briefcase
+  Briefcase,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { useAnimations } from '../../hooks/useAnimations';
 import Logo from '../../components/Logo';
@@ -65,7 +67,7 @@ import AnimatedNumber from '../../components/AnimatedNumber';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
-import { supabase } from '../../lib/supabase';
+import { supabase, supabaseConfig } from '../../lib/supabase';
 import { apiService } from '../../services/api';
 import { toast } from 'react-hot-toast';
 import './SharedDashboard.css';
@@ -110,8 +112,24 @@ const AdminDashboard = () => {
     userGrowth: { current: 0, change: "+0%" },
     revenueGrowth: { current: 0, change: "+0%" },
     serviceRequests: { current: 0, change: "+0%" },
-    securityScore: { current: 0, change: "+0%" }
+    customerSatisfaction: { current: 0, change: "+0.0" }
   });
+  // Ratings summary from backend (for Average Rating card)
+  const [ratingSummary, setRatingSummary] = useState({
+    average_rating: 0,
+    total_reviews: 0
+  });
+  const [providerLeave, setProviderLeave] = useState([]);
+  const [providerLeaveLoading, setProviderLeaveLoading] = useState(false);
+  const [providerLeaveError, setProviderLeaveError] = useState(null);
+  const [providerAvailability, setProviderAvailability] = useState([]);
+  const [providerAvailabilityLoading, setProviderAvailabilityLoading] = useState(false);
+  const [providerAvailabilityError, setProviderAvailabilityError] = useState(null);
+  const [selectedLeave, setSelectedLeave] = useState(null);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [selectedPayout, setSelectedPayout] = useState(null);
+  const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [leaveDecisionLoading, setLeaveDecisionLoading] = useState(false);
   const [systemHealth, setSystemHealth] = useState({});
   const [securityEvents, setSecurityEvents] = useState([]);
   const [performanceData, setPerformanceData] = useState({});
@@ -132,6 +150,7 @@ const AdminDashboard = () => {
   // Providers & Allocation
   const [providersPending, setProvidersPending] = useState([]);
   const [providers, setProviders] = useState([]);
+  // Unified allocations (individual + team assignments) for Allocation tab
   const [allocations, setAllocations] = useState([]);
 
   // Monitoring
@@ -146,6 +165,31 @@ const AdminDashboard = () => {
   // Feedback
   const [reviews, setReviews] = useState([]);
   const [profileModalUser, setProfileModalUser] = useState(null);
+
+  // Admin bookings (customer, service, who accepted, when)
+  const [adminBookings, setAdminBookings] = useState([]);
+  const [adminBookingsLoading, setAdminBookingsLoading] = useState(false);
+  const [bookingsFilterStatus, setBookingsFilterStatus] = useState('all');
+  const [bookingsSearch, setBookingsSearch] = useState('');
+  const [expandedBookingId, setExpandedBookingId] = useState(null);
+  // Team assignment responses (who accepted / declined) keyed by assignment id
+  const [teamAcceptanceDetails, setTeamAcceptanceDetails] = useState({});
+  const [teamAcceptanceLoadingId, setTeamAcceptanceLoadingId] = useState(null);
+  // Assign individual provider to a booking
+  const [assignProviderBooking, setAssignProviderBooking] = useState(null);
+  const [assignProviderProviders, setAssignProviderProviders] = useState([]);
+  const [assignProviderSelectedId, setAssignProviderSelectedId] = useState('');
+  const [assignProviderFetchLoading, setAssignProviderFetchLoading] = useState(false);
+  const [assignProviderLoading, setAssignProviderLoading] = useState(false);
+  // Assign team to booking
+  const [assignTeamBooking, setAssignTeamBooking] = useState(null);
+  const [assignTeamAvailableTeams, setAssignTeamAvailableTeams] = useState([]);
+  const [assignTeamSelectedTeamId, setAssignTeamSelectedTeamId] = useState('');
+  const [assignTeamNotes, setAssignTeamNotes] = useState('');
+  const [assignTeamLoading, setAssignTeamLoading] = useState(false);
+  const [assignTeamFetchLoading, setAssignTeamFetchLoading] = useState(false);
+  const [assignTeamNoServiceCategory, setAssignTeamNoServiceCategory] = useState(false);
+  const searchInputRef = useRef(null);
   // const [profileModalLoading, setProfileModalLoading] = useState(false);
   
   const [headerRef, headerInView] = useInView({ threshold: 0.3, triggerOnce: true });
@@ -163,6 +207,21 @@ const AdminDashboard = () => {
     );
   }, [user]);
 
+  // Resolve admin header avatar URL (storage path -> full public URL)
+  const headerAvatarUrl = React.useMemo(() => {
+    const raw =
+      user?.user_metadata?.avatar_url ||
+      user?.user_metadata?.picture ||
+      user?.user_metadata?.photoURL ||
+      '';
+    if (!raw || typeof raw !== 'string') return '';
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const base = (supabaseConfig?.url || import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+    if (!base) return raw;
+    const path = String(raw).replace(/^\//, '');
+    return `${base}/storage/v1/object/public/${path}`;
+  }, [user?.user_metadata?.avatar_url, user?.user_metadata?.picture, user?.user_metadata?.photoURL]);
+
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
     // Apply dark mode class to document
@@ -173,7 +232,42 @@ const AdminDashboard = () => {
     }
   };
 
+  // Aggregated analytics focused on worker payouts (admin payment management)
+  const billingStats = React.useMemo(() => {
+    const totalWorker = (payouts || []).reduce(
+      (sum, po) => sum + (Number(po.amount) || 0),
+      0
+    );
+    const paidRows = (payouts || []).filter(
+      (po) => (po.status || 'paid').toLowerCase() === 'paid'
+    );
+    const pendingRows = (payouts || []).filter(
+      (po) => (po.status || '').toLowerCase() === 'pending'
+    );
+    const paidAmount = paidRows.reduce(
+      (sum, po) => sum + (Number(po.amount) || 0),
+      0
+    );
+    const pendingAmount = pendingRows.reduce(
+      (sum, po) => sum + (Number(po.amount) || 0),
+      0
+    );
+
+    return {
+      totalWorker,
+      paidCount: paidRows.length,
+      pendingCount: pendingRows.length,
+      paidAmount,
+      pendingAmount,
+    };
+  }, [payouts]);
+
   const [showWelcome, setShowWelcome] = useState(false);
+  const [headerAvatarError, setHeaderAvatarError] = useState(false);
+
+  useEffect(() => {
+    setHeaderAvatarError(false);
+  }, [headerAvatarUrl]);
 
   const formatUptime = (totalSeconds) => {
     if (typeof totalSeconds !== 'number' || totalSeconds < 0) return '—';
@@ -385,7 +479,8 @@ const AdminDashboard = () => {
       target: notif.message,
       timestamp: notif.time,
       type: notif.type,
-      severity: notif.priority === 'urgent' ? 'high' : notif.priority === 'high' ? 'medium' : 'info'
+      severity: notif.priority === 'urgent' ? 'high' : notif.priority === 'high' ? 'medium' : 'info',
+      metadata: notif.metadata
     }));
     
     setRecentActivity(activityFromNotifications);
@@ -398,19 +493,19 @@ const AdminDashboard = () => {
       message: notif.message,
       severity: notif.priority,
       timestamp: notif.time,
-      status: notif.status === 'unread' ? 'active' : notif.status === 'read' ? 'resolved' : 'pending'
+      status: notif.status === 'unread' ? 'active' : notif.status === 'read' ? 'resolved' : 'pending',
+      metadata: notif.metadata
     }));
     
     setAlerts(alertsFromNotifications);
 
-    setAnalytics({
+    setAnalytics(prev => ({
+      ...prev,
       userGrowth: { current: 1247, previous: 1189, change: "+4.9%" },
       revenueGrowth: { current: 456000, previous: 432000, change: "+5.6%" },
       serviceRequests: { current: 892, previous: 756, change: "+18.0%" },
-      customerSatisfaction: { current: 4.7, previous: 4.5, change: "+4.4%" },
-      systemPerformance: { current: 98.5, previous: 97.2, change: "+1.3%" },
-      securityScore: { current: 94, previous: 91, change: "+3.3%" }
-    });
+      customerSatisfaction: { current: 4.7, previous: 4.5, change: "+4.4%" }
+    }));
 
     setSystemHealth({
       servers: { status: "healthy", uptime: "99.97%", lastCheck: "2 minutes ago" },
@@ -449,18 +544,9 @@ const AdminDashboard = () => {
       { id: 3, categoryId: 4, name: 'Medicine Delivery', pricingModel: 'per_km', basePrice: 1.5 }
     ]);
 
-    // Providers
-    setProvidersPending([
-      { id: 101, name: 'Alpha Services', specialization: 'Plumbing', documents: 'Pending Review' },
-      { id: 102, name: 'CareFirst', specialization: 'Elder Care', documents: 'Submitted' }
-    ]);
-    setProviders([
-      { id: 201, name: 'QuickFix Co.', specialization: 'Electrical', rating: 4.6, available: true },
-      { id: 202, name: 'SafeRide', specialization: 'Transport', rating: 4.8, available: true }
-    ]);
-    setAllocations([
-      { id: 1, requestId: 'REQ-1001', category: 'Home Maintenance', service: 'Plumbing', assignedProviderId: 201, mode: 'AI' }
-    ]);
+    // Providers (demo placeholders for pending/available; real assignments shown in Allocation tab)
+    setProvidersPending([]);
+    setProviders([]);
 
     // Monitoring
     setServiceRequests([
@@ -470,20 +556,6 @@ const AdminDashboard = () => {
     setOngoingTasks([
       { id: 'TASK-9001', provider: 'QuickFix Co.', job: 'Electrical Diagnosis', eta: '40m', progress: 70 },
       { id: 'TASK-9002', provider: 'SafeRide', job: 'Pickup to Airport', eta: '15m', progress: 35 }
-    ]);
-
-    // Billing
-    setInvoices([
-      { id: 'INV-5001', customer: 'Emily Davis', amount: 120, status: 'due', date: '2024-01-15' },
-      { id: 'INV-5002', customer: 'John Smith', amount: 45, status: 'paid', date: '2024-01-14' }
-    ]);
-    setPayouts([
-      { id: 'PO-3001', provider: 'QuickFix Co.', amount: 220, status: 'scheduled', date: '2024-01-18' },
-      { id: 'PO-3002', provider: 'SafeRide', amount: 140, status: 'completed', date: '2024-01-12' }
-    ]);
-    setTransactions([
-      { id: 'TX-7001', type: 'invoice', ref: 'INV-5002', amount: 45, method: 'card', status: 'success' },
-      { id: 'TX-7002', type: 'payout', ref: 'PO-3002', amount: 140, method: 'bank', status: 'success' }
     ]);
 
     // Feedback
@@ -515,6 +587,73 @@ const AdminDashboard = () => {
     const intervalId = setInterval(() => fetchMetrics(true), 5000);
     return () => { clearInterval(intervalId); };
   }, []);
+
+  // Fetch global rating summary for ratings card
+  const fetchRatingSummary = async () => {
+    try {
+      const res = await apiService.getAdminRatingSummary();
+      if (res && res.success && res.data) {
+        setRatingSummary({
+          average_rating: res.data.average_rating || 0,
+          total_reviews: res.data.total_reviews || 0
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch admin rating summary:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchRatingSummary();
+  }, []);
+
+  // Fetch allocations when Allocation tab is active
+  const fetchAllocations = async () => {
+    try {
+      const res = await apiService.getAdminAllocations(200);
+      if (res && res.success) {
+        setAllocations(res.data || []);
+      } else if (Array.isArray(res)) {
+        setAllocations(res);
+      }
+    } catch (error) {
+      console.error('Failed to fetch admin allocations:', error);
+      setAllocations([]);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'allocation') {
+      fetchAllocations();
+    }
+  }, [activeTab]);
+
+  // Fetch billing summary when Billing tab is active
+  const fetchBillingSummary = async () => {
+    try {
+      const res = await apiService.getAdminBillingSummary(200);
+      if (res && res.success && res.data) {
+        setInvoices(res.data.customer_payments || []);
+        setPayouts(res.data.provider_payouts || []);
+        setTransactions(res.data.transactions || []);
+      } else {
+        setInvoices([]);
+        setPayouts([]);
+        setTransactions([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch admin billing summary:', error);
+      setInvoices([]);
+      setPayouts([]);
+      setTransactions([]);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'billing') {
+      fetchBillingSummary();
+    }
+  }, [activeTab]);
 
   // Live activity feed polling
   useEffect(() => {
@@ -577,16 +716,26 @@ const AdminDashboard = () => {
     { label: "Total Users", value: (systemMetrics.totalUsers || 0).toLocaleString(), icon: Users, color: "#8b5cf6", change: `+${systemMetrics.newUsers || 0}`, changeType: "positive" },
     { label: "System Uptime", value: systemMetrics.systemUptime || "0%", icon: Server, color: "#10b981", change: "+0.02%", changeType: "positive" },
     { label: "Active Sessions", value: (systemMetrics.activeSessions || 0).toLocaleString(), icon: Activity, color: "#4f9cf9", change: "+12", changeType: "positive" },
-    { label: "Security Score", value: `${analytics.securityScore?.current || 0}/100`, icon: Shield, color: "#f59e0b", change: analytics.securityScore?.change || "+0%", changeType: "positive" }
+    // Replace Security Score card with Ratings card
+    {
+      label: "Average Rating",
+      value: `${(ratingSummary.average_rating || 0).toFixed ? ratingSummary.average_rating.toFixed(1) : ratingSummary.average_rating || 0}/5.0`,
+      icon: Star,
+      color: "#fbbf24",
+      change: `${ratingSummary.total_reviews || 0} reviews`,
+      changeType: "positive"
+    }
   ];
 
   const navItems = [
     { key: 'overview', label: 'Overview', icon: BarChart3 },
+    { key: 'bookings', label: 'Bookings', icon: Calendar },
     { key: 'users', label: 'User Management', icon: Users },
     { key: 'services', label: 'Services', icon: Settings },
+    { key: 'leave', label: 'Provider Leave', icon: Calendar },
     { key: 'allocation', label: 'Allocation', icon: Target },
     { key: 'monitoring', label: 'Monitoring', icon: Activity },
-    { key: 'billing', label: 'Billing', icon: IndianRupee },
+    { key: 'billing', label: 'Worker Payments', icon: IndianRupee },
     { key: 'feedback', label: 'Feedback', icon: Star },
     { key: 'system', label: 'System Health', icon: Server },
     { key: 'security', label: 'Security', icon: Shield },
@@ -618,6 +767,240 @@ const AdminDashboard = () => {
       setSelectedRole('');
     }
   }, [activeTab]);
+
+  // Fetch provider leave when Leave tab is active
+  const fetchProviderLeave = async () => {
+    setProviderLeaveLoading(true);
+    setProviderLeaveError(null);
+    try {
+      const res = await apiService.getAdminProviderTimeOff();
+      setProviderLeave(res?.data || []);
+    } catch (err) {
+      console.error('Failed to fetch provider leave:', err);
+      setProviderLeave([]);
+      setProviderLeaveError(err?.message || 'Failed to load provider leave');
+    } finally {
+      setProviderLeaveLoading(false);
+    }
+  };
+
+  // Fetch provider availability (next 7 days)
+  const fetchProviderAvailability = async () => {
+    setProviderAvailabilityLoading(true);
+    setProviderAvailabilityError(null);
+    try {
+      const res = await apiService.getAdminProviderAvailability();
+      setProviderAvailability(res?.data || []);
+    } catch (err) {
+      console.error('Failed to fetch provider availability:', err);
+      setProviderAvailability([]);
+      setProviderAvailabilityError(err?.message || 'Failed to load provider availability');
+    } finally {
+      setProviderAvailabilityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'leave') {
+      fetchProviderLeave();
+      fetchProviderAvailability();
+    }
+  }, [activeTab]);
+
+  // Fetch admin bookings when Bookings tab is active
+  const fetchAdminBookings = async () => {
+    setAdminBookingsLoading(true);
+    try {
+      const res = await apiService.getAdminBookings({
+        limit: 200,
+        status: bookingsFilterStatus === 'all' ? undefined : bookingsFilterStatus
+      });
+      setAdminBookings(res?.data || []);
+    } catch (err) {
+      console.error('Failed to fetch admin bookings:', err);
+      setAdminBookings([]);
+      toast.error('Failed to load bookings');
+    } finally {
+      setAdminBookingsLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (activeTab === 'bookings') fetchAdminBookings();
+  }, [activeTab, bookingsFilterStatus]);
+
+  // Open "Assign provider" modal and load candidate providers (both individual & team-capable)
+  const openAssignProviderModal = async (booking) => {
+    setAssignProviderBooking(booking);
+    setAssignProviderSelectedId('');
+    setAssignProviderProviders([]);
+    setAssignProviderFetchLoading(true);
+    try {
+      // Prefer ML-based ranked providers from backend; fall back to simple provider list if ML is unavailable
+      const mlResp = await apiService.getRecommendedProviders(booking.id, 5);
+      const mlProviders = mlResp?.recommendedProviders || [];
+
+      if (Array.isArray(mlProviders) && mlProviders.length > 0) {
+        setAssignProviderProviders(mlProviders);
+      } else {
+        // Fallback to existing listProviders logic if ML returns nothing
+        const data = await apiService.listProviders();
+        const providers = data.providers || [];
+        const serviceId = booking.service_id || booking.service_id;
+        const categoryId = booking.category_id || booking.category_id;
+
+        const activeProviders = providers.filter((p) => (
+          p.status === 'active' || p.provider_status === 'active'
+        ));
+
+        const matching = activeProviders.filter((p) => {
+          const provServiceId = p.service_id;
+          const provCategoryId = p.service_category_id;
+
+          if (serviceId && provServiceId && provServiceId === serviceId) return true;
+          if (!provServiceId && provCategoryId && categoryId && provCategoryId === categoryId) {
+            return true;
+          }
+          if (!provServiceId && !provCategoryId) return true;
+          return false;
+        });
+
+        setAssignProviderProviders(matching.length ? matching : activeProviders);
+        if (!(matching.length || activeProviders.length)) {
+          toast.error('No active providers available for this booking.');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch providers for assign-provider modal:', err);
+      toast.error(err?.message || 'Failed to load providers');
+      setAssignProviderProviders([]);
+    } finally {
+      setAssignProviderFetchLoading(false);
+    }
+  };
+
+  const closeAssignProviderModal = () => {
+    setAssignProviderBooking(null);
+    setAssignProviderSelectedId('');
+    setAssignProviderProviders([]);
+  };
+
+  const submitAssignProvider = async () => {
+    if (!assignProviderBooking?.id || !assignProviderSelectedId) {
+      toast.error('Please select a provider.');
+      return;
+    }
+    setAssignProviderLoading(true);
+    try {
+      await apiService.assignBooking(assignProviderBooking.id, assignProviderSelectedId);
+      toast.success('Provider assigned to booking.');
+      closeAssignProviderModal();
+      fetchAdminBookings();
+    } catch (err) {
+      console.error('Assign provider failed:', err);
+      toast.error(err?.message || 'Failed to assign provider');
+    } finally {
+      setAssignProviderLoading(false);
+    }
+  };
+
+  // For a given team assignment, load per-member accept/decline so admin can see who declined
+  const fetchTeamAcceptancesForBooking = async (assignmentId) => {
+    if (!assignmentId || teamAcceptanceLoadingId === assignmentId) return;
+    try {
+      setTeamAcceptanceLoadingId(assignmentId);
+      const res = await apiService.getAssignmentAcceptances(assignmentId);
+      if (res && res.assignment_id) {
+        setTeamAcceptanceDetails(prev => ({
+          ...prev,
+          [assignmentId]: res
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch team assignment acceptances for admin:', error);
+      toast.error(error?.message || 'Failed to load team responses');
+    } finally {
+      setTeamAcceptanceLoadingId(null);
+    }
+  };
+
+  // Open Assign Team modal immediately, then fetch available teams for this booking
+  const openAssignTeamModal = async (booking) => {
+    setAssignTeamBooking(booking);
+    setAssignTeamSelectedTeamId('');
+    setAssignTeamNotes('');
+    setAssignTeamAvailableTeams([]);
+    setAssignTeamNoServiceCategory(false);
+    const serviceId = booking.service_id || (booking.services && (booking.services.id ?? booking.services[0]?.id));
+    const categoryId = booking.category_id || (booking.service_categories && (booking.service_categories.id ?? booking.service_categories[0]?.id));
+    if (!serviceId && !categoryId) {
+      setAssignTeamNoServiceCategory(true);
+      setAssignTeamFetchLoading(false);
+      return;
+    }
+    setAssignTeamFetchLoading(true);
+    try {
+      const res = await apiService.getAvailableTeamsForService(serviceId || null, categoryId || null, {
+        scheduled_date: booking.scheduled_date || undefined,
+        scheduled_time: booking.scheduled_time || undefined,
+        exclude_booking_id: booking.id || undefined
+      });
+      setAssignTeamAvailableTeams(res?.teams || []);
+      if (!(res?.teams?.length)) {
+        toast.error('No teams available for this service/category.');
+      }
+    } catch (err) {
+      console.error('Failed to fetch available teams:', err);
+      toast.error(err?.message || 'Failed to load teams');
+      setAssignTeamAvailableTeams([]);
+    } finally {
+      setAssignTeamFetchLoading(false);
+    }
+  };
+
+  const closeAssignTeamModal = () => {
+    setAssignTeamBooking(null);
+    setAssignTeamSelectedTeamId('');
+    setAssignTeamNotes('');
+    setAssignTeamAvailableTeams([]);
+    setAssignTeamNoServiceCategory(false);
+  };
+
+  const submitAssignTeam = async () => {
+    if (!assignTeamBooking?.id || !assignTeamSelectedTeamId) {
+      toast.error('Please select a team.');
+      return;
+    }
+    const team = assignTeamAvailableTeams.find(t => t.id === assignTeamSelectedTeamId);
+    if (!team?.team_members?.length) {
+      toast.error('Selected team has no members.');
+      return;
+    }
+    const activeMembers = team.team_members.filter(m => m.status === 'active');
+    const assignedMemberIds = activeMembers
+      .map(m => m.user_id || m.users?.id)
+      .filter(Boolean);
+    if (!assignedMemberIds.length) {
+      toast.error('No active members in selected team.');
+      return;
+    }
+    setAssignTeamLoading(true);
+    try {
+      await apiService.assignTeamToBooking({
+        booking_id: assignTeamBooking.id,
+        team_id: assignTeamSelectedTeamId,
+        assigned_member_ids: assignedMemberIds,
+        notes: assignTeamNotes.trim() || undefined
+      });
+      toast.success('Team assigned. Workers will see this job in their dashboard and can Accept or Decline.');
+      closeAssignTeamModal();
+      fetchAdminBookings();
+    } catch (err) {
+      console.error('Assign team failed:', err);
+      toast.error(err?.message || 'Failed to assign team');
+    } finally {
+      setAssignTeamLoading(false);
+    }
+  };
 
   // Reset component state when navigating back to users tab
   useEffect(() => {
@@ -711,6 +1094,37 @@ const AdminDashboard = () => {
           : alert
       )
     );
+  };
+
+  const handleWageRequestDecision = async (alert, decision) => {
+    if (!alert?.metadata?.wage_request_id) {
+      toast.error('Wage request details missing');
+      return;
+    }
+    try {
+      await apiService.decideWageRequest(alert.metadata.wage_request_id, {
+        decision,
+        adminUserId: user?.id || null,
+        comment: null,
+        newHourlyRate: undefined
+      });
+      toast.success(
+        decision === 'approve'
+          ? 'Wage increase request approved and worker rate updated'
+          : 'Wage increase request rejected'
+      );
+      // Mark alert as resolved locally
+      setAlerts(prev =>
+        prev.map(a =>
+          a.id === alert.id ? { ...a, status: 'resolved' } : a
+        )
+      );
+      // Also mark notification as read for admin
+      markAsRead(alert.id);
+    } catch (err) {
+      console.error('Failed to process wage request decision:', err);
+      toast.error(err?.message || 'Failed to process wage request');
+    }
   };
 
   const handleSecurityEventAction = (eventId, action) => {
@@ -1011,9 +1425,10 @@ const AdminDashboard = () => {
                 <span className="breadcrumb-separator">/</span>
                 <span className="breadcrumb-item active">
                   {activeTab === 'overview' ? 'Overview' : 
+                   activeTab === 'bookings' ? 'Bookings' :
                    activeTab === 'users' ? 'User Management' :
                    activeTab === 'services' ? 'Services' :
-                   activeTab === 'billing' ? 'Billing' :
+                   activeTab === 'billing' ? 'Worker Payments' :
                    activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
                 </span>
               </motion.div>
@@ -1061,10 +1476,11 @@ const AdminDashboard = () => {
               whileHover={{ scale: 1.02 }}
             >
               <div className="user-profile-avatar">
-                {user?.user_metadata?.avatar_url || user?.user_metadata?.picture ? (
-                  <img 
-                    src={user.user_metadata.avatar_url || user.user_metadata.picture} 
+                {headerAvatarUrl && !headerAvatarError ? (
+                  <img
+                    src={headerAvatarUrl}
                     alt={displayName}
+                    onError={() => setHeaderAvatarError(true)}
                   />
                 ) : (
                   <span>{displayName.charAt(0).toUpperCase()}</span>
@@ -1351,7 +1767,7 @@ const AdminDashboard = () => {
                       </div>
                       <div className="security-status">
                         <div className="security-score">
-                          <span className="score-value">{analytics.securityScore.current}</span>
+                          <span className="score-value">94</span>
                           <span className="score-max">/100</span>
                         </div>
                         <div className="security-metrics">
@@ -1600,13 +2016,32 @@ const AdminDashboard = () => {
                         <div className="alert-footer">
                           <span className="timestamp">{alert.timestamp}</span>
                           <div className="alert-actions">
-                            <button 
-                              className="btn-secondary"
-                              onClick={() => handleAlertAction(alert.id, 'resolved')}
-                            >
-                              Resolve
-                            </button>
-                            <button className="btn-secondary">View Details</button>
+                            {alert.type === 'wage_increase_request' ? (
+                              <>
+                                <button
+                                  className="btn-secondary"
+                                  onClick={() => handleWageRequestDecision(alert, 'approve')}
+                                >
+                                  Approve & Update Wage
+                                </button>
+                                <button
+                                  className="btn-secondary"
+                                  onClick={() => handleWageRequestDecision(alert, 'reject')}
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button 
+                                  className="btn-secondary"
+                                  onClick={() => handleAlertAction(alert.id, 'resolved')}
+                                >
+                                  Resolve
+                                </button>
+                                <button className="btn-secondary">View Details</button>
+                              </>
+                            )}
                           </div>
                         </div>
                       </motion.div>
@@ -1648,6 +2083,388 @@ const AdminDashboard = () => {
                       </motion.button>
                     ))}
                   </motion.div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'bookings' && (
+              <motion.div 
+                className="bookings-tab"
+                initial="hidden"
+                animate="visible"
+                variants={containerVariants}
+              >
+                <div className="bookings-page">
+                  <header className="bookings-header">
+                    <div className="bookings-header-top">
+                      <div className="bookings-header-icon-wrap">
+                        <Calendar size={28} strokeWidth={2} />
+                      </div>
+                      <div>
+                        <h2>Bookings</h2>
+                        <p className="bookings-subtitle">View and manage all service bookings</p>
+                      </div>
+                    </div>
+                    <div className="bookings-controls">
+                      <div className="bookings-search-section">
+                        <label className="bookings-search-label">Search bookings</label>
+                        <div className="bookings-search-wrap">
+                          <Search size={20} className="search-icon" aria-hidden />
+                          <input
+                            ref={searchInputRef}
+                            type="search"
+                            placeholder="Customer name, email, service, category, phone, provider..."
+                            value={bookingsSearch}
+                            onChange={(e) => setBookingsSearch(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') {
+                                setBookingsSearch('');
+                                searchInputRef.current?.blur();
+                              }
+                            }}
+                            className="bookings-search"
+                            aria-label="Search bookings by customer, service, email, or phone"
+                            autoComplete="off"
+                          />
+                          {bookingsSearch ? (
+                            <button type="button" className="search-clear" onClick={() => setBookingsSearch('')} aria-label="Clear search">
+                              <X size={18} />
+                            </button>
+                          ) : null}
+                        </div>
+                        {(bookingsSearch || bookingsFilterStatus !== 'all') && (
+                          <button
+                            type="button"
+                            className="bookings-clear-filters"
+                            onClick={() => { setBookingsSearch(''); setBookingsFilterStatus('all'); }}
+                          >
+                            Clear all filters
+                          </button>
+                        )}
+                      </div>
+                      <div className="bookings-filters">
+                        <label className="filter-label" htmlFor="bookings-status-filter">Status</label>
+                        <select
+                          id="bookings-status-filter"
+                          value={bookingsFilterStatus}
+                          onChange={(e) => setBookingsFilterStatus(e.target.value)}
+                          className="filter-select"
+                          aria-label="Filter by booking status"
+                        >
+                          <option value="all">All statuses</option>
+                          <option value="pending">Pending</option>
+                          <option value="confirmed">Confirmed</option>
+                          <option value="assigned">Assigned</option>
+                          <option value="in_progress">In progress</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                        <button
+                          type="button"
+                          className="btn-refresh"
+                          onClick={fetchAdminBookings}
+                          disabled={adminBookingsLoading}
+                          title="Refresh list"
+                          aria-label="Refresh bookings"
+                        >
+                          <RefreshCw size={18} className={adminBookingsLoading ? 'spin' : ''} />
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+                  </header>
+
+                  {adminBookings.length > 0 && (() => {
+                    const total = adminBookings.length;
+                    const pending = adminBookings.filter(b => b.booking_status === 'pending').length;
+                    const assigned = adminBookings.filter(b => b.booking_status === 'assigned').length;
+                    const inProgress = adminBookings.filter(b => b.booking_status === 'in_progress').length;
+                    const completed = adminBookings.filter(b => b.booking_status === 'completed').length;
+                    const cancelled = adminBookings.filter(b => b.booking_status === 'cancelled').length;
+                    return (
+                      <div className="bookings-stats">
+                        <button type="button" className={`booking-stat ${bookingsFilterStatus === 'all' ? 'active' : ''}`} onClick={() => setBookingsFilterStatus('all')}>
+                          <span className="stat-value">{total}</span>
+                          <span className="stat-label">Total</span>
+                        </button>
+                        <button type="button" className={`booking-stat pending ${bookingsFilterStatus === 'pending' ? 'active' : ''}`} onClick={() => setBookingsFilterStatus('pending')}>
+                          <span className="stat-value">{pending}</span>
+                          <span className="stat-label">Pending</span>
+                        </button>
+                        <button type="button" className={`booking-stat assigned ${bookingsFilterStatus === 'assigned' ? 'active' : ''}`} onClick={() => setBookingsFilterStatus('assigned')}>
+                          <span className="stat-value">{assigned}</span>
+                          <span className="stat-label">Assigned</span>
+                        </button>
+                        <button type="button" className={`booking-stat in_progress ${bookingsFilterStatus === 'in_progress' ? 'active' : ''}`} onClick={() => setBookingsFilterStatus('in_progress')}>
+                          <span className="stat-value">{inProgress}</span>
+                          <span className="stat-label">In progress</span>
+                        </button>
+                        <button type="button" className={`booking-stat completed ${bookingsFilterStatus === 'completed' ? 'active' : ''}`} onClick={() => setBookingsFilterStatus('completed')}>
+                          <span className="stat-value">{completed}</span>
+                          <span className="stat-label">Completed</span>
+                        </button>
+                        <button type="button" className={`booking-stat cancelled ${bookingsFilterStatus === 'cancelled' ? 'active' : ''}`} onClick={() => setBookingsFilterStatus('cancelled')}>
+                          <span className="stat-value">{cancelled}</span>
+                          <span className="stat-label">Cancelled</span>
+                        </button>
+                      </div>
+                    );
+                  })()}
+
+                  {adminBookings.some(b => b.booking_status === 'pending') && (
+                    <p className="bookings-flow-hint">
+                      <Info size={18} />
+                      For pending bookings, use <strong>Assign to team</strong> so workers see the job in their dashboard and can Accept or Decline.
+                    </p>
+                  )}
+
+                  <div className="bookings-list">
+                    {adminBookingsLoading ? (
+                      <div className="bookings-loading">
+                        <SkeletonLoader />
+                        <span>Loading bookings...</span>
+                      </div>
+                    ) : (() => {
+                      const q = (bookingsSearch || '').toLowerCase().trim();
+                      const filtered = q
+                        ? adminBookings.filter(b => {
+                            const searchable = [
+                              b.customer_name,
+                              b.customer_email,
+                              b.service_name,
+                              b.category_name,
+                              b.contact_phone,
+                              b.contact_email,
+                              b.provider_name,
+                              b.provider_email,
+                              b.service_address,
+                              b.admin_notes,
+                              b.special_instructions
+                            ].filter(Boolean).join(' ').toLowerCase();
+                            return searchable.includes(q);
+                          })
+                        : adminBookings;
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="bookings-empty">
+                            <Search size={40} strokeWidth={1.5} />
+                            <h3>{adminBookings.length === 0 ? 'No bookings found' : 'No matching bookings'}</h3>
+                            <p>{adminBookings.length === 0 ? 'Adjust the status filter or check back later.' : 'Try a different search or clear the filter.'}</p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <>
+                          <div className="bookings-results-bar">
+                            <span className="results-count">
+                              {q || bookingsFilterStatus !== 'all'
+                                ? `Showing ${filtered.length} of ${adminBookings.length} ${adminBookings.length === 1 ? 'booking' : 'bookings'}`
+                                : `${filtered.length} ${filtered.length === 1 ? 'booking' : 'bookings'}`}
+                            </span>
+                            {q && (
+                              <span className="results-filter-hint">
+                                <Search size={14} /> &quot;{bookingsSearch.trim()}&quot;
+                              </span>
+                            )}
+                          </div>
+                          <ul className="booking-cards">
+                            {filtered.map((b, index) => {
+                              const isExpanded = expandedBookingId === b.id;
+                              return (
+                                <motion.li
+                                  key={b.id}
+                                  className={`booking-card ${b.booking_status || ''}`}
+                                  initial={{ opacity: 0, y: 16 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ duration: 0.25, delay: Math.min(index * 0.04, 0.3) }}
+                                >
+                              <div className="booking-card-header">
+                                <div className="booking-card-title">
+                                  <span className="booking-id">#{String(b.id).slice(0, 8)}</span>
+                                  <h4>{b.customer_name || '—'}</h4>
+                                  <span className="booking-service">{b.service_name || '—'}</span>
+                                  {b.category_name && <span className="booking-category">{b.category_name}</span>}
+                                </div>
+                                <div className="booking-card-meta">
+                                  <span className={`booking-status-badge ${b.booking_status || ''}`}>
+                                    {b.booking_status?.replace('_', ' ') || '—'}
+                                  </span>
+                                  <span className="booking-amount">₹{Number(b.total_amount)?.toLocaleString() ?? '—'}</span>
+                                </div>
+                              </div>
+                              <div className="booking-card-body">
+                                <div className="booking-grid">
+                                  <div className="booking-info-block">
+                                    <span className="info-label"><Calendar size={14} /> Schedule</span>
+                                    <div>{b.scheduled_date} · {b.scheduled_time}</div>
+                                    {b.duration_minutes != null && <div className="muted">{b.duration_minutes} min</div>}
+                                  </div>
+                                  <div className="booking-info-block">
+                                    <span className="info-label"><MapPin size={14} /> Location</span>
+                                    <div>{b.service_address || '—'}</div>
+                                    {(b.service_city || b.service_postal_code) && (
+                                      <div className="muted">{[b.service_city, b.service_state, b.service_postal_code].filter(Boolean).join(', ')}</div>
+                                    )}
+                                  </div>
+                                  <div className="booking-info-block">
+                                    <span className="info-label"><Phone size={14} /> Contact</span>
+                                    <div>{b.contact_phone || '—'}</div>
+                                    {b.contact_email && <div className="muted">{b.contact_email}</div>}
+                                  </div>
+                                  <div className="booking-info-block">
+                                    <span className="info-label"><IndianRupee size={14} /> Payment</span>
+                                    <div>{b.payment_method || '—'} · <span className={`tiny-badge ${b.payment_status || ''}`}>{b.payment_status || '—'}</span></div>
+                                  </div>
+                                  <div className="booking-info-block">
+                                    <span className="info-label"><UserCheck size={14} /> Assigned to</span>
+                                    <div>{b.provider_name || '—'}</div>
+                                    {(b.provider_assigned_at || b.audit_assigned_at) && (
+                                      <div className="muted">
+                                        {new Date(b.provider_assigned_at || b.audit_assigned_at).toLocaleString()}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {b.booking_status === 'pending' && b.team_assignment_status === 'cancelled' && (
+                                    <div className="booking-info-block full-width">
+                                      <span className="info-label">
+                                        <AlertTriangle size={14} /> Team status
+                                      </span>
+                                      <div className="warning-text">
+                                        Previous team/worker <strong>declined or cancelled</strong> this job. Please assign it to another team.
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="booking-card-actions">
+                                  {(() => {
+                                    const isGroupService = b.service_type === 'group';
+                                    // Treat any booking that already has a team assignment (or is marked team booking)
+                                    // as a team-only flow to avoid showing "Assign provider" for team jobs.
+                                    const isTeamBooking = isGroupService || !!b.assigned_team_id || b.is_team_booking === true;
+
+                                    const needsReassign =
+                                      b.booking_status === 'pending' &&
+                                      b.team_assignment_status === 'cancelled';
+
+                                    // For individual bookings (no team), allow assigning a single provider
+                                    const showProviderAssign = !isTeamBooking;
+
+                                    // For team bookings (group service or has team assignment), allow assigning/reassigning team
+                                    const showTeamAssign = isTeamBooking;
+
+                                    return (
+                                      <>
+                                        {showProviderAssign && (
+                                          <button
+                                            type="button"
+                                            className="btn-assign-provider"
+                                            onClick={() => openAssignProviderModal(b)}
+                                            title="Assign an individual provider to this booking"
+                                          >
+                                            <UserCheck size={16} /> Assign provider
+                                          </button>
+                                        )}
+
+                                        {showTeamAssign && (
+                                          <button
+                                            type="button"
+                                            className="btn-assign-team"
+                                            onClick={() => openAssignTeamModal(b)}
+                                            title={
+                                              needsReassign
+                                                ? 'Previous team assignment was declined or cancelled – assign a new team to this booking'
+                                                : 'Assign a team – team members will see this job and can accept or decline'
+                                            }
+                                          >
+                                            <Users size={16} /> {needsReassign ? 'Reassign team' : 'Assign team'}
+                                          </button>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                  <button
+                                    type="button"
+                                    className="booking-expand-btn"
+                                    onClick={() => setExpandedBookingId(isExpanded ? null : b.id)}
+                                    aria-expanded={isExpanded}
+                                  >
+                                    {isExpanded ? <><ChevronUp size={16} /> Less</> : <><ChevronDown size={16} /> More details</>}
+                                  </button>
+                                </div>
+                                <AnimatePresence>
+                                  {isExpanded && (
+                                    <motion.div
+                                      className="booking-card-details"
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.2 }}
+                                    >
+                                      <div className="details-grid">
+                                        <div><strong>Created</strong> {b.created_at ? new Date(b.created_at).toLocaleString() : '—'}</div>
+                                        <div><strong>Confirmed at</strong> {b.provider_confirmed_at ? new Date(b.provider_confirmed_at).toLocaleString() : '—'}</div>
+                                        <div><strong>Base / Fee / Tax</strong> ₹{Number(b.base_price)?.toLocaleString() ?? '—'} + {Number(b.service_fee) ?? 0} + {Number(b.tax_amount) ?? 0}</div>
+                                        <div><strong>Priority</strong> {b.priority_level || '—'} · <strong>Source</strong> {b.booking_source || '—'}</div>
+                                        {b.special_instructions && <div className="full-width"><strong>Instructions</strong> {b.special_instructions}</div>}
+                                        {b.admin_notes && <div className="full-width"><strong>Admin notes</strong> {b.admin_notes}</div>}
+                                        {(b.emergency_contact_name || b.emergency_contact_phone) && (
+                                          <div className="full-width"><strong>Emergency</strong> {b.emergency_contact_name || b.emergency_contact_phone}</div>
+                                        )}
+                                        {b.customer_rating != null && <div><strong>Rating</strong> {b.customer_rating}★</div>}
+                                        {b.customer_feedback && <div className="full-width"><strong>Feedback</strong> {b.customer_feedback}</div>}
+
+                                        {/* Team assignment responses: show who accepted / declined so admin knows which worker declined */}
+                                        {b.team_assignment_id && (
+                                          <div className="full-width">
+                                            <strong>Team responses</strong>
+                                            {teamAcceptanceLoadingId === b.team_assignment_id && (
+                                              <span className="muted" style={{ marginLeft: '0.5rem' }}>Loading…</span>
+                                            )}
+                                            {!teamAcceptanceDetails[b.team_assignment_id] && teamAcceptanceLoadingId !== b.team_assignment_id && (
+                                              <div style={{ marginTop: '0.35rem' }}>
+                                                <button
+                                                  type="button"
+                                                  className="btn-secondary small"
+                                                  onClick={() => fetchTeamAcceptancesForBooking(b.team_assignment_id)}
+                                                >
+                                                  View team responses
+                                                </button>
+                                              </div>
+                                            )}
+                                            {teamAcceptanceDetails[b.team_assignment_id] && (
+                                              <ul className="team-responses-list">
+                                                {teamAcceptanceDetails[b.team_assignment_id].acceptances?.map((m) => {
+                                                  const name = m.full_name || m.email || m.user_id;
+                                                  const status = m.status || 'pending';
+                                                  let statusLabel = status;
+                                                  let statusClass = '';
+                                                  if (status === 'accepted') statusClass = 'status-accepted';
+                                                  else if (status === 'declined') statusClass = 'status-declined';
+                                                  else statusClass = 'status-pending';
+                                                  return (
+                                                    <li key={m.user_id} className={`team-response-item ${statusClass}`}>
+                                                      <span className="team-member-name">{name}</span>
+                                                      <span className="team-member-status">{statusLabel}</span>
+                                                    </li>
+                                                  );
+                                                })}
+                                              </ul>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            </motion.li>
+                          );
+                        })}
+                          </ul>
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -2087,49 +2904,50 @@ const AdminDashboard = () => {
               >
                 <div className="content-grid">
                   <div className="content-card">
-                    <h3>Pending Providers</h3>
-                    <div className="list-table">
-                      {providersPending.length === 0 && <div className="empty">No pending providers</div>}
-                      {providersPending.map(p => (
-                        <div key={p.id} className="list-row">
-                          <div className="list-main">
-                            <strong>{p.name}</strong>
-                            <span className="text-muted">{p.specialization} • {p.documents}</span>
-                          </div>
-                          <div className="list-actions">
-                            <button className="btn-primary" onClick={() => handleApproveProvider(p.id)}>Approve</button>
-                            <button className="btn-secondary">Reject</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="content-card">
                     <div className="card-header">
-                      <h3>Provider Assignment</h3>
-                      <button 
-                        className="btn-primary" 
-                        onClick={() => navigate('/admin/assign-provider')}
-                      >
-                        <Plus size={20} />
-                        Assign Provider
-                      </button>
+                      <h3>Allocations (Individual & Team)</h3>
                     </div>
                     <div className="list-table">
-                      {serviceRequests.map(req => (
-                        <div key={req.id} className="list-row">
+                      {allocations.length === 0 && (
+                        <div className="empty">No allocations found.</div>
+                      )}
+                      {allocations.map(a => (
+                        <div key={a.booking_id} className="list-row">
                           <div className="list-main">
-                            <strong>{req.id}</strong>
-                            <span className="text-muted">{req.category} • {req.service} • {req.status}</span>
+                            <strong>#{String(a.booking_id).slice(0, 8)}</strong>
+                            <span className="text-muted">
+                              {a.service_name} • {a.allocation_type === 'team' ? 'Team' : a.allocation_type === 'individual' ? 'Individual' : 'Unassigned'} • {a.booking_status}
+                            </span>
+                            <span className="text-muted">
+                              {a.customer_name} • {a.scheduled_date} · {a.scheduled_time || '—'}
+                            </span>
                           </div>
                           <div className="list-actions">
-                            <select onChange={(e) => handleAssignProvider(req.id, Number(e.target.value))} defaultValue="">
-                              <option value="" disabled>Select provider</option>
-                              {providers.map(pr => (
-                                <option key={pr.id} value={pr.id}>{pr.name} ({pr.specialization})</option>
-                              ))}
-                            </select>
+                            {a.allocation_type === 'individual' && a.individual && (
+                              <div className="allocation-individual">
+                                <span className="badge">Provider</span>
+                                <span>{a.individual.provider_name}</span>
+                              </div>
+                            )}
+                            {a.allocation_type === 'team' && a.team && (
+                              <div className="allocation-team-details">
+                                <div>
+                                  <span className="badge">Team</span>
+                                  <span>{a.team.team_name}</span>
+                                </div>
+                                <div className="allocation-team-status">
+                                  <span className={`status-badge ${a.team.assignment_status || 'pending'}`}>
+                                    {a.team.assignment_status || 'pending'}
+                                  </span>
+                                  <span className="text-muted">
+                                    {a.team.responses.accepted} accepted · {a.team.responses.declined} declined · {a.team.responses.pending} pending
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                            {a.allocation_type === 'unassigned' && (
+                              <span className="status-badge pending">Unassigned</span>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -2192,70 +3010,509 @@ const AdminDashboard = () => {
                 animate="visible"
                 variants={containerVariants}
               >
+                <div className="stats-grid">
+                  <div className="stat-card">
+                    <div className="stat-label">Total worker payouts</div>
+                    <div className="stat-value">
+                      ₹{billingStats.totalWorker.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div className="stat-subtitle">All payouts processed to workers</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label">Paid vs pending amount</div>
+                    <div className="stat-value">
+                      ₹{billingStats.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} paid
+                    </div>
+                    <div className="stat-subtitle">
+                      ₹{billingStats.pendingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} pending
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label">Worker payout status</div>
+                    <div className="stat-value">
+                      Paid: {billingStats.paidCount} • Pending: {billingStats.pendingCount}
+                    </div>
+                    <div className="stat-subtitle">Helps track any delayed payments</div>
+                  </div>
+                </div>
                 <div className="content-grid">
                   <div className="content-card">
                     <div className="card-header">
-                      <h3>Invoices</h3>
-                      <button 
-                        className="btn-primary" 
-                        onClick={() => navigate('/admin/create-bill')}
-                      >
-                        <Plus size={20} />
-                        Create Bill
-                      </button>
+                      <h3>Worker Payments & Bank Details</h3>
                     </div>
-                    <div className="list-table">
-                      {invoices.map(inv => (
-                        <div key={inv.id} className="list-row">
-                          <div className="list-main">
-                            <strong>{inv.id}</strong>
-                            <span className="text-muted">{inv.customer} • {inv.date}</span>
+                    {(!payouts || payouts.length === 0) ? (
+                      <div className="empty">
+                        No worker payments have been processed yet.  
+                        Once payouts are created, you&apos;ll see each worker listed here and can click their name to view full bank / UPI details.
+                      </div>
+                    ) : (
+                      <div className="list-table">
+                        {payouts.map((po) => (
+                          <div key={po.id} className="list-row">
+                            <div className="list-main">
+                              <button
+                                type="button"
+                                className="link-button-strong"
+                                onClick={() => {
+                                  setSelectedPayout(po);
+                                  setShowPayoutModal(true);
+                                }}
+                              >
+                                {po.provider}
+                              </button>
+                              <span className="text-muted">
+                                {po.date
+                                  ? new Date(po.date).toLocaleString('en-IN', {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : '—'}
+                              </span>
+                              <span className="text-muted small">
+                                Method: {(po.payout_preference || po.method || 'auto').toUpperCase()}
+                                {po.upi_id && ` • UPI: ${po.upi_id}`}
+                                {po.bank_name && po.bank_account_number && (
+                                  <> • Bank: {po.bank_name} • A/C: {po.bank_account_number}</>
+                                )}
+                                {po.bank_ifsc && ` • IFSC: ${po.bank_ifsc}`}
+                              </span>
+                            </div>
+                            <div className="list-actions">
+                              <span className="amount">
+                                ₹{(po.amount || 0).toFixed(2)}
+                              </span>
+                              <span className={`status-badge ${po.status || 'paid'}`}>
+                                {po.status || 'paid'}
+                              </span>
+                            </div>
                           </div>
-                          <div className="list-actions">
-                            <span className="amount">{inv.amount.toFixed(2)}</span>
-                            <span className={`status-badge ${inv.status}`}>{inv.status}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="content-card">
-                    <h3>Provider Payouts</h3>
-                    <div className="list-table">
-                      {payouts.map(po => (
-                        <div key={po.id} className="list-row">
-                          <div className="list-main">
-                            <strong>{po.provider}</strong>
-                            <span className="text-muted">{po.date}</span>
-                          </div>
-                          <div className="list-actions">
-                            <span className="amount">{po.amount.toFixed(2)}</span>
-                            <span className={`status-badge ${po.status}`}>{po.status}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="content-card">
-                    <h3>Transactions</h3>
-                    <div className="list-table">
-                      {transactions.map(tx => (
-                        <div key={tx.id} className="list-row">
-                          <div className="list-main">
-                            <strong>{tx.id}</strong>
-                            <span className="text-muted">{tx.type} • {tx.ref}</span>
-                          </div>
-                          <div className="list-actions">
-                            <span className="amount">{tx.amount.toFixed(2)}</span>
-                            <span className={`status-badge ${tx.status}`}>{tx.status}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>
             )}
+
+            {activeTab === 'leave' && (
+              <motion.div 
+                className="leave-tab"
+                initial="hidden"
+                animate="visible"
+                variants={containerVariants}
+              >
+                <div className="content-grid">
+                  <div className="content-card">
+                    <div className="card-header">
+                      <h3>Providers on Leave</h3>
+                      <button
+                        className="btn-secondary"
+                        onClick={fetchProviderLeave}
+                        disabled={providerLeaveLoading}
+                      >
+                        <RefreshCw size={18} />
+                        <span>{providerLeaveLoading ? 'Refreshing...' : 'Refresh'}</span>
+                      </button>
+                    </div>
+                    {providerLeaveLoading && (
+                      <div className="empty">Loading provider leave...</div>
+                    )}
+                    {providerLeaveError && !providerLeaveLoading && (
+                      <div className="empty error">{providerLeaveError}</div>
+                    )}
+                    {!providerLeaveLoading && !providerLeaveError && providerLeave.length === 0 && (
+                      <div className="empty">
+                        No providers are currently on leave or scheduled for upcoming leave.
+                      </div>
+                    )}
+                    {!providerLeaveLoading && !providerLeaveError && providerLeave.length > 0 && (
+                      <div className="list-table compact-rows">
+                        <div className="table-header">
+                          <div className="header-cell">Provider</div>
+                          <div className="header-cell">Dates</div>
+                          <div className="header-cell">Status</div>
+                        </div>
+                        <div className="table-body">
+                          {providerLeave.map((row) => {
+                            const sameDay = row.start_date === row.end_date;
+                            const formatDate = (iso) =>
+                              iso
+                                ? new Date(iso).toLocaleDateString('en-IN', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric'
+                                  })
+                                : '';
+                            const startLabel = formatDate(row.start_date);
+                            const endLabel = formatDate(row.end_date);
+                            const rangeLabel = sameDay || !endLabel
+                              ? startLabel
+                              : `${startLabel} – ${endLabel}`;
+                            const status = row.status || 'pending';
+                            const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+                            return (
+                              <button
+                                key={row.id}
+                                type="button"
+                                className="table-row row-clickable"
+                                onClick={() => {
+                                  setSelectedLeave(row);
+                                  setShowLeaveModal(true);
+                                }}
+                              >
+                                <div className="table-cell">
+                                  <div className="user-cell-main">
+                                    <div className="user-name">{row.provider_name}</div>
+                                    {row.email && (
+                                      <div className="user-subtext">{row.email}</div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="table-cell">
+                                  <span className="text-muted">{rangeLabel}</span>
+                                </div>
+                                <div className="table-cell">
+                                  <span className={`status-badge ${status}`}>{statusLabel}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="content-card">
+                    <div className="card-header">
+                      <h3>Upcoming Availability (Next 7 Days)</h3>
+                      <button
+                        className="btn-secondary"
+                        onClick={fetchProviderAvailability}
+                        disabled={providerAvailabilityLoading}
+                      >
+                        <RefreshCw size={18} />
+                        <span>{providerAvailabilityLoading ? 'Refreshing...' : 'Refresh'}</span>
+                      </button>
+                    </div>
+                    {providerAvailabilityLoading && (
+                      <div className="empty">Loading provider availability...</div>
+                    )}
+                    {providerAvailabilityError && !providerAvailabilityLoading && (
+                      <div className="empty error">{providerAvailabilityError}</div>
+                    )}
+                    {!providerAvailabilityLoading && !providerAvailabilityError && providerAvailability.length === 0 && (
+                      <div className="empty">
+                        No upcoming availability has been configured for the next 7 days.
+                      </div>
+                    )}
+                    {!providerAvailabilityLoading && !providerAvailabilityError && providerAvailability.length > 0 && (
+                      <div className="list-table">
+                        <div className="table-header">
+                          <div className="header-cell">Provider</div>
+                          <div className="header-cell">Date</div>
+                          <div className="header-cell">Day</div>
+                          <div className="header-cell">Time</div>
+                        </div>
+                        <div className="table-body">
+                          {providerAvailability.map((row) => (
+                            <div key={row.id} className="table-row">
+                              <div className="table-cell">
+                                <div className="user-cell-main">
+                                  <div className="user-name">{row.provider_name}</div>
+                                  {row.email && (
+                                    <div className="user-subtext">{row.email}</div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="table-cell">
+                                <span className="text-muted">{row.date}</span>
+                              </div>
+                              <div className="table-cell">
+                                <span className="text-muted">
+                                  {row.day.charAt(0).toUpperCase() + row.day.slice(1)}
+                                </span>
+                              </div>
+                              <div className="table-cell">
+                                <span className="text-muted">
+                                  {row.start && row.end ? `${row.start} – ${row.end}` : '—'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Leave details modal */}
+            <AnimatePresence>
+              {showLeaveModal && selectedLeave && (
+                <motion.div
+                  className="assign-team-overlay"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  onClick={() => setShowLeaveModal(false)}
+                >
+                  <motion.div
+                    className="assign-team-modal"
+                    initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                    transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <header className="assign-team-modal-header">
+                      <div className="assign-team-modal-header-icon">
+                        <Calendar size={24} />
+                      </div>
+                      <div className="assign-team-modal-header-text">
+                        <h2>Leave request</h2>
+                        <p>View full details and decide to approve or reject.</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="assign-team-modal-close"
+                        onClick={() => setShowLeaveModal(false)}
+                      >
+                        <X size={20} />
+                      </button>
+                    </header>
+                    <div className="assign-team-modal-body">
+                      <div className="assign-team-booking-card">
+                        <span className="assign-team-booking-id">
+                          {selectedLeave.provider_name}
+                        </span>
+                        <div className="assign-team-booking-meta">
+                          <span className="assign-team-booking-service">
+                            {selectedLeave.email}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="assign-team-info-box">
+                        <Info size={18} />
+                        <p>
+                          {selectedLeave.start_date && selectedLeave.end_date
+                            ? `From ${new Date(
+                                selectedLeave.start_date
+                              ).toLocaleDateString('en-IN')} to ${new Date(
+                                selectedLeave.end_date
+                              ).toLocaleDateString('en-IN')}`
+                            : 'Dates not available'}
+                        </p>
+                      </div>
+                      <div className="assign-team-field">
+                        <label>Status</label>
+                        <span className={`status-badge ${selectedLeave.status || 'pending'}`}>
+                          {(selectedLeave.status || 'pending')
+                            .charAt(0)
+                            .toUpperCase() +
+                            (selectedLeave.status || 'pending').slice(1)}
+                        </span>
+                      </div>
+                      <div className="assign-team-field">
+                        <label>Reason</label>
+                        <p className="assign-team-notes">
+                          {selectedLeave.reason || 'No reason provided.'}
+                        </p>
+                      </div>
+                    </div>
+                    <footer className="assign-team-modal-footer">
+                      <button
+                        type="button"
+                        className="assign-team-btn assign-team-btn-secondary"
+                        onClick={() => setShowLeaveModal(false)}
+                        disabled={leaveDecisionLoading}
+                      >
+                        Close
+                      </button>
+                      <button
+                        type="button"
+                        className="assign-team-btn assign-team-btn-cancel"
+                        disabled={leaveDecisionLoading}
+                        onClick={async () => {
+                          try {
+                            setLeaveDecisionLoading(true);
+                            await apiService.decideLeaveRequest(selectedLeave.id, { decision: 'reject' });
+                            toast.success('Leave request rejected');
+                            await fetchProviderLeave();
+                            setShowLeaveModal(false);
+                          } catch (err) {
+                            console.error('Failed to reject leave request:', err);
+                            toast.error(err?.message || 'Failed to reject leave request');
+                          } finally {
+                            setLeaveDecisionLoading(false);
+                          }
+                        }}
+                      >
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        className="assign-team-btn assign-team-btn-primary"
+                        disabled={leaveDecisionLoading}
+                        onClick={async () => {
+                          try {
+                            setLeaveDecisionLoading(true);
+                            await apiService.decideLeaveRequest(selectedLeave.id, { decision: 'approve' });
+                            toast.success('Leave request approved');
+                            await fetchProviderLeave();
+                            setShowLeaveModal(false);
+                          } catch (err) {
+                            console.error('Failed to approve leave request:', err);
+                            toast.error(err?.message || 'Failed to approve leave request');
+                          } finally {
+                            setLeaveDecisionLoading(false);
+                          }
+                        }}
+                      >
+                        {leaveDecisionLoading ? 'Saving...' : 'Approve'}
+                      </button>
+                    </footer>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Worker payout bank details modal */}
+            <AnimatePresence>
+              {showPayoutModal && selectedPayout && (
+                <motion.div
+                  className="assign-team-overlay"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  onClick={() => setShowPayoutModal(false)}
+                >
+                  <motion.div
+                    className="assign-team-modal"
+                    initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                    transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <header className="assign-team-modal-header">
+                      <div className="assign-team-modal-header-icon">
+                        <IndianRupee size={24} />
+                      </div>
+                      <div className="assign-team-modal-header-text">
+                        <h2>Worker payout details</h2>
+                        <p>
+                          Review the worker&apos;s payout method and saved bank / UPI information for this payment.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="assign-team-modal-close"
+                        onClick={() => setShowPayoutModal(false)}
+                      >
+                        <X size={20} />
+                      </button>
+                    </header>
+                    <div className="assign-team-modal-body">
+                      <div className="assign-team-booking-card">
+                        <span className="assign-team-booking-id">
+                          {selectedPayout.provider}
+                        </span>
+                        <div className="assign-team-booking-meta">
+                          <span className="assign-team-booking-service">
+                            Booking #{selectedPayout.booking_id || '—'}
+                          </span>
+                          <span className="assign-team-booking-service">
+                            Amount: ₹{(selectedPayout.amount || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="assign-team-info-box">
+                        <Info size={18} />
+                        <p>
+                          Status:{' '}
+                          <span className={`status-badge ${selectedPayout.status || 'paid'}`}>
+                            {selectedPayout.status || 'paid'}
+                          </span>
+                          {selectedPayout.date && (
+                            <>
+                              {' '}• Paid on{' '}
+                              {new Date(selectedPayout.date).toLocaleString('en-IN', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </>
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="assign-team-field">
+                        <label>Payout method</label>
+                        <p className="assign-team-notes">
+                          {(selectedPayout.payout_preference || selectedPayout.method || 'auto')
+                            .toUpperCase()}
+                        </p>
+                      </div>
+
+                      {selectedPayout.upi_id && (
+                        <div className="assign-team-field">
+                          <label>UPI ID</label>
+                          <p className="assign-team-notes">{selectedPayout.upi_id}</p>
+                        </div>
+                      )}
+
+                      {(selectedPayout.bank_name ||
+                        selectedPayout.bank_account_number ||
+                        selectedPayout.bank_ifsc ||
+                        selectedPayout.account_holder_name) && (
+                        <div className="assign-team-field">
+                          <label>Bank account details</label>
+                          <p className="assign-team-notes">
+                            {selectedPayout.account_holder_name && (
+                              <>
+                                Account holder: {selectedPayout.account_holder_name}
+                                <br />
+                              </>
+                            )}
+                            {selectedPayout.bank_name && (
+                              <>
+                                Bank: {selectedPayout.bank_name}
+                                <br />
+                              </>
+                            )}
+                            {selectedPayout.bank_account_number && (
+                              <>
+                                Account number: {selectedPayout.bank_account_number}
+                                <br />
+                              </>
+                            )}
+                            {selectedPayout.bank_ifsc && (
+                              <>IFSC: {selectedPayout.bank_ifsc}</>
+                            )}
+                          </p>
+                        </div>
+                      )}
+
+                      {selectedPayout.payout_reference && (
+                        <div className="assign-team-field">
+                          <label>Payout reference</label>
+                          <p className="assign-team-notes">{selectedPayout.payout_reference}</p>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {activeTab === 'feedback' && (
               <motion.div 
@@ -2407,10 +3664,10 @@ const AdminDashboard = () => {
                     <div className="metric-card">
                       <div className="metric-header">
                         <Shield size={20} />
-                        <span>Security Score</span>
+                        <span>Security Status</span>
                       </div>
-                      <div className="metric-value">{analytics.securityScore.current}/100</div>
-                      <div className="metric-change positive">{analytics.securityScore.change}</div>
+                      <div className="metric-value">94/100</div>
+                      <div className="metric-change positive">Stable</div>
                     </div>
                     <div className="metric-card">
                       <div className="metric-header">
@@ -2628,6 +3885,273 @@ const AdminDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Assign to Team Modal - professional layout */}
+      <AnimatePresence>
+        {assignTeamBooking && (
+          <motion.div
+            className="assign-team-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={closeAssignTeamModal}
+          >
+            <motion.div
+              className="assign-team-modal"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <header className="assign-team-modal-header">
+                <div className="assign-team-modal-header-icon">
+                  <Users size={24} strokeWidth={2} />
+                </div>
+                <div className="assign-team-modal-header-text">
+                  <h2>Assign to team</h2>
+                  <p>Choose a team for this booking</p>
+                </div>
+                <button type="button" className="assign-team-modal-close" onClick={closeAssignTeamModal} aria-label="Close">
+                  <X size={22} strokeWidth={2} />
+                </button>
+              </header>
+
+              <div className="assign-team-modal-body">
+                <div className="assign-team-booking-card">
+                  <span className="assign-team-booking-id">#{String(assignTeamBooking.id).slice(0, 8)}</span>
+                  <div className="assign-team-booking-meta">
+                    <span className="assign-team-booking-service">{assignTeamBooking.service_name || '—'}</span>
+                    <span className="assign-team-booking-datetime">
+                      <Calendar size={14} /> {assignTeamBooking.scheduled_date} · {assignTeamBooking.scheduled_time || '—'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="assign-team-info-box">
+                  <Info size={18} />
+                  <p>Workers in the selected team will see this job and can <strong>Accept</strong> or <strong>Decline</strong> in their dashboard.</p>
+                </div>
+
+                {assignTeamFetchLoading ? (
+                  <div className="assign-team-loading-state">
+                    <div className="assign-team-spinner" />
+                    <span>Loading teams...</span>
+                  </div>
+                ) : assignTeamNoServiceCategory ? (
+                  <div className="assign-team-empty-state">
+                    <div className="assign-team-empty-icon">
+                      <AlertCircle size={32} />
+                    </div>
+                    <h4>No service or category</h4>
+                    <p>This booking has no service or category set. Edit the booking first, then assign a team.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="assign-team-field">
+                      <label htmlFor="assign-team-select">Team</label>
+                      <select
+                        id="assign-team-select"
+                        value={assignTeamSelectedTeamId}
+                        onChange={(e) => setAssignTeamSelectedTeamId(e.target.value)}
+                        className="assign-team-select"
+                      >
+                        <option value="">Select a team</option>
+                        {assignTeamAvailableTeams.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name} ({(t.team_members || []).filter(m => m.status === 'active').length} members)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {assignTeamSelectedTeamId && (() => {
+                      const t = assignTeamAvailableTeams.find(x => x.id === assignTeamSelectedTeamId);
+                      const active = (t?.team_members || []).filter(m => m.status === 'active');
+                      return (
+                        <div className="assign-team-members-block">
+                          <span className="assign-team-members-label">Assigned members ({active.length})</span>
+                          <ul className="assign-team-members-list">
+                            {active.map((m) => {
+                              const profile = m.users?.user_profiles;
+                              const name = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : m.users?.email || m.user_id || '—';
+                              const occupied = m.occupied === true;
+                              return (
+                                <li key={m.id || m.user_id} className={occupied ? 'assign-team-member-row occupied' : 'assign-team-member-row'}>
+                                  <span className="assign-team-member-dot" />
+                                  <span className="assign-team-member-name">{name}</span>
+                                  {occupied && (
+                                    <span className="assign-team-member-occupied" title="Already assigned to another booking at this time">Occupied</span>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="assign-team-field">
+                      <label htmlFor="assign-team-notes">Notes <span className="assign-team-optional">(optional)</span></label>
+                      <textarea
+                        id="assign-team-notes"
+                        value={assignTeamNotes}
+                        onChange={(e) => setAssignTeamNotes(e.target.value)}
+                        className="assign-team-textarea"
+                        rows={2}
+                        placeholder="Add instructions for the team..."
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {!assignTeamFetchLoading && !assignTeamNoServiceCategory && (
+                <footer className="assign-team-modal-footer">
+                  <button type="button" className="assign-team-btn assign-team-btn-cancel" onClick={closeAssignTeamModal}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="assign-team-btn assign-team-btn-primary"
+                    onClick={submitAssignTeam}
+                    disabled={assignTeamLoading || !assignTeamSelectedTeamId}
+                  >
+                    {assignTeamLoading ? (
+                      <>
+                        <span className="assign-team-btn-spinner" />
+                        Assigning...
+                      </>
+                    ) : (
+                      <>
+                        <Users size={18} />
+                        Assign team
+                      </>
+                    )}
+                  </button>
+                </footer>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Assign Provider Modal */}
+      <AnimatePresence>
+        {assignProviderBooking && (
+          <motion.div
+            className="assign-team-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={closeAssignProviderModal}
+          >
+            <motion.div
+              className="assign-team-modal"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <header className="assign-team-modal-header">
+                <div className="assign-team-modal-header-icon">
+                  <UserCheck size={24} strokeWidth={2} />
+                </div>
+                <div className="assign-team-modal-header-text">
+                  <h2>Assign provider</h2>
+                  <p>Select an individual worker for this booking</p>
+                </div>
+                <button type="button" className="assign-team-modal-close" onClick={closeAssignProviderModal} aria-label="Close">
+                  <X size={22} strokeWidth={2} />
+                </button>
+              </header>
+
+              <div className="assign-team-modal-body">
+                <div className="assign-team-booking-card">
+                  <span className="assign-team-booking-id">#{String(assignProviderBooking.id).slice(0, 8)}</span>
+                  <div className="assign-team-booking-meta">
+                    <span className="assign-team-booking-service">{assignProviderBooking.service_name || '—'}</span>
+                    <span className="assign-team-booking-datetime">
+                      <Calendar size={14} /> {assignProviderBooking.scheduled_date} · {assignProviderBooking.scheduled_time || '—'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="assign-team-info-box">
+                  <Info size={18} />
+                  <p>The selected provider will be directly assigned to this booking.</p>
+                </div>
+
+                {assignProviderFetchLoading ? (
+                  <div className="assign-team-loading-state">
+                    <div className="assign-team-spinner" />
+                    <span>Loading providers...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="assign-team-field">
+                      <label htmlFor="assign-provider-select">Provider</label>
+                      <select
+                        id="assign-provider-select"
+                        value={assignProviderSelectedId}
+                        onChange={(e) => setAssignProviderSelectedId(e.target.value)}
+                        className="assign-team-select"
+                      >
+                        <option value="">Select a provider</option>
+                        {assignProviderProviders.map((p) => {
+                          // Support both ML-ranked shape and legacy listProviders shape
+                          const profile = p.user_profiles || {};
+                          const fullNameFromProfile = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+                          const nameFromMl = p.provider_name;
+                          const emailFromMl = p.provider_email || p.email;
+                          const displayName = fullNameFromProfile || nameFromMl || emailFromMl || 'Provider';
+                          const specialization = p.service_provider_details?.specialization;
+                          return (
+                            <option key={p.id} value={p.id}>
+                              {displayName}
+                              {specialization ? ` – ${specialization}` : ''}
+                              {typeof p.score === 'number' ? ` (score ${p.score.toFixed(2)})` : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {!assignProviderFetchLoading && (
+                <footer className="assign-team-modal-footer">
+                  <button type="button" className="assign-team-btn assign-team-btn-cancel" onClick={closeAssignProviderModal}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="assign-team-btn assign-team-btn-primary"
+                    onClick={submitAssignProvider}
+                    disabled={assignProviderLoading || !assignProviderSelectedId}
+                  >
+                    {assignProviderLoading ? (
+                      <>
+                        <span className="assign-team-btn-spinner" />
+                        Assigning...
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck size={18} />
+                        Assign provider
+                      </>
+                    )}
+                  </button>
+                </footer>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Suspension Confirmation Modal */}
       {isSuspensionModalOpen && (
