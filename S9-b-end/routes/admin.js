@@ -1043,14 +1043,57 @@ router.get('/security-events', async (req, res) => {
     const dayStart = new Date();
     dayStart.setHours(0, 0, 0, 0);
     const unresolvedStatuses = new Set(['investigating', 'blocked', 'pending', 'unread', 'warning', 'error']);
-    const highSeverities = new Set(['high', 'critical']);
+    const severityScore = (severity) => {
+      const s = String(severity || '').toLowerCase();
+      if (s === 'critical') return 5;
+      if (s === 'high' || s === 'error') return 4;
+      if (s === 'medium' || s === 'warning') return 3;
+      if (s === 'low') return 2;
+      return 1; // info/unknown
+    };
+    const isUnresolved = (status) => unresolvedStatuses.has(String(status || '').toLowerCase());
 
     const failedLoginEvents = allWithTimestamp.filter((e) => e.type === 'failed_login');
     const failedLoginsToday = failedLoginEvents.filter((e) => new Date(e.timestamp) >= dayStart).length;
-    const activeThreats = allWithTimestamp.filter(
-      (e) => highSeverities.has(String(e.severity || '').toLowerCase()) &&
-        unresolvedStatuses.has(String(e.status || '').toLowerCase())
+
+    // Threat logic:
+    // - Failed logins are grouped by user+IP and counted as 1 threat if >=3 attempts in 15 minutes.
+    // - Other security events count as threat if unresolved and severity score >= 3.
+    const FAILED_LOGIN_WINDOW_MS = 15 * 60 * 1000;
+    const FAILED_LOGIN_THRESHOLD = 3;
+    const failedByActor = {};
+    failedLoginEvents
+      .filter((e) => isUnresolved(e.status))
+      .forEach((e) => {
+        const actorKey = `${String(e.user || 'unknown').toLowerCase()}|${String(e.ip || 'na').toLowerCase()}`;
+        if (!failedByActor[actorKey]) failedByActor[actorKey] = [];
+        failedByActor[actorKey].push(new Date(e.timestamp).getTime());
+      });
+
+    let failedLoginThreatGroups = 0;
+    Object.values(failedByActor).forEach((times) => {
+      const sortedTimes = times.filter(Number.isFinite).sort((a, b) => a - b);
+      let left = 0;
+      let hasBurst = false;
+      for (let right = 0; right < sortedTimes.length; right += 1) {
+        while (sortedTimes[right] - sortedTimes[left] > FAILED_LOGIN_WINDOW_MS) {
+          left += 1;
+        }
+        if (right - left + 1 >= FAILED_LOGIN_THRESHOLD) {
+          hasBurst = true;
+          break;
+        }
+      }
+      if (hasBurst) failedLoginThreatGroups += 1;
+    });
+
+    const nonFailedThreats = allWithTimestamp.filter((e) =>
+      e.type !== 'failed_login' &&
+      isUnresolved(e.status) &&
+      severityScore(e.severity) >= 3
     ).length;
+
+    const activeThreats = failedLoginThreatGroups + nonFailedThreats;
 
     return res.json({
       success: true,
