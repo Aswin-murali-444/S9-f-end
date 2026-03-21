@@ -998,13 +998,29 @@ const CustomerDashboard = () => {
 
         const preferred = customerDetails?.preferred_services;
         const preferredArray = Array.isArray(preferred) ? preferred : (preferred ? [preferred] : []);
-
-        // If user already has preferences, no modal needed.
-        if (preferredArray.length > 0) return;
-
         const doneKey = `onboarding_done_${user.id}`;
         const alreadyDone = localStorage.getItem(doneKey) === '1';
-        if (!alreadyDone) setOnboardingRequired(true);
+
+        // If user already has preferences, no modal needed.
+        if (preferredArray.length > 0) {
+          localStorage.setItem(doneKey, '1');
+          return;
+        }
+
+        // Show onboarding only for truly new users.
+        // Existing users may not have preferred_services filled yet, and should not be blocked.
+        const createdAt = complete?.created_at ? new Date(complete.created_at) : null;
+        const createdAtMs = createdAt instanceof Date && !Number.isNaN(createdAt.getTime())
+          ? createdAt.getTime()
+          : null;
+        const recentlyCreated = createdAtMs ? (Date.now() - createdAtMs) < (1000 * 60 * 60 * 48) : false;
+
+        if (!alreadyDone && recentlyCreated) {
+          setOnboardingRequired(true);
+        } else {
+          localStorage.setItem(doneKey, '1');
+          setOnboardingRequired(false);
+        }
       } catch (e) {
         // If we cannot read preferences, don't block the user.
         console.warn('Onboarding check failed:', e?.message || e);
