@@ -1328,7 +1328,7 @@ const AdminDashboard = () => {
     setSecurityEvents(prev => 
       prev.map(event => 
         event.id === eventId 
-          ? { ...event, status: action }
+          ? { ...event, status: action, updated_at: new Date().toISOString() }
           : event
       )
     );
@@ -4029,25 +4029,41 @@ const AdminDashboard = () => {
                       <div className="header-cell">Actions</div>
                     </div>
                     <div className="table-body">
+                      {securityEvents.length === 0 && (
+                        <div className="table-row">
+                          <div className="table-cell" style={{ gridColumn: '1 / -1', justifyContent: 'center', color: '#64748b' }}>
+                            No security events available
+                          </div>
+                        </div>
+                      )}
                       {securityEvents.map(event => (
                         <div key={event.id} className="table-row">
                           <div className="table-cell">
                             <span className={`event-type ${event.type}`}>{String(event.type || '').replace(/_/g, ' ')}</span>
                           </div>
-                          <div className="table-cell">{event.user || event.ip}</div>
+                          <div className="table-cell">{event.user || 'Unknown user'}</div>
                           <div className="table-cell">{event.target || event.resource || 'N/A'}</div>
                           <div className="table-cell">{formatActivityTimestamp(event.timestamp)}</div>
                           <div className="table-cell">
                             <span className={`severity ${event.severity}`}>{event.severity}</span>
                           </div>
                           <div className="table-cell">
-                            <span className={`status ${event.status}`}>{event.status}</span>
+                            <span className={`security-status-badge ${String(event.status || '').toLowerCase()}`}>{event.status}</span>
                           </div>
                           <div className="table-cell actions">
-                            <button className="btn-secondary">Investigate</button>
+                            <button
+                              className="btn-secondary"
+                              onClick={() => handleSecurityEventAction(event.id, 'investigating')}
+                              disabled={String(event.status || '').toLowerCase() === 'resolved'}
+                              title="Mark this event for review"
+                            >
+                              Investigate
+                            </button>
                             <button 
                               className="btn-primary"
                               onClick={() => handleSecurityEventAction(event.id, 'resolved')}
+                              disabled={String(event.status || '').toLowerCase() === 'resolved'}
+                              title="Mark this event as resolved"
                             >
                               Resolve
                             </button>

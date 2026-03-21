@@ -862,23 +862,33 @@ class ApiService {
           const type = String(row?.type || '').toLowerCase();
           const action = String(row?.action || '');
           const description = String(row?.description || '');
+          const details = row?.details || {};
           const ts = row?.timestamp || row?.created_at || null;
           if (!ts) return null;
 
+          const isFailedLogin =
+            type === 'failed_login_attempts' ||
+            type === 'account_locked' ||
+            /failed login/i.test(action) ||
+            /failed login/i.test(description);
           const isRegistration = type === 'user_registration' || /account created|registered/i.test(action);
-          const isLogin = type === 'user_login' || /logged in|login/i.test(action);
-          if (!isRegistration && !isLogin) return null;
+          const isLogin = type === 'user_login' || /logged in/i.test(action);
+          if (!isRegistration && !isLogin && !isFailedLogin) return null;
+
+          const emailFromDetails = String(details?.user_email || '').trim();
+          const ipFromDetails = String(details?.ip_address || '').trim();
+          const userLabel = emailFromDetails || description || row?.actor || 'Unknown user';
 
           return {
             id: `activity-security-${row?.id || Math.random().toString(36).slice(2)}`,
-            type: isRegistration ? 'user_registered' : 'user_login',
-            user: description || row?.actor || 'Unknown user',
-            ip: null,
-            target: action || (isRegistration ? 'New user registered' : 'Successful login'),
+            type: isFailedLogin ? 'failed_login' : (isRegistration ? 'user_registered' : 'user_login'),
+            user: userLabel,
+            ip: ipFromDetails || null,
+            target: action || (isFailedLogin ? 'Failed login attempt detected' : (isRegistration ? 'New user registered' : 'Successful login')),
             resource: null,
             timestamp: ts,
-            severity: isRegistration ? 'low' : 'info',
-            status: 'normal'
+            severity: isFailedLogin ? 'warning' : (isRegistration ? 'low' : 'info'),
+            status: isFailedLogin ? 'investigating' : 'normal'
           };
         })
         .filter(Boolean)
