@@ -653,12 +653,7 @@ class ApiService {
   }
 
   getBaseUrl() {
-    const envBase = import.meta.env.VITE_API_URL;
-    if (envBase) return envBase.replace(/\/$/, '');
-    if (typeof window !== 'undefined' && (window.location?.hostname === 'localhost' || window.location?.hostname === '127.0.0.1')) {
-      return 'http://localhost:3001';
-    }
-    return '/api';
+    return resolveApiBaseUrl();
   }
 
   async aadhaarExtract(formData) {
