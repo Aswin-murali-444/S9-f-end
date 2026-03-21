@@ -320,11 +320,19 @@
   }
   
   .mobile-menu-btn {
-    display: flex;
+    display: none;
   }
   
   .auth-buttons {
-    display: none;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .auth-buttons .btn-login,
+  .auth-buttons .btn-register {
+    padding: 0.5rem 0.85rem;
+    min-width: 110px;
+    text-align: center;
   }
   
   .user-menu {

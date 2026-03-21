@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, User, LogOut, Settings } from 'lucide-react';
+import { User, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useAnimations } from '../hooks/useAnimations';
 import { apiService } from '../services/api';
@@ -184,18 +184,6 @@ const Header = () => {
               </div>
             )}
 
-            {/* Mobile Menu Button */}
-            <button 
-              className={`mobile-menu-btn ${isMenuOpen ? 'active' : ''} btn-animate`}
-              onClick={toggleMenu}
-              aria-label="Toggle menu"
-            >
-              {isMenuOpen ? (
-                <X size={24} className="animate-rotate-in" />
-              ) : (
-                <Menu size={24} className="animate-fade-in" />
-              )}
-            </button>
           </div>
         </div>
 
