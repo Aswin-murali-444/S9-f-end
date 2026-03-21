@@ -492,8 +492,8 @@
   align-items: center;
   gap: 0.75rem;
   flex: 1;
-  height: 40px;
-  min-height: 40px;
+  height: auto;
+  min-height: 42px;
 }
 
 /* Special alignment for readonly fields (no edit button) */
@@ -520,10 +520,10 @@
 /* Editable Field Styles - cleaned up */
 
 .editable-field-container svg {
-  color: #374151 !important;
+  color: #334155;
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   opacity: 1;
   display: block;
 }
@@ -629,11 +629,11 @@
 }
 
 .edit-btn {
-  background: #3b82f6;
+  background: #2563eb;
   color: white;
-  border: 1px solid #3b82f6;
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
-  margin-left: 0.5rem;
+  border: 1px solid #1d4ed8;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.22);
+  margin-left: 0.25rem;
   flex-shrink: 0;
 }
 
