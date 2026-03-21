@@ -22,12 +22,45 @@ class ErrorBoundary extends Component {
       errorInfo,
     });
 
+    // Recover automatically from stale deploy asset errors on hosted builds.
+    this.tryRecoverFromStaleAssets(error);
+
     // Log error to monitoring service in production
     if (import.meta.env.PROD) {
       console.error('Error caught by boundary:', error, errorInfo);
       // Here you would send to error reporting service like Sentry
     }
   }
+
+  isStaleAssetError = (error) => {
+    const message = String(error?.message || error || '');
+    return /Unable to preload CSS|Failed to fetch dynamically imported module|Importing a module script failed/i.test(message);
+  };
+
+  tryRecoverFromStaleAssets = async (error) => {
+    if (!this.isStaleAssetError(error)) return;
+    if (sessionStorage.getItem('nexus_stale_asset_recovered') === '1') return;
+
+    sessionStorage.setItem('nexus_stale_asset_recovered', '1');
+
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch (cleanupError) {
+      console.warn('Stale asset cleanup skipped:', cleanupError);
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('v', Date.now().toString());
+    window.location.replace(url.toString());
+  };
 
   handleRetry = () => {
     this.setState(prevState => ({
