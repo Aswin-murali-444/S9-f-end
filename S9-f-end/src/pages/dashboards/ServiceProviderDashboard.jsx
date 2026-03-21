@@ -1219,7 +1219,7 @@ const ServiceProviderDashboard = () => {
     { key: 'schedule', label: 'Schedule & Leave', icon: Calendar },
     { key: 'profile', label: 'Profile', icon: User, incomplete: isProfileCheckReady ? !isProfileComplete : false },
     { key: 'reviews', label: 'Reviews', icon: Star },
-    { key: 'settings', label: 'Settings', icon: Settings }
+    { key: 'settings', label: 'Admin Support', icon: MessageSquare }
   ];
 
   // Close dropdowns on outside click
@@ -3596,33 +3596,6 @@ const ServiceProviderDashboard = () => {
               </div>
 
               <div className="settings-grid">
-                <div className="settings-card">
-                  <h3>Notification Settings</h3>
-                  {Object.entries(profile.notificationSettings).map(([key, value]) => (
-                    <div key={key} className="setting-item">
-                      <div className="setting-info">
-                        <h4>{key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}</h4>
-                        <p>Receive notifications for {key.replace(/([A-Z])/g, ' $1').toLowerCase()}</p>
-                      </div>
-                      <label className="toggle-switch">
-                        <input 
-                          type="checkbox" 
-                          checked={value}
-                          onChange={(e) => {
-                            setProfile(prev => ({
-                              ...prev,
-                              notificationSettings: {
-                                ...prev.notificationSettings,
-                                [key]: e.target.checked
-                              }
-                            }));
-                          }}
-                        />
-                        <span className="slider"></span>
-                      </label>
-                    </div>
-                  ))}
-                </div>
                 <div className="settings-card">
                   <h3>Admin Communication</h3>
                   <p className="settings-card-subtext">

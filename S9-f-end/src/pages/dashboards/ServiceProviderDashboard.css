@@ -3560,6 +3560,12 @@
   padding: 0.6rem 0.7rem;
   font-size: 0.9rem;
   background: #fff;
+  color: #0f172a;
+}
+
+.admin-message-field select option {
+  color: #0f172a;
+  background: #ffffff;
 }
 
 .admin-message-field textarea {
