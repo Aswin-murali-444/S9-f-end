@@ -644,6 +644,50 @@
   transform: translateY(-1px);
 }
 
+/* Hard-scope field icon and pen alignment to avoid global CSS collisions */
+.editable-profile-sections .form-group-enhanced .icon-container {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 42px !important;
+  height: 42px !important;
+  position: relative !important;
+}
+
+.editable-profile-sections .form-group-enhanced .icon-container svg {
+  width: 18px !important;
+  height: 18px !important;
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  animation: none !important;
+  filter: none !important;
+}
+
+.editable-profile-sections .readonly-field-container .edit-btn,
+.editable-profile-sections .editable-field-container .edit-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 34px !important;
+  height: 42px !important;
+}
+
+.editable-profile-sections .readonly-field-container .edit-btn svg,
+.editable-profile-sections .editable-field-container .edit-btn svg {
+  width: 16px !important;
+  height: 16px !important;
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
 /* Help Text */
 .help-text {
   font-size: 0.75rem;
