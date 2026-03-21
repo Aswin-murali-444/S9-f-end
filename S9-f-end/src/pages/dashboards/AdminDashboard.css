@@ -6156,6 +6156,18 @@ input[type="text"][placeholder*="Search" i]::placeholder {
   color: #166534;
 }
 
+.payment-insights-table {
+  margin-top: 1rem;
+}
+
+.payment-insights-table .table-header {
+  grid-template-columns: 1.8fr 0.7fr 1.2fr 1.2fr 1.2fr 0.8fr;
+}
+
+.payment-insights-table .table-row {
+  grid-template-columns: 1.8fr 0.7fr 1.2fr 1.2fr 1.2fr 0.8fr;
+}
+
 /* Analytics Tab */
 .analytics-header {
   display: flex;

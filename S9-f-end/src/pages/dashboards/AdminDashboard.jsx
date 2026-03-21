@@ -115,6 +115,15 @@ const AdminDashboard = () => {
     customerSatisfaction: { current: 0, change: "+0.0" }
   });
   const [analyticsRangeDays, setAnalyticsRangeDays] = useState(30);
+  const [paymentInsights, setPaymentInsights] = useState({
+    totals: {
+      customerPaid: 0,
+      workerPaid: 0,
+      pendingWorkerPayout: 0,
+      companyProfit: 0
+    },
+    byService: []
+  });
   // Ratings summary from backend (for Average Rating card)
   const [ratingSummary, setRatingSummary] = useState({
     average_rating: 0,
@@ -594,9 +603,102 @@ const AdminDashboard = () => {
     return `${sign}${n.toFixed(1)}%`;
   };
 
+  const formatCurrency = (value) => {
+    const n = Number(value || 0);
+    return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
+  };
+
+  const computePaymentInsights = (billingData) => {
+    const customerPayments = Array.isArray(billingData?.customer_payments) ? billingData.customer_payments : [];
+    const providerPayouts = Array.isArray(billingData?.provider_payouts) ? billingData.provider_payouts : [];
+
+    const customerByBooking = new Map();
+    customerPayments.forEach((p) => {
+      customerByBooking.set(String(p.booking_id), p);
+    });
+
+    const isWorkerPaidStatus = (status) => {
+      const s = String(status || '').toLowerCase();
+      return ['paid', 'completed', 'success', 'earned'].includes(s);
+    };
+
+    const serviceAgg = new Map();
+    let customerPaidTotal = 0;
+    let workerPaidTotal = 0;
+    let pendingWorkerPayout = 0;
+
+    customerPayments.forEach((p) => {
+      const service = p.service_name || 'Unknown Service';
+      const amount = Number(p.total_amount || 0);
+      customerPaidTotal += amount;
+
+      if (!serviceAgg.has(service)) {
+        serviceAgg.set(service, {
+          serviceName: service,
+          jobsCount: 0,
+          customerPaid: 0,
+          workerPaid: 0
+        });
+      }
+      const row = serviceAgg.get(service);
+      row.jobsCount += 1;
+      row.customerPaid += amount;
+    });
+
+    providerPayouts.forEach((p) => {
+      const payoutAmount = Number(p.amount || 0);
+      const bookingId = String(p.booking_id || '');
+      const linkedCustomerPayment = customerByBooking.get(bookingId);
+      const service = linkedCustomerPayment?.service_name || p.service_name || 'Unknown Service';
+
+      if (!serviceAgg.has(service)) {
+        serviceAgg.set(service, {
+          serviceName: service,
+          jobsCount: 0,
+          customerPaid: 0,
+          workerPaid: 0
+        });
+      }
+      const row = serviceAgg.get(service);
+
+      if (isWorkerPaidStatus(p.status)) {
+        row.workerPaid += payoutAmount;
+        workerPaidTotal += payoutAmount;
+      } else {
+        pendingWorkerPayout += payoutAmount;
+      }
+    });
+
+    const byService = Array.from(serviceAgg.values())
+      .map((row) => {
+        const companyProfit = row.customerPaid - row.workerPaid;
+        const marginPct = row.customerPaid > 0 ? (companyProfit / row.customerPaid) * 100 : 0;
+        return {
+          ...row,
+          companyProfit,
+          marginPct
+        };
+      })
+      .sort((a, b) => b.customerPaid - a.customerPaid);
+
+    setPaymentInsights({
+      totals: {
+        customerPaid: customerPaidTotal,
+        workerPaid: workerPaidTotal,
+        pendingWorkerPayout,
+        companyProfit: customerPaidTotal - workerPaidTotal
+      },
+      byService
+    });
+  };
+
   const fetchAnalyticsSummary = async (days = analyticsRangeDays) => {
     try {
-      const response = await apiService.getAdminAnalyticsSummary(days);
+      const [summaryResponse, billingResponse] = await Promise.all([
+        apiService.getAdminAnalyticsSummary(days),
+        apiService.getAdminBillingSummary(500)
+      ]);
+      const response = summaryResponse;
       if (!response?.success || !response?.data) return;
       const d = response.data;
       setAnalytics({
@@ -626,6 +728,11 @@ const AdminDashboard = () => {
         systemPerformance: Array.isArray(d?.trends?.systemPerformance) ? d.trends.systemPerformance : [],
         securityScore: Array.isArray(d?.trends?.securityScore) ? d.trends.securityScore : []
       }));
+      if (billingResponse?.success && billingResponse?.data) {
+        computePaymentInsights(billingResponse.data);
+      } else {
+        computePaymentInsights({});
+      }
     } catch (error) {
       console.error('Failed to fetch analytics summary:', error);
     }
@@ -4015,6 +4122,67 @@ const AdminDashboard = () => {
                           ))}
                         </div>
                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="performance-analytics">
+                  <h3>Payment Insights</h3>
+                  <div className="analytics-grid">
+                    <div className="analytics-card">
+                      <h4>Customer Paid</h4>
+                      <div className="analytics-value">
+                        <span className="current">{formatCurrency(paymentInsights.totals.customerPaid)}</span>
+                      </div>
+                    </div>
+                    <div className="analytics-card">
+                      <h4>Worker Paid</h4>
+                      <div className="analytics-value">
+                        <span className="current">{formatCurrency(paymentInsights.totals.workerPaid)}</span>
+                      </div>
+                    </div>
+                    <div className="analytics-card">
+                      <h4>Company Profit</h4>
+                      <div className="analytics-value">
+                        <span className="current">{formatCurrency(paymentInsights.totals.companyProfit)}</span>
+                      </div>
+                    </div>
+                    <div className="analytics-card">
+                      <h4>Pending Worker Payout</h4>
+                      <div className="analytics-value">
+                        <span className="current">{formatCurrency(paymentInsights.totals.pendingWorkerPayout)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="events-table payment-insights-table">
+                    <div className="table-header">
+                      <div className="header-cell">Service</div>
+                      <div className="header-cell">Jobs</div>
+                      <div className="header-cell">Customer Paid</div>
+                      <div className="header-cell">Worker Paid</div>
+                      <div className="header-cell">Company Profit</div>
+                      <div className="header-cell">Margin</div>
+                    </div>
+                    <div className="table-body">
+                      {paymentInsights.byService.length === 0 ? (
+                        <div className="table-row">
+                          <div className="table-cell" style={{ gridColumn: '1 / -1' }}>
+                            No payment insight rows available yet.
+                          </div>
+                        </div>
+                      ) : (
+                        paymentInsights.byService.map((row) => (
+                          <div key={row.serviceName} className="table-row">
+                            <div className="table-cell">{row.serviceName}</div>
+                            <div className="table-cell">{row.jobsCount}</div>
+                            <div className="table-cell">{formatCurrency(row.customerPaid)}</div>
+                            <div className="table-cell">{formatCurrency(row.workerPaid)}</div>
+                            <div className="table-cell">{formatCurrency(row.companyProfit)}</div>
+                            <div className="table-cell">{row.marginPct.toFixed(1)}%</div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>

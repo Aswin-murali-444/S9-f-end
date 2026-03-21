@@ -1186,6 +1186,205 @@ router.get('/rating-summary', async (req, res) => {
   }
 });
 
+// GET /admin/analytics-summary – DB-backed analytics for admin analytics tab
+router.get('/analytics-summary', async (req, res) => {
+  try {
+    const daysRaw = parseInt(req.query.days, 10);
+    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 7), 365) : 30;
+
+    const now = new Date();
+    const currentStart = new Date(now);
+    currentStart.setDate(currentStart.getDate() - days);
+    const previousStart = new Date(currentStart);
+    previousStart.setDate(previousStart.getDate() - days);
+
+    const toIso = (d) => d.toISOString();
+    const pctChange = (current, previous) => {
+      const c = Number(current) || 0;
+      const p = Number(previous) || 0;
+      if (p === 0) return c === 0 ? 0 : 100;
+      return ((c - p) / p) * 100;
+    };
+
+    // Pull users and bookings for current+previous windows
+    const [{ data: usersRows }, { data: bookingRows }, { data: reviewRows }, { data: statusLogRows }, { data: notifRows }] =
+      await Promise.all([
+        supabase
+          .from('users')
+          .select('created_at')
+          .gte('created_at', toIso(previousStart))
+          .lte('created_at', toIso(now)),
+        supabase
+          .from('bookings')
+          .select('created_at, total_amount, payment_status, booking_status, customer_rating')
+          .gte('created_at', toIso(previousStart))
+          .lte('created_at', toIso(now)),
+        supabase
+          .from('service_reviews')
+          .select('created_at, rating')
+          .gte('created_at', toIso(previousStart))
+          .lte('created_at', toIso(now)),
+        supabase
+          .from('profile_status_log')
+          .select('created_at, new_status')
+          .gte('created_at', toIso(previousStart))
+          .lte('created_at', toIso(now)),
+        supabase
+          .from('notifications')
+          .select('created_at, priority, type')
+          .in('type', ['verification_status_changed', 'provider_pending_verification'])
+          .gte('created_at', toIso(previousStart))
+          .lte('created_at', toIso(now))
+      ]);
+
+    const users = Array.isArray(usersRows) ? usersRows : [];
+    const bookings = Array.isArray(bookingRows) ? bookingRows : [];
+    const reviews = Array.isArray(reviewRows) ? reviewRows : [];
+    const statusLogs = Array.isArray(statusLogRows) ? statusLogRows : [];
+    const notifications = Array.isArray(notifRows) ? notifRows : [];
+
+    const inCurrent = (iso) => {
+      const t = new Date(iso).getTime();
+      return t >= currentStart.getTime() && t <= now.getTime();
+    };
+    const inPrevious = (iso) => {
+      const t = new Date(iso).getTime();
+      return t >= previousStart.getTime() && t < currentStart.getTime();
+    };
+
+    const userCurrent = users.filter((u) => u.created_at && inCurrent(u.created_at)).length;
+    const userPrevious = users.filter((u) => u.created_at && inPrevious(u.created_at)).length;
+
+    const bookingCurrent = bookings.filter((b) => b.created_at && inCurrent(b.created_at));
+    const bookingPrevious = bookings.filter((b) => b.created_at && inPrevious(b.created_at));
+
+    const revenueFrom = (rows) =>
+      rows.reduce((sum, b) => {
+        const paid = ['completed', 'paid'].includes(String(b.payment_status || '').toLowerCase());
+        return sum + (paid ? Number(b.total_amount || 0) : 0);
+      }, 0);
+
+    const revenueCurrent = revenueFrom(bookingCurrent);
+    const revenuePrevious = revenueFrom(bookingPrevious);
+
+    const requestsCurrent = bookingCurrent.length;
+    const requestsPrevious = bookingPrevious.length;
+
+    const reviewCurrentRows = reviews.filter((r) => r.created_at && inCurrent(r.created_at) && Number(r.rating) > 0);
+    const reviewPreviousRows = reviews.filter((r) => r.created_at && inPrevious(r.created_at) && Number(r.rating) > 0);
+
+    const avg = (rows) => {
+      if (!rows.length) return 0;
+      const sum = rows.reduce((s, r) => s + Number(r.rating || 0), 0);
+      return sum / rows.length;
+    };
+
+    // Fallback to booking customer_rating when service_reviews unavailable
+    let satCurrent = avg(reviewCurrentRows);
+    let satPrevious = avg(reviewPreviousRows);
+    if (satCurrent === 0) {
+      const bookingRatedCurrent = bookingCurrent.filter((b) => Number(b.customer_rating) > 0);
+      satCurrent = bookingRatedCurrent.length
+        ? bookingRatedCurrent.reduce((s, b) => s + Number(b.customer_rating || 0), 0) / bookingRatedCurrent.length
+        : 0;
+    }
+    if (satPrevious === 0) {
+      const bookingRatedPrevious = bookingPrevious.filter((b) => Number(b.customer_rating) > 0);
+      satPrevious = bookingRatedPrevious.length
+        ? bookingRatedPrevious.reduce((s, b) => s + Number(b.customer_rating || 0), 0) / bookingRatedPrevious.length
+        : 0;
+    }
+
+    // Last 12-day trend windows from DB rows
+    const daysForTrend = 12;
+    const dayBucketKey = (date) => {
+      const d = new Date(date);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const lastDays = [];
+    for (let i = daysForTrend - 1; i >= 0; i -= 1) {
+      const d = new Date(now);
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      lastDays.push(dayBucketKey(d));
+    }
+
+    const bookingByDay = {};
+    bookings.forEach((b) => {
+      if (!b.created_at) return;
+      const key = dayBucketKey(b.created_at);
+      if (!lastDays.includes(key)) return;
+      if (!bookingByDay[key]) bookingByDay[key] = { total: 0, completed: 0 };
+      bookingByDay[key].total += 1;
+      if (String(b.booking_status || '').toLowerCase() === 'completed') {
+        bookingByDay[key].completed += 1;
+      }
+    });
+
+    const systemPerformanceTrend = lastDays.map((key) => {
+      const day = bookingByDay[key] || { total: 0, completed: 0 };
+      if (day.total === 0) return 0;
+      return Math.round((day.completed / day.total) * 100);
+    });
+
+    const securityByDay = {};
+    const addSecurityRow = (createdAt, severityScore) => {
+      if (!createdAt) return;
+      const key = dayBucketKey(createdAt);
+      if (!lastDays.includes(key)) return;
+      securityByDay[key] = (securityByDay[key] || 0) + severityScore;
+    };
+
+    statusLogs.forEach((row) => {
+      const sev = ['suspended', 'rejected'].includes(String(row.new_status || '').toLowerCase()) ? 3 : 1;
+      addSecurityRow(row.created_at, sev);
+    });
+    notifications.forEach((n) => {
+      const pri = String(n.priority || '').toLowerCase();
+      const sev = pri === 'high' ? 3 : pri === 'medium' ? 2 : 1;
+      addSecurityRow(n.created_at, sev);
+    });
+
+    const securityScoreTrend = lastDays.map((key) => {
+      const penalty = securityByDay[key] || 0;
+      return Math.max(0, Math.min(100, 100 - penalty * 5));
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        userGrowth: {
+          current: userCurrent,
+          previous: userPrevious,
+          change: pctChange(userCurrent, userPrevious)
+        },
+        revenueGrowth: {
+          current: revenueCurrent,
+          previous: revenuePrevious,
+          change: pctChange(revenueCurrent, revenuePrevious)
+        },
+        serviceRequests: {
+          current: requestsCurrent,
+          previous: requestsPrevious,
+          change: pctChange(requestsCurrent, requestsPrevious)
+        },
+        customerSatisfaction: {
+          current: Number(satCurrent.toFixed(1)),
+          previous: Number(satPrevious.toFixed(1)),
+          change: pctChange(satCurrent, satPrevious)
+        },
+        trends: {
+          systemPerformance: systemPerformanceTrend,
+          securityScore: securityScoreTrend
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Admin analytics-summary error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to fetch analytics summary' });
+  }
+});
+
 // GET /admin/allocations – unified view of individual and team assignments
 router.get('/allocations', async (req, res) => {
   try {

@@ -852,6 +852,11 @@ class ApiService {
     return this.request('/admin/rating-summary');
   }
 
+  // Get DB-backed analytics summary for analytics tab
+  async getAdminAnalyticsSummary(days = 30) {
+    return this.request(`/admin/analytics-summary?days=${encodeURIComponent(days)}`);
+  }
+
   // Get provider time off / leave for admin dashboard
   async getAdminProviderTimeOff() {
     return this.request('/admin/provider-time-off');
