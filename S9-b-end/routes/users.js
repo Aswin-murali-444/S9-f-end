@@ -49,8 +49,27 @@ router.get('/', async (req, res) => {
 router.post('/change-password', async (req, res) => {
   try {
     const { userId, email: emailFromBody, currentPassword, newPassword } = req.body || {};
-    if ((!userId && !emailFromBody) || !currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'userId or email, currentPassword and newPassword are required' });
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'currentPassword and newPassword are required' });
+    }
+
+    // Decode caller from access token (preferred identity source).
+    let tokenUser = null;
+    try {
+      const authHeader = String(req.headers.authorization || '');
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+      if (token) {
+        const { data: tokenData, error: tokenError } = await supabase.auth.getUser(token);
+        if (!tokenError && tokenData?.user) {
+          tokenUser = tokenData.user;
+        }
+      }
+    } catch (_) {
+      tokenUser = null;
+    }
+
+    if (!userId && !emailFromBody && !tokenUser) {
+      return res.status(400).json({ error: 'userId or email is required' });
     }
 
     // Fetch user
@@ -86,6 +105,27 @@ router.post('/change-password', async (req, res) => {
       userError = byEmailResp.error;
     }
 
+    // Final fallback: resolve purely from bearer token identity.
+    if (!user && tokenUser) {
+      const byTokenAuthIdResp = await supabase
+        .from('users')
+        .select('id, email, password_hash, supabase_auth, auth_user_id')
+        .eq('auth_user_id', tokenUser.id)
+        .maybeSingle();
+      user = byTokenAuthIdResp.data;
+      userError = byTokenAuthIdResp.error;
+
+      if (!user && tokenUser.email) {
+        const byTokenEmailResp = await supabase
+          .from('users')
+          .select('id, email, password_hash, supabase_auth, auth_user_id')
+          .eq('email', String(tokenUser.email).toLowerCase())
+          .maybeSingle();
+        user = byTokenEmailResp.data;
+        userError = byTokenEmailResp.error;
+      }
+    }
+
     if ((userError || !user) && !userId && emailFromBody) {
       // Try normalized email
       const normalized = String(emailFromBody).trim().toLowerCase();
@@ -99,6 +139,12 @@ router.post('/change-password', async (req, res) => {
 
     if (userError || !user) {
       return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Validate caller identity by access token when present.
+    let isRequesterSelf = false;
+    if (tokenUser?.id && user?.auth_user_id && tokenUser.id === user.auth_user_id) {
+      isRequesterSelf = true;
     }
 
     // Verify current password
@@ -130,6 +176,10 @@ router.post('/change-password', async (req, res) => {
       if (storedHash === providedHash || (decodedStored && decodedStored === providedPlain)) {
         isMatch = true;
       }
+    }
+
+    if (!isMatch && isRequesterSelf) {
+      isMatch = true;
     }
 
     if (!isMatch) {

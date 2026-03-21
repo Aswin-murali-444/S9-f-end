@@ -1154,9 +1154,30 @@ class ApiService {
 
   // Change password
   async changePassword(passwordData) {
+    let authHeader = {};
+    const payload = { ...(passwordData || {}) };
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const sessionUser = sessionData?.session?.user || null;
+      const accessToken = sessionData?.session?.access_token;
+      if (accessToken) {
+        authHeader = { Authorization: `Bearer ${accessToken}` };
+      }
+      // Ensure backend always receives at least one identifier.
+      if (!payload.userId && sessionUser?.id) {
+        payload.userId = sessionUser.id;
+      }
+      if (!payload.email && sessionUser?.email) {
+        payload.email = sessionUser.email;
+      }
+    } catch (_) {
+      // Non-fatal: backend still has legacy validation fallbacks
+    }
+
     return this.request('/users/change-password', {
       method: 'POST',
-      body: JSON.stringify(passwordData)
+      headers: authHeader,
+      body: JSON.stringify(payload)
     });
   }
 
