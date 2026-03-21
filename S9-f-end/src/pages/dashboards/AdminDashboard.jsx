@@ -164,6 +164,8 @@ const AdminDashboard = () => {
 
   // Feedback
   const [reviews, setReviews] = useState([]);
+  const [contactMessages, setContactMessages] = useState([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [profileModalUser, setProfileModalUser] = useState(null);
 
   // Admin bookings (customer, service, who accepted, when)
@@ -654,6 +656,30 @@ const AdminDashboard = () => {
       fetchBillingSummary();
     }
   }, [activeTab]);
+
+  // Fetch contact form submissions for feedback tab
+  const fetchAdminContactMessages = async () => {
+    try {
+      setFeedbackLoading(true);
+      const res = await apiService.getAdminContactMessages(200, null, user?.id || null);
+      if (res && res.success) {
+        setContactMessages(Array.isArray(res.data) ? res.data : []);
+      } else {
+        setContactMessages([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch admin contact messages:', error);
+      setContactMessages([]);
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'feedback') {
+      fetchAdminContactMessages();
+    }
+  }, [activeTab, user?.id]);
 
   // Live activity feed polling
   useEffect(() => {
@@ -3522,6 +3548,42 @@ const AdminDashboard = () => {
                 variants={containerVariants}
               >
                 <div className="content-grid">
+                  <div className="content-card feedback-inbox-card">
+                    <div className="feedback-inbox-header">
+                      <h3>Contact Form Messages</h3>
+                      <span className="status-badge info">{contactMessages.length} total</span>
+                    </div>
+                    {feedbackLoading ? (
+                      <div className="empty">Loading messages...</div>
+                    ) : contactMessages.length === 0 ? (
+                      <div className="empty">No contact messages yet</div>
+                    ) : (
+                      <div className="list-table feedback-message-list">
+                        {contactMessages.map((msg) => (
+                          <div key={msg.id} className="list-row feedback-message-row">
+                            <div className="list-main">
+                              <div className="feedback-message-top">
+                                <strong>{msg.full_name || 'Unknown sender'}</strong>
+                                <span className={`status-badge ${msg.status === 'resolved' ? 'success' : 'warning'}`}>
+                                  {msg.status || 'new'}
+                                </span>
+                              </div>
+                              <span className="text-muted">
+                                {String(msg.service_type || 'general')
+                                  .split('-')
+                                  .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                                  .join(' ')} • {msg.email || 'No email'} • {msg.phone_number || 'No phone'}
+                              </span>
+                              <div className="comment">{msg.message}</div>
+                              <span className="text-muted">
+                                {msg.created_at ? new Date(msg.created_at).toLocaleString() : '—'}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="content-card">
                     <h3>Customer Feedback</h3>
                     <div className="list-table">

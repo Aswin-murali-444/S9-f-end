@@ -1,31 +1,49 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-hot-toast';
-import { Phone, Mail, MapPin, Send, MessageSquare, Calendar, Headphones } from 'lucide-react';
-import { useContactForm } from '../hooks/useModernFeatures';
-import LoadingSpinner from '../components/LoadingSpinner';
+import { Phone, Mail, Send, Calendar, Headphones } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
+import { apiService } from '../services/api';
 import './ContactPage.css';
 
 const ContactPage = () => {
-  const [formData, setFormData] = useState({
-    fullName: '',
-    phoneNumber: '',
-    email: '',
-    serviceType: '',
-    message: ''
+  const { user } = useAuth();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting, isValid }
+  } = useForm({
+    mode: 'onChange',
+    reValidateMode: 'onChange',
+    defaultValues: {
+      fullName: '',
+      phoneNumber: '',
+      email: '',
+      serviceType: '',
+      message: ''
+    }
   });
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Handle form submission
-    console.log('Form submitted:', formData);
+  const onSubmit = async (values) => {
+    try {
+      await apiService.submitContactMessage({
+        ...values,
+        source: 'website_contact_form',
+        page: '/contact',
+        authUserId: user?.id || null
+      });
+      toast.success('Message submitted. Our admin team will contact you soon.');
+      reset();
+    } catch (error) {
+      const details = error?.details || {};
+      if (details && typeof details === 'object' && Object.keys(details).length) {
+        const firstFieldError = Object.values(details)[0];
+        toast.error(firstFieldError || 'Please correct the form and try again.');
+      } else {
+        toast.error(error?.message || 'Failed to submit message. Please try again.');
+      }
+    }
   };
 
   return (
@@ -51,31 +69,44 @@ const ContactPage = () => {
                 <p>Share your requirement and our team will guide you with the right service flow.</p>
               </div>
               
-              <form className="contact-form" onSubmit={handleSubmit}>
+              <form className="contact-form" onSubmit={handleSubmit(onSubmit)} noValidate>
                 <div className="form-row">
                   <div className="form-group">
                     <label htmlFor="fullName">Full Name *</label>
                     <input
                       type="text"
                       id="fullName"
-                      name="fullName"
-                      value={formData.fullName}
-                      onChange={handleChange}
                       placeholder="Enter your full name"
-                      required
+                      {...register('fullName', {
+                        required: 'Full name is required',
+                        minLength: { value: 2, message: 'Enter at least 2 characters' },
+                        maxLength: { value: 80, message: 'Name is too long' },
+                        pattern: {
+                          value: /^[A-Za-z][A-Za-z\s.'-]{1,79}$/,
+                          message: 'Enter a valid name (letters and spaces only)'
+                        }
+                      })}
                     />
+                    {errors.fullName && <span className="field-error">{errors.fullName.message}</span>}
                   </div>
                   <div className="form-group">
                     <label htmlFor="phoneNumber">Phone Number *</label>
                     <input
                       type="tel"
                       id="phoneNumber"
-                      name="phoneNumber"
-                      value={formData.phoneNumber}
-                      onChange={handleChange}
                       placeholder="Your phone number"
-                      required
+                      {...register('phoneNumber', {
+                        required: 'Phone number is required',
+                        validate: (value) => {
+                          const cleaned = String(value || '').replace(/[^0-9]/g, '');
+                          if (cleaned.length < 7 || cleaned.length > 15) {
+                            return 'Enter a valid phone number';
+                          }
+                          return true;
+                        }
+                      })}
                     />
+                    {errors.phoneNumber && <span className="field-error">{errors.phoneNumber.message}</span>}
                   </div>
                 </div>
                 
@@ -84,22 +115,26 @@ const ContactPage = () => {
                   <input
                     type="email"
                     id="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
                     placeholder="your.email@example.com"
-                    required
+                    {...register('email', {
+                      required: 'Email is required',
+                      pattern: {
+                        value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                        message: 'Enter a valid email'
+                      }
+                    })}
                   />
+                  {errors.email && <span className="field-error">{errors.email.message}</span>}
                 </div>
                 
                 <div className="form-group">
-                  <label htmlFor="serviceType">Service Type</label>
+                  <label htmlFor="serviceType">Service Type *</label>
                   <select
                     id="serviceType"
-                    name="serviceType"
-                    value={formData.serviceType}
-                    onChange={handleChange}
                     aria-label="Select service type"
+                    {...register('serviceType', {
+                      required: 'Please select a service type'
+                    })}
                   >
                     <option value="">Select a service...</option>
                     <option value="home-maintenance">Home Maintenance</option>
@@ -111,23 +146,27 @@ const ContactPage = () => {
                     <option value="billing-payments">Billing & Payments</option>
                     <option value="general">General Query</option>
                   </select>
+                  {errors.serviceType && <span className="field-error">{errors.serviceType.message}</span>}
                 </div>
                 
                 <div className="form-group">
-                  <label htmlFor="message">Message</label>
+                  <label htmlFor="message">Message *</label>
                   <textarea
                     id="message"
-                    name="message"
-                    value={formData.message}
-                    onChange={handleChange}
                     placeholder="Tell us about your specific needs and requirements..."
                     rows="5"
+                    {...register('message', {
+                      required: 'Message is required',
+                      minLength: { value: 10, message: 'Message should be at least 10 characters' },
+                      maxLength: { value: 1500, message: 'Message is too long' }
+                    })}
                   ></textarea>
+                  {errors.message && <span className="field-error">{errors.message.message}</span>}
                 </div>
                 
-                <button type="submit" className="submit-btn">
+                <button type="submit" className="submit-btn" disabled={isSubmitting || !isValid}>
                   <Send size={20} />
-                  Send Message
+                  {isSubmitting ? 'Sending...' : 'Send Message'}
                 </button>
               </form>
             </div>

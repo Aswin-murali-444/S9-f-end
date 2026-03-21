@@ -4705,6 +4705,40 @@ input[type="text"][placeholder*="Search" i]::placeholder {
   justify-content: flex-end;
 }
 
+/* Feedback tab: contact message inbox */
+.feedback-inbox-card {
+  border: 1px solid rgba(79, 156, 249, 0.18);
+}
+
+.feedback-inbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.feedback-message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.feedback-message-row {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  background: #f8fbff;
+}
+
+.feedback-message-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
 .table-row:last-child {
   border-bottom: none;
 }

@@ -831,6 +831,23 @@ class ApiService {
     return this.request(q ? `/admin/bookings?${q}` : '/admin/bookings');
   }
 
+  // Public contact form + admin feedback inbox
+  async submitContactMessage(payload) {
+    return this.request('/contact/message', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async getAdminContactMessages(limit = 100, status = null, adminAuthUserId = null) {
+    const params = new URLSearchParams();
+    if (limit != null) params.set('limit', String(limit));
+    if (status) params.set('status', status);
+    if (adminAuthUserId) params.set('adminAuthUserId', adminAuthUserId);
+    const q = params.toString();
+    return this.request(q ? `/contact/admin/messages?${q}` : '/contact/admin/messages');
+  }
+
   // Notification methods
   async getNotifications(page = 1, limit = 20, type = null, status = null) {
     const params = new URLSearchParams({ page, limit });
