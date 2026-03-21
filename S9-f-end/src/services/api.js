@@ -1023,7 +1023,58 @@ class ApiService {
             if (status) query = query.eq('status', status);
 
             const { data } = await query;
-            return { success: true, data: data || [] };
+            const messages = Array.isArray(data) ? data : [];
+            const providerIds = [...new Set(
+              messages
+                .flatMap((row) => {
+                  const supportRows = Array.isArray(row?.provider_admin_support_messages)
+                    ? row.provider_admin_support_messages
+                    : row?.provider_admin_support_messages
+                      ? [row.provider_admin_support_messages]
+                      : [];
+                  return supportRows.map((s) => s?.provider_user_id).filter(Boolean);
+                })
+            )];
+
+            let providerById = {};
+            if (providerIds.length > 0) {
+              const { data: providerRows } = await supabase
+                .from('users')
+                .select('id, email, role, user_profiles(first_name, last_name, phone)')
+                .in('id', providerIds);
+
+              providerById = (providerRows || []).reduce((acc, row) => {
+                const profile = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
+                const firstName = profile?.first_name || '';
+                const lastName = profile?.last_name || '';
+                const fullName = `${firstName} ${lastName}`.trim();
+                acc[row.id] = {
+                  id: row.id,
+                  name: fullName || null,
+                  email: row.email || null,
+                  phone: profile?.phone || null,
+                  role: row.role || null
+                };
+                return acc;
+              }, {});
+            }
+
+            const enriched = messages.map((row) => {
+              const supportRows = Array.isArray(row?.provider_admin_support_messages)
+                ? row.provider_admin_support_messages
+                : row?.provider_admin_support_messages
+                  ? [row.provider_admin_support_messages]
+                  : [];
+              return {
+                ...row,
+                provider_admin_support_messages: supportRows.map((s) => ({
+                  ...s,
+                  provider_user: s?.provider_user_id ? (providerById[s.provider_user_id] || null) : null
+                }))
+              };
+            });
+
+            return { success: true, data: enriched };
           }
           throw fallbackError;
         }

@@ -3761,6 +3761,11 @@ const AdminDashboard = () => {
                           const supportMetaRaw = msg.provider_admin_support_messages;
                           const supportMeta = Array.isArray(supportMetaRaw) ? supportMetaRaw[0] : supportMetaRaw;
                           const supportPriority = String(supportMeta?.priority || '').toLowerCase();
+                          const providerUser = supportMeta?.provider_user || null;
+                          const providerDisplayName =
+                            providerUser?.name ||
+                            msg.full_name ||
+                            'Unknown provider';
                           return (
                           <article key={msg.id} className="feedback-message-row">
                             <div className="feedback-message-top">
@@ -3775,7 +3780,7 @@ const AdminDashboard = () => {
                                 </div>
                                 <div className="feedback-field-group">
                                   <span className="feedback-field-label">Name</span>
-                                  <strong>{msg.full_name || 'Unknown sender'}</strong>
+                                  <strong>{providerDisplayName}</strong>
                                 </div>
                               </div>
                               <span className={`status-badge ${msg.status === 'resolved' ? 'success' : 'warning'}`}>
@@ -3807,13 +3812,25 @@ const AdminDashboard = () => {
                               <span className="feedback-meta-chip">
                                 <span className="feedback-field-label-inline">Email</span>
                                 <Mail size={14} />
-                                {msg.email || 'No email'}
+                                {providerUser?.email || msg.email || 'No email'}
                               </span>
                               <span className="feedback-meta-chip">
                                 <span className="feedback-field-label-inline">Phone</span>
                                 <Phone size={14} />
-                                {msg.phone_number || 'No phone'}
+                                {providerUser?.phone || msg.phone_number || 'No phone'}
                               </span>
+                              {providerUser?.id && (
+                                <span className="feedback-meta-chip">
+                                  <span className="feedback-field-label-inline">Provider ID</span>
+                                  {providerUser.id}
+                                </span>
+                              )}
+                              {providerUser?.role && (
+                                <span className="feedback-meta-chip">
+                                  <span className="feedback-field-label-inline">Role</span>
+                                  {providerUser.role}
+                                </span>
+                              )}
                             </div>
 
                             <div className="feedback-field-group">
