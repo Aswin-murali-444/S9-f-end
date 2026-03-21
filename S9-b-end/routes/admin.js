@@ -1403,15 +1403,20 @@ router.get('/payment-insights', async (req, res) => {
         payment_status,
         services(name)
       `)
-      .gte('created_at', start.toISOString())
-      .lte('created_at', now.toISOString())
       .limit(5000);
 
     if (bookingErr) {
       return res.status(500).json({ error: bookingErr.message || 'Failed to fetch payment insights bookings' });
     }
 
-    const bookings = Array.isArray(bookingRows) ? bookingRows : [];
+    const bookingsAll = Array.isArray(bookingRows) ? bookingRows : [];
+    const bookingsInRange = bookingsAll.filter((b) => {
+      if (!b?.created_at) return true;
+      const t = new Date(b.created_at).getTime();
+      return t >= start.getTime() && t <= now.getTime();
+    });
+    // Fallback to all-time if selected window has no rows
+    const bookings = bookingsInRange.length > 0 ? bookingsInRange : bookingsAll;
     const bookingById = new Map(bookings.map((b) => [String(b.id), b]));
 
     const isCustomerPaid = (status) => {
@@ -1425,12 +1430,17 @@ router.get('/payment-insights', async (req, res) => {
       const { data: pRows, error: pErr } = await supabase
         .from('booking_worker_payouts')
         .select('booking_id, worker_payout_amount, payout_status, paid_at')
-        .or(`paid_at.gte.${start.toISOString()},created_at.gte.${start.toISOString()}`)
         .limit(5000);
       if (!pErr && Array.isArray(pRows)) payoutRows = pRows;
     } catch (_) {
       payoutRows = [];
     }
+    const payoutsInRange = payoutRows.filter((p) => {
+      if (!p?.paid_at) return true;
+      const t = new Date(p.paid_at).getTime();
+      return t >= start.getTime() && t <= now.getTime();
+    });
+    const payouts = payoutsInRange.length > 0 ? payoutsInRange : payoutRows;
 
     const isWorkerPaid = (status) => {
       const s = String(status || '').toLowerCase();
@@ -1464,7 +1474,7 @@ router.get('/payment-insights', async (req, res) => {
       totalCustomerPaid += amt;
     });
 
-    payoutRows.forEach((p) => {
+    payouts.forEach((p) => {
       const b = bookingById.get(String(p.booking_id));
       const serviceName = b?.services?.name || 'Unknown Service';
       const amt = Number(p.worker_payout_amount || 0);
