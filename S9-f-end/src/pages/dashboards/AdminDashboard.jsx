@@ -674,11 +674,7 @@ const AdminDashboard = () => {
 
   const fetchAnalyticsSummary = async (days = analyticsRangeDays) => {
     try {
-      const [summaryResponse, paymentInsightsResponse, billingResponse] = await Promise.all([
-        apiService.getAdminAnalyticsSummary(days),
-        apiService.getAdminPaymentInsights(days),
-        apiService.getAdminBillingSummary(500)
-      ]);
+      const summaryResponse = await apiService.getAdminAnalyticsSummary(days);
       const response = summaryResponse;
       if (response?.success && response?.data) {
         const d = response.data;
@@ -710,32 +706,41 @@ const AdminDashboard = () => {
           securityScore: Array.isArray(d?.trends?.securityScore) ? d.trends.securityScore : []
         }));
       }
-      if (paymentInsightsResponse?.success && paymentInsightsResponse?.data) {
-        setPaymentInsights(paymentInsightsResponse.data);
-      } else if (billingResponse?.success && billingResponse?.data) {
-        computePaymentInsightsFromBilling(billingResponse.data);
-      } else {
-        setPaymentInsights({
-          totals: {
-            customerPaid: 0,
-            workerPaid: 0,
-            pendingWorkerPayout: 0,
-            companyProfit: 0
-          },
-          byService: []
-        });
-      }
     } catch (error) {
       console.error('Failed to fetch analytics summary:', error);
-      try {
-        const billingFallback = await apiService.getAdminBillingSummary(500);
-        if (billingFallback?.success && billingFallback?.data) {
-          computePaymentInsightsFromBilling(billingFallback.data);
-        }
-      } catch (_) {
-        // fallback failed; keep current values
-      }
     }
+  };
+
+  const fetchPaymentInsights = async (days = analyticsRangeDays) => {
+    try {
+      const res = await apiService.getAdminPaymentInsights(days);
+      if (res?.success && res?.data) {
+        setPaymentInsights(res.data);
+        return;
+      }
+    } catch (error) {
+      console.warn('Payment insights endpoint unavailable, using billing fallback:', error?.message || error);
+    }
+
+    try {
+      const billingFallback = await apiService.getAdminBillingSummary(500);
+      if (billingFallback?.success && billingFallback?.data) {
+        computePaymentInsightsFromBilling(billingFallback.data);
+        return;
+      }
+    } catch (billingError) {
+      console.error('Billing fallback for payment insights failed:', billingError);
+    }
+
+    setPaymentInsights({
+      totals: {
+        customerPaid: 0,
+        workerPaid: 0,
+        pendingWorkerPayout: 0,
+        companyProfit: 0
+      },
+      byService: []
+    });
   };
 
   // Live system metrics polling
@@ -771,6 +776,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (activeTab === 'analytics') {
       fetchAnalyticsSummary(analyticsRangeDays);
+      fetchPaymentInsights(analyticsRangeDays);
     }
   }, [activeTab, analyticsRangeDays]);
 
