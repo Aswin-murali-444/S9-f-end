@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import QueryProvider from './providers/QueryProvider';
@@ -15,40 +15,66 @@ import DashboardRouter from './components/DashboardRouter';
 import './App.css';
 import './components/ErrorBoundary.css';
 
+const STALE_CHUNK_PATTERN = /Failed to fetch dynamically imported module|Importing a module script failed|Unable to preload CSS|ChunkLoadError/i;
+const LAZY_RETRY_KEY = 'nexus_lazy_chunk_retry_count';
+const MAX_LAZY_RETRIES = 2;
+
+const lazyWithRetry = (importer) =>
+  lazy(async () => {
+    try {
+      return await importer();
+    } catch (error) {
+      const message = String(error?.message || error || '');
+      if (!STALE_CHUNK_PATTERN.test(message)) {
+        throw error;
+      }
+
+      const retryCount = Number(sessionStorage.getItem(LAZY_RETRY_KEY) || '0');
+      if (retryCount < MAX_LAZY_RETRIES) {
+        sessionStorage.setItem(LAZY_RETRY_KEY, String(retryCount + 1));
+        const url = new URL(window.location.href);
+        url.searchParams.set('v', Date.now().toString());
+        window.location.replace(url.toString());
+      }
+
+      throw error;
+    }
+  });
+
 // Modern Code Splitting with React.lazy
-const HomePage = lazy(() => import('./pages/HomePage'));
-const ServicesPage = lazy(() => import('./pages/ServicesPage'));
-const AboutPage = lazy(() => import('./pages/AboutPage'));
-const ContactPage = lazy(() => import('./pages/ContactPage'));
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const RegisterPage = lazy(() => import('./pages/RegisterPage'));
-const AuthCallback = lazy(() => import('./pages/AuthCallback'));
-const ProfilePage = lazy(() => import('./pages/ProfilePage'));
-const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
-const ResetPassword = lazy(() => import('./pages/ResetPassword'));
-const CustomerDashboard = lazy(() => import('./pages/dashboards/CustomerDashboard'));
-const ServiceProviderDashboard = lazy(() => import('./pages/dashboards/ServiceProviderDashboard'));
-const DriverDashboard = lazy(() => import('./pages/dashboards/DriverDashboard'));
-const SupervisorDashboard = lazy(() => import('./pages/dashboards/SupervisorDashboard'));
-const AdminDashboard = lazy(() => import('./pages/dashboards/AdminDashboard'));
+const HomePage = lazyWithRetry(() => import('./pages/HomePage'));
+const ServicesPage = lazyWithRetry(() => import('./pages/ServicesPage'));
+const AboutPage = lazyWithRetry(() => import('./pages/AboutPage'));
+const ContactPage = lazyWithRetry(() => import('./pages/ContactPage'));
+const LoginPage = lazyWithRetry(() => import('./pages/LoginPage'));
+const RegisterPage = lazyWithRetry(() => import('./pages/RegisterPage'));
+const AuthCallback = lazyWithRetry(() => import('./pages/AuthCallback'));
+const ProfilePage = lazyWithRetry(() => import('./pages/ProfilePage'));
+const ForgotPassword = lazyWithRetry(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'));
+const CustomerDashboard = lazyWithRetry(() => import('./pages/dashboards/CustomerDashboard'));
+const ServiceProviderDashboard = lazyWithRetry(() => import('./pages/dashboards/ServiceProviderDashboard'));
+const DriverDashboard = lazyWithRetry(() => import('./pages/dashboards/DriverDashboard'));
+const SupervisorDashboard = lazyWithRetry(() => import('./pages/dashboards/SupervisorDashboard'));
+const AdminDashboard = lazyWithRetry(() => import('./pages/dashboards/AdminDashboard'));
 
 // Admin Pages
-const AddCategoryPage = lazy(() => import('./pages/admin/AddCategoryPage'));
-const AddServicePage = lazy(() => import('./pages/admin/AddServicePage'));
-const AddServiceProviderPage = lazy(() => import('./pages/admin/AddServiceProviderPage'));
-const AssignProviderPage = lazy(() => import('./pages/admin/AssignProviderPage'));
-const CreateBillPage = lazy(() => import('./pages/admin/CreateBillPage'));
-const AdminUserProfilePage = lazy(() => import('./pages/admin/AdminUserProfile'));
-const CategoriesPage = lazy(() => import('./pages/admin/CategoriesPage'));
-const EditCategoryPage = lazy(() => import('./pages/admin/EditCategoryPage'));
-const AdminServicesPage = lazy(() => import('./pages/admin/ServicesPage'));
-const EditServicePage = lazy(() => import('./pages/admin/EditServicePage'));
-const ManageProvidersPage = lazy(() => import('./pages/admin/ManageProvidersPage'));
+const AddCategoryPage = lazyWithRetry(() => import('./pages/admin/AddCategoryPage'));
+const AddServicePage = lazyWithRetry(() => import('./pages/admin/AddServicePage'));
+const AddServiceProviderPage = lazyWithRetry(() => import('./pages/admin/AddServiceProviderPage'));
+const AssignProviderPage = lazyWithRetry(() => import('./pages/admin/AssignProviderPage'));
+const CreateBillPage = lazyWithRetry(() => import('./pages/admin/CreateBillPage'));
+const AdminUserProfilePage = lazyWithRetry(() => import('./pages/admin/AdminUserProfile'));
+const CategoriesPage = lazyWithRetry(() => import('./pages/admin/CategoriesPage'));
+const EditCategoryPage = lazyWithRetry(() => import('./pages/admin/EditCategoryPage'));
+const AdminServicesPage = lazyWithRetry(() => import('./pages/admin/ServicesPage'));
+const EditServicePage = lazyWithRetry(() => import('./pages/admin/EditServicePage'));
+const ManageProvidersPage = lazyWithRetry(() => import('./pages/admin/ManageProvidersPage'));
 
 // Test Pages
 
 // Booking Page
-const BookingPage = lazy(() => import('./pages/BookingPage'));
+const BookingPage = lazyWithRetry(() => import('./pages/BookingPage'));
 
 const Placeholder = ({ title }) => (
   <div style={{ minHeight: '50vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
@@ -290,6 +316,10 @@ function AppShell() {
 }
 
 function App() {
+  useEffect(() => {
+    sessionStorage.setItem(LAZY_RETRY_KEY, '0');
+  }, []);
+
   return (
     <ErrorBoundary>
       <QueryProvider>
