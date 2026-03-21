@@ -517,13 +517,6 @@ const AdminDashboard = () => {
       applications: { status: "healthy", uptime: "99.93%", lastCheck: "4 minutes ago" }
     });
 
-    setSecurityEvents([
-      { id: 1, type: "failed_login", user: "david.w@company.com", ip: "192.168.1.45", timestamp: "3 hours ago", severity: "medium", status: "investigating" },
-      { id: 2, type: "suspicious_activity", user: "unknown", ip: "203.45.67.89", timestamp: "5 hours ago", severity: "high", status: "blocked" },
-      { id: 3, type: "permission_change", user: "john.smith@company.com", target: "emily.d@company.com", timestamp: "2 hours ago", severity: "low", status: "approved" },
-      { id: 4, type: "data_access", user: "sarah.j@company.com", resource: "Customer Database", timestamp: "1 hour ago", severity: "info", status: "normal" }
-    ]);
-
     setPerformanceData({
       responseTime: [45, 42, 48, 51, 47, 43, 46, 49, 44, 45, 47, 48],
       cpuUsage: [23, 25, 28, 31, 27, 24, 26, 29, 22, 25, 27, 23],
@@ -577,6 +570,20 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchSecurityEvents = async () => {
+    try {
+      const response = await apiService.getAdminSecurityEvents(30);
+      if (response?.success) {
+        setSecurityEvents(response.data || []);
+      } else {
+        setSecurityEvents([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch security events:', error);
+      setSecurityEvents([]);
+    }
+  };
+
   // Live system metrics polling
   useEffect(() => {
     fetchMetrics();
@@ -601,6 +608,10 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     fetchRatingSummary();
+  }, []);
+
+  useEffect(() => {
+    fetchSecurityEvents();
   }, []);
 
   // Fetch allocations when Allocation tab is active
@@ -3788,7 +3799,7 @@ const AdminDashboard = () => {
                           </div>
                           <div className="table-cell">{event.user || event.ip}</div>
                           <div className="table-cell">{event.target || event.resource || 'N/A'}</div>
-                          <div className="table-cell">{event.timestamp}</div>
+                          <div className="table-cell">{formatActivityTimestamp(event.timestamp)}</div>
                           <div className="table-cell">
                             <span className={`severity ${event.severity}`}>{event.severity}</span>
                           </div>

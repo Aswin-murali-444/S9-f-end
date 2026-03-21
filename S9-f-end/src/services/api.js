@@ -842,6 +842,11 @@ class ApiService {
     return this.request(`/admin/activity-feed?limit=${limit}`);
   }
 
+  // Get DB-backed security events for admin dashboard
+  async getAdminSecurityEvents(limit = 30) {
+    return this.request(`/admin/security-events?limit=${limit}`);
+  }
+
   // Get overall rating summary for admin dashboard
   async getAdminRatingSummary() {
     return this.request('/admin/rating-summary');
