@@ -142,7 +142,7 @@ const AdminDashboard = () => {
   const [transactions, setTransactions] = useState([]);
 
   // Feedback
-  const [reviews, setReviews] = useState([]);
+  const [contactMessages] = useState([]);
   const [profileModalUser, setProfileModalUser] = useState(null);
   // const [profileModalLoading, setProfileModalLoading] = useState(false);
   
@@ -522,11 +522,6 @@ const AdminDashboard = () => {
       { id: 'TX-7002', type: 'payout', ref: 'PO-3002', amount: 140, method: 'bank', status: 'success' }
     ]);
 
-    // Feedback
-    setReviews([
-      { id: 'RV-8001', customer: 'Alice', provider: 'QuickFix Co.', rating: 5, comment: 'Great service!', flagged: false },
-      { id: 'RV-8002', customer: 'Bob', provider: 'SafeRide', rating: 3, comment: 'Pickup was late', flagged: false }
-    ]);
   }, []);
 
   // Fetch live activity feed
@@ -1989,31 +1984,46 @@ const AdminDashboard = () => {
                 animate="visible"
                 variants={containerVariants}
               >
-                <div className="content-grid">
-                  <div className="content-card">
-                    <h3>Customer Feedback</h3>
-                    <div className="list-table">
-                      {reviews.map(rv => (
-                        <div key={rv.id} className="list-row">
-                          <div className="list-main">
-                            <strong>{rv.customer}</strong>
-                            <span className="text-muted">{rv.provider} • {rv.rating}/5</span>
-                            <div className="comment">{rv.comment}</div>
-                          </div>
-                          <div className="list-actions">
-                            {!rv.flagged ? (
-                              <button className="btn-secondary" onClick={() => setReviews(prev => prev.map(r => r.id === rv.id ? { ...r, flagged: true } : r))}>Flag</button>
-                            ) : (
-                              <span className="status-badge warning">Flagged</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                <div className="content-grid feedback-single-column">
+                  <div className="content-card feedback-inbox-card">
+                    <div className="feedback-inbox-header">
+                      <h3>Contact Form Messages</h3>
+                      <span className="status-badge info">{contactMessages.length} total</span>
                     </div>
-                  </div>
-                  <div className="content-card">
-                    <h3>Disputes & Escalations</h3>
-                    <div className="empty">No active disputes</div>
+                    {contactMessages.length === 0 ? (
+                      <div className="empty">No contact messages yet</div>
+                    ) : (
+                      <div className="list-table feedback-message-list">
+                        {contactMessages.map((msg) => (
+                          <article key={msg.id} className="feedback-message-row">
+                            <div className="feedback-message-top">
+                              <div className="feedback-sender-block">
+                                <strong>{msg.full_name || 'Unknown sender'}</strong>
+                                <span className="feedback-service-type">
+                                  {String(msg.service_type || 'general')
+                                    .split('-')
+                                    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                                    .join(' ')}
+                                </span>
+                              </div>
+                              <span className={`status-badge ${msg.status === 'resolved' ? 'success' : 'warning'}`}>
+                                {msg.status || 'new'}
+                              </span>
+                            </div>
+                            <div className="feedback-contact-meta">
+                              <span>{msg.email || 'No email'}</span>
+                              <span>{msg.phone_number || 'No phone'}</span>
+                            </div>
+                            <p className="feedback-message-body">
+                              {msg.message || 'No message provided.'}
+                            </p>
+                            <div className="feedback-message-footer">
+                              {msg.created_at ? new Date(msg.created_at).toLocaleString() : '—'}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>
