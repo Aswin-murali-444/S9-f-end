@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Eye, EyeOff, Lock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { validationUtils } from '../utils/validation';
@@ -141,8 +142,9 @@ const ChangePasswordModal = ({ isOpen, onClose, userId }) => {
   };
 
   if (!isOpen) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div className="change-password-modal-overlay">
       <div className="change-password-modal">
         <div className="modal-header">
@@ -306,7 +308,8 @@ const ChangePasswordModal = ({ isOpen, onClose, userId }) => {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
