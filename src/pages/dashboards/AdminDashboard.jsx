@@ -2006,44 +2006,62 @@ const AdminDashboard = () => {
                                     .map((part) => part[0]?.toUpperCase())
                                     .join('')}
                                 </div>
-                                <div className="feedback-sender-block">
+                                <div className="feedback-field-group">
+                                  <span className="feedback-field-label">Name</span>
                                   <strong>{msg.full_name || 'Unknown sender'}</strong>
-                                  <span className="feedback-service-type">
-                                    {String(msg.service_type || 'general')
-                                      .split('-')
-                                      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-                                      .join(' ')}
-                                  </span>
                                 </div>
                               </div>
                               <span className={`status-badge ${msg.status === 'resolved' ? 'success' : 'warning'}`}>
                                 {msg.status || 'new'}
                               </span>
                             </div>
+
+                            <div className="feedback-details-grid">
+                              <div className="feedback-field-group">
+                                <span className="feedback-field-label">Service Type</span>
+                                <span className="feedback-service-type">
+                                  {String(msg.service_type || 'general')
+                                    .split('-')
+                                    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                                    .join(' ')}
+                                </span>
+                              </div>
+                            </div>
+
                             <div className="feedback-contact-meta">
                               <span className="feedback-meta-chip">
+                                <span className="feedback-field-label-inline">Email</span>
                                 <Mail size={14} />
                                 {msg.email || 'No email'}
                               </span>
                               <span className="feedback-meta-chip">
+                                <span className="feedback-field-label-inline">Phone</span>
                                 <Phone size={14} />
                                 {msg.phone_number || 'No phone'}
                               </span>
                             </div>
-                            <p className="feedback-message-body">
-                              {msg.message || 'No message provided.'}
-                            </p>
+
+                            <div className="feedback-field-group">
+                              <span className="feedback-field-label">Message</span>
+                              <p className="feedback-message-body">
+                                {msg.message || 'No message provided.'}
+                              </p>
+                            </div>
+
                             <div className="feedback-message-footer">
+                              <span className="feedback-field-label-inline">Received At</span>
                               <Clock size={14} />
-                              {msg.created_at
-                                ? new Date(msg.created_at).toLocaleString('en-IN', {
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })
-                                : '—'}
+                              <span>
+                                {msg.created_at
+                                  ? new Date(msg.created_at).toLocaleString('en-IN', {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : '—'}
+                              </span>
                             </div>
                           </article>
                         ))}
