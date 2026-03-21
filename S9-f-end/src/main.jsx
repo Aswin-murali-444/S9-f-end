@@ -7,7 +7,7 @@ const CHUNK_RELOAD_KEY = 'nexus_chunk_reload_attempted';
 
 function setupChunkLoadRecovery() {
   const shouldRecover = (message = '') =>
-    /Failed to fetch dynamically imported module|Importing a module script failed/i.test(message);
+    /Failed to fetch dynamically imported module|Importing a module script failed|Unable to preload CSS/i.test(message);
 
   const recover = () => {
     if (sessionStorage.getItem(CHUNK_RELOAD_KEY) === '1') return;
