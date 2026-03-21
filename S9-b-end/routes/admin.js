@@ -944,9 +944,27 @@ router.get('/security-events', async (req, res) => {
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
       .slice(0, cap);
 
+    const allWithTimestamp = events.filter((e) => e?.timestamp);
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const unresolvedStatuses = new Set(['investigating', 'blocked', 'pending', 'unread', 'warning', 'error']);
+    const highSeverities = new Set(['high', 'critical']);
+
+    const failedLoginEvents = allWithTimestamp.filter((e) => e.type === 'failed_login');
+    const failedLoginsToday = failedLoginEvents.filter((e) => new Date(e.timestamp) >= dayStart).length;
+    const activeThreats = allWithTimestamp.filter(
+      (e) => highSeverities.has(String(e.severity || '').toLowerCase()) &&
+        unresolvedStatuses.has(String(e.status || '').toLowerCase())
+    ).length;
+
     return res.json({
       success: true,
-      data: sorted
+      data: sorted,
+      summary: {
+        failedLogins: failedLoginEvents.length,
+        failedLoginsToday,
+        securityThreats: activeThreats
+      }
     });
   } catch (error) {
     console.error('Admin security-events error:', error);

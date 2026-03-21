@@ -132,6 +132,7 @@ const AdminDashboard = () => {
   const [leaveDecisionLoading, setLeaveDecisionLoading] = useState(false);
   const [systemHealth, setSystemHealth] = useState({});
   const [securityEvents, setSecurityEvents] = useState([]);
+  const [failedLoginsToday, setFailedLoginsToday] = useState(0);
   const [performanceData, setPerformanceData] = useState({});
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -467,9 +468,7 @@ const AdminDashboard = () => {
       memoryUsage: 67,
       diskUsage: 42,
       networkTraffic: "2.4 GB/s",
-      activeSessions: 456,
-      failedLogins: 12,
-      securityThreats: 3
+      activeSessions: 456
     }));
 
     // Convert real notifications to recent activity format
@@ -575,12 +574,21 @@ const AdminDashboard = () => {
       const response = await apiService.getAdminSecurityEvents(30);
       if (response?.success) {
         setSecurityEvents(response.data || []);
+        const summary = response?.summary || {};
+        setSystemMetrics((prev) => ({
+          ...prev,
+          failedLogins: Number(summary.failedLogins || 0),
+          securityThreats: Number(summary.securityThreats || 0)
+        }));
+        setFailedLoginsToday(Number(summary.failedLoginsToday || 0));
       } else {
         setSecurityEvents([]);
+        setFailedLoginsToday(0);
       }
     } catch (error) {
       console.error('Failed to fetch security events:', error);
       setSecurityEvents([]);
+      setFailedLoginsToday(0);
     }
   };
 
@@ -3774,7 +3782,9 @@ const AdminDashboard = () => {
                         <span>Failed Logins</span>
                       </div>
                       <div className="metric-value">{systemMetrics.failedLogins}</div>
-                      <div className="metric-change negative">+3 today</div>
+                      <div className={`metric-change ${failedLoginsToday > 0 ? 'negative' : 'neutral'}`}>
+                        {failedLoginsToday > 0 ? `+${failedLoginsToday} today` : 'No failed logins today'}
+                      </div>
                     </div>
                   </div>
                 </div>
