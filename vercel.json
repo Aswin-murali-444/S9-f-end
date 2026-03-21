@@ -3,5 +3,9 @@
   "installCommand": "cd S9-f-end && npm install --include=dev",
   "buildCommand": "cd S9-f-end && npm run build",
   "outputDirectory": "S9-f-end/dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/assets/(.*)", "destination": "/assets/$1" },
+    { "source": "/(.*\\..*)", "destination": "/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
