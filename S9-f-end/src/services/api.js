@@ -1,16 +1,7 @@
 // API service for backend communication
-// Resolve base URL robustly across dev/preview/prod
-const API_BASE_URL = (() => {
-  const envBase = import.meta.env.VITE_API_URL;
-  if (envBase) return envBase.replace(/\/$/, '');
-  if (typeof window !== 'undefined') {
-    const host = window.location?.hostname || '';
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return 'http://localhost:3001';
-    }
-  }
-  return '/api';
-})();
+import { resolveApiBaseUrl } from '../lib/apiBaseUrl.js';
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 // Debug logging for production troubleshooting
 if (typeof window !== 'undefined') {

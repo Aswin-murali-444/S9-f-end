@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd S9-f-end && npm install --include=dev",
+  "buildCommand": "cd S9-f-end && npm run build",
+  "outputDirectory": "S9-f-end/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}

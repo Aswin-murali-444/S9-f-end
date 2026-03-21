@@ -1,15 +1,9 @@
 import { supabase } from '../lib/supabase';
+import { resolveApiBaseUrl } from '../lib/apiBaseUrl.js';
 
 class CartWishlistService {
   constructor() {
-    // Resolve base URL robustly across dev/preview/prod
-    const envBase = import.meta.env.VITE_API_URL;
-    const baseUrl = envBase 
-      ? envBase.replace(/\/$/, '') 
-      : typeof window !== 'undefined' && (window.location?.hostname === 'localhost' || window.location?.hostname === '127.0.0.1')
-        ? 'http://localhost:3001'
-        : '/api';
-    
+    const baseUrl = resolveApiBaseUrl();
     this.baseUrl = `${baseUrl}/cart-wishlist`;
   }
 
