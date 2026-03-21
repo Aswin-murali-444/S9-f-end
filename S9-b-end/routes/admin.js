@@ -915,6 +915,7 @@ router.get('/security-events', async (req, res) => {
     }
 
     // 3) Live auth events from Supabase Auth (registration, login, Google continue/sign-in)
+    let authEventsAdded = 0;
     try {
       const perPage = Math.min(Math.max(cap * 3, 30), 200);
       const { data: authList, error: authUsersError } = await supabase.auth.admin.listUsers({
@@ -950,6 +951,7 @@ router.get('/security-events', async (req, res) => {
               severity: 'low',
               status: 'normal'
             });
+            authEventsAdded += 1;
           }
 
           if (lastSignInAt) {
@@ -964,6 +966,7 @@ router.get('/security-events', async (req, res) => {
               severity: 'info',
               status: 'normal'
             });
+            authEventsAdded += 1;
 
             if (provider === 'google') {
               events.push({
@@ -977,12 +980,55 @@ router.get('/security-events', async (req, res) => {
                 severity: 'info',
                 status: 'normal'
               });
+              authEventsAdded += 1;
             }
           }
         });
       }
     } catch (authEventsError) {
       console.warn('Skipping Supabase Auth-based security events:', authEventsError?.message || authEventsError);
+    }
+
+    // 3b) Fallback to app users table when auth admin events are unavailable.
+    // This ensures the Recent Security Events table is never empty for active systems.
+    if (authEventsAdded === 0) {
+      const { data: appUsers, error: appUsersError } = await supabase
+        .from('users')
+        .select('id, email, created_at, last_login_at')
+        .order('created_at', { ascending: false })
+        .limit(cap);
+
+      if (!appUsersError && Array.isArray(appUsers)) {
+        appUsers.forEach((u) => {
+          if (u?.created_at) {
+            events.push({
+              id: `fallback-register-${u.id}-${u.created_at}`,
+              type: 'user_registered',
+              user: u?.email || 'Unknown user',
+              ip: null,
+              target: 'New user registered',
+              resource: 'email',
+              timestamp: u.created_at,
+              severity: 'low',
+              status: 'normal'
+            });
+          }
+
+          if (u?.last_login_at) {
+            events.push({
+              id: `fallback-login-${u.id}-${u.last_login_at}`,
+              type: 'user_login',
+              user: u?.email || 'Unknown user',
+              ip: null,
+              target: 'Successful login',
+              resource: 'email',
+              timestamp: u.last_login_at,
+              severity: 'info',
+              status: 'normal'
+            });
+          }
+        });
+      }
     }
 
     // Sort by timestamp desc and return limited rows
