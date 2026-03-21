@@ -824,7 +824,7 @@ const EditableProfileSections = ({ providerId, onProfileUpdate }) => {
                       value={wageRequestData.reason}
                       onChange={(e) => handleWageRequestChange('reason', e.target.value)}
                       className="editable-textarea"
-                      rows={2}
+                      rows={3}
                     />
                   </div>
                   <div className="wage-request-actions">

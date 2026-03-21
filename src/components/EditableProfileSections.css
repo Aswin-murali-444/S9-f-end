@@ -311,22 +311,6 @@
   color: #6b7280;
 }
 
-.loading-spinner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.loading-spinner .animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 /* Inactive Profile State */
 .inactive-profile {
   padding: 2rem;
@@ -453,16 +437,15 @@
 
 /* Ensure all icons in form fields are visible */
 .form-group-enhanced svg {
-  color: #374151 !important;
-  opacity: 1 !important;
-  display: block !important;
-  width: 20px !important;
-  height: 20px !important;
-  background-color: rgba(59, 130, 246, 0.1) !important;
-  border-radius: 4px !important;
-  padding: 2px !important;
-  z-index: 5 !important;
-  position: relative !important;
+  color: #334155;
+  opacity: 1;
+  display: block;
+  width: 18px;
+  height: 18px;
+  z-index: 1;
+  position: relative;
+  background: transparent;
+  padding: 0;
 }
 
 /* Icon container - perfect centering inside the square */
@@ -470,25 +453,36 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  background-color: rgba(59, 130, 246, 0.1);
-  border-radius: 4px;
-  border: 10px solid rgba(59, 130, 246, 0.2);
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
   flex-shrink: 0;
   position: relative;
 }
 
 .icon-container svg {
-  color: #e0e2e6;
-  width: 20px;
-  height: 20px;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  color: #1e3a8a;
+  width: 18px;
+  height: 18px;
+  position: static;
+  transform: none;
   margin: 0;
   padding: 0;
+}
+
+.editable-field-container .icon-container svg,
+.readonly-field-container .icon-container svg {
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+  transform: none !important;
+  color: #1e3a8a !important;
+  background: transparent !important;
+  width: 18px !important;
+  height: 18px !important;
+  padding: 0 !important;
 }
 
 /* Field containers - perfect vertical alignment */
@@ -515,10 +509,10 @@
 
 /* Ensure email field icon is perfectly aligned */
 .readonly-field-container .icon-container svg {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  position: static;
+  top: auto;
+  left: auto;
+  transform: none;
   margin: 0;
   padding: 0;
 }

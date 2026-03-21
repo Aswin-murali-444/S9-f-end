@@ -523,6 +523,8 @@
   height: 18px;
   z-index: 1;
   position: relative;
+  background: transparent;
+  padding: 0;
 }
 
 /* Icon container - perfect centering inside the square */
@@ -545,6 +547,19 @@
   height: 18px;
   position: static;
   transform: none;
+}
+
+.editable-field-container .icon-container svg,
+.readonly-field-container .icon-container svg {
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+  transform: none !important;
+  color: #1e3a8a !important;
+  background: transparent !important;
+  width: 18px !important;
+  height: 18px !important;
+  padding: 0 !important;
 }
 
 /* Field containers - perfect vertical alignment */
@@ -571,10 +586,10 @@
 
 /* Ensure email field icon is perfectly aligned */
 .readonly-field-container .icon-container svg {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  position: static;
+  top: auto;
+  left: auto;
+  transform: none;
   margin: 0;
   padding: 0;
 }
@@ -883,7 +898,7 @@
 
 .wage-request-body {
   display: grid;
-  grid-template-columns: minmax(160px, 200px) minmax(200px, 1fr) auto;
+  grid-template-columns: minmax(170px, 220px) minmax(220px, 1fr);
   gap: 0.9rem;
   align-items: flex-start;
 }
@@ -959,11 +974,13 @@
 .wage-request-actions {
   display: flex;
   align-items: flex-end;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
 }
 
 .wage-request-btn {
-  padding: 0.5rem 1.1rem;
-  font-size: 0.82rem;
+  padding: 0.65rem 1.2rem;
+  font-size: 0.84rem;
   white-space: nowrap;
   box-shadow: 0 2px 6px rgba(37, 99, 235, 0.16);
   transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
@@ -1003,6 +1020,11 @@
   }
 
   .wage-request-actions {
-    justify-content: flex-start;
+    justify-content: stretch;
+  }
+
+  .wage-request-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
