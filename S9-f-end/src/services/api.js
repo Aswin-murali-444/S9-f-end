@@ -992,7 +992,15 @@ class ApiService {
   }
 
   async getProviderDetails(providerId) {
-    return this.request(`/providers/${providerId}`);
+    const encodedProviderId = encodeURIComponent(providerId);
+    try {
+      return await this.request(`/users/service-provider-details/${encodedProviderId}`);
+    } catch (error) {
+      if (error?.status === 404) {
+        return this.request(`/users/profile/provider/${encodedProviderId}`);
+      }
+      throw error;
+    }
   }
 
   // Cart operations
