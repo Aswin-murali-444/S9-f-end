@@ -1997,28 +1997,53 @@ const AdminDashboard = () => {
                         {contactMessages.map((msg) => (
                           <article key={msg.id} className="feedback-message-row">
                             <div className="feedback-message-top">
-                              <div className="feedback-sender-block">
-                                <strong>{msg.full_name || 'Unknown sender'}</strong>
-                                <span className="feedback-service-type">
-                                  {String(msg.service_type || 'general')
-                                    .split('-')
-                                    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-                                    .join(' ')}
-                                </span>
+                              <div className="feedback-sender-wrap">
+                                <div className="feedback-sender-avatar">
+                                  {(msg.full_name || 'Unknown sender')
+                                    .split(' ')
+                                    .filter(Boolean)
+                                    .slice(0, 2)
+                                    .map((part) => part[0]?.toUpperCase())
+                                    .join('')}
+                                </div>
+                                <div className="feedback-sender-block">
+                                  <strong>{msg.full_name || 'Unknown sender'}</strong>
+                                  <span className="feedback-service-type">
+                                    {String(msg.service_type || 'general')
+                                      .split('-')
+                                      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                                      .join(' ')}
+                                  </span>
+                                </div>
                               </div>
                               <span className={`status-badge ${msg.status === 'resolved' ? 'success' : 'warning'}`}>
                                 {msg.status || 'new'}
                               </span>
                             </div>
                             <div className="feedback-contact-meta">
-                              <span>{msg.email || 'No email'}</span>
-                              <span>{msg.phone_number || 'No phone'}</span>
+                              <span className="feedback-meta-chip">
+                                <Mail size={14} />
+                                {msg.email || 'No email'}
+                              </span>
+                              <span className="feedback-meta-chip">
+                                <Phone size={14} />
+                                {msg.phone_number || 'No phone'}
+                              </span>
                             </div>
                             <p className="feedback-message-body">
                               {msg.message || 'No message provided.'}
                             </p>
                             <div className="feedback-message-footer">
-                              {msg.created_at ? new Date(msg.created_at).toLocaleString() : '—'}
+                              <Clock size={14} />
+                              {msg.created_at
+                                ? new Date(msg.created_at).toLocaleString('en-IN', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })
+                                : '—'}
                             </div>
                           </article>
                         ))}
