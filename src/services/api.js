@@ -31,6 +31,7 @@ const isNonLocalBrowser = () => {
   return host !== 'localhost' && host !== '127.0.0.1';
 };
 const isLocalTarget = (urlOrBase) => /localhost|127\.0\.0\.1/i.test(String(urlOrBase || ''));
+const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 
 class ApiService {
   async request(endpoint, options = {}) {
@@ -46,6 +47,8 @@ class ApiService {
       },
       ...options,
     };
+    const timeoutMs = Number.isFinite(options?.timeoutMs) ? Number(options.timeoutMs) : DEFAULT_REQUEST_TIMEOUT_MS;
+    delete config.timeoutMs;
 
     try {
       const readJsonResponse = async (response) => {
@@ -66,14 +69,29 @@ class ApiService {
         return err;
       };
 
-      let response = await fetch(url, config);
+      const doFetch = async (targetUrl) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          return await fetch(targetUrl, { ...config, signal: controller.signal });
+        } catch (fetchErr) {
+          if (fetchErr?.name === 'AbortError') {
+            throw new Error(`Request timed out after ${timeoutMs}ms`);
+          }
+          throw fetchErr;
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      };
+
+      let response = await doFetch(url);
       let data = await readJsonResponse(response);
 
       if (!response.ok && response.status === 404 && data?.error === 'Route not found') {
         const fallbackBase = toggleApiPrefix(API_BASE_URL);
         const fallbackUrl = joinUrl(fallbackBase, endpoint);
         if (fallbackUrl !== url) {
-          response = await fetch(fallbackUrl, config);
+          response = await doFetch(fallbackUrl);
           data = await readJsonResponse(response);
         }
       }
