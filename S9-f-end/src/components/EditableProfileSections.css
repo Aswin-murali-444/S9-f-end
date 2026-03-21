@@ -5,12 +5,12 @@
 
 /* Profile Photo Section */
 .profile-photo-section {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 58%, #334155 100%);
   border-radius: 16px;
   padding: 2rem;
   margin-bottom: 2rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.25);
+  border: 1px solid rgba(148, 163, 184, 0.28);
   color: white;
 }
 
@@ -378,11 +378,11 @@
 
 .form-section-enhanced {
   position: relative;
-  background: radial-gradient(circle at top left, #eef2ff 0, #ffffff 42%, #f9fafb 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   border-radius: 18px;
   padding: 1.6rem 1.8rem;
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+  border: 1px solid #e2e8f0;
   overflow: hidden;
   animation: profile-section-enter 0.5s ease-out both;
   transform-origin: top center;
@@ -428,7 +428,7 @@
   gap: 0.75rem;
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
-  border-bottom: 1px dashed rgba(148, 163, 184, 0.5);
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .section-icon {
@@ -437,10 +437,10 @@
   justify-content: center;
   width: 44px;
   height: 44px;
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
   border-radius: 14px;
-  color: #e5e7eb;
-  box-shadow: 0 10px 28px rgba(59, 130, 246, 0.35);
+  color: #ffffff;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.28);
 }
 
 .section-header h3 {
@@ -492,9 +492,10 @@
 }
 
 .form-group-enhanced label {
-  font-weight: 500;
-  color: #374151;
-  font-size: 0.875rem;
+  font-weight: 600;
+  color: #334155;
+  font-size: 0.84rem;
+  letter-spacing: 0.01em;
 }
 
 .input-wrapper {
@@ -505,26 +506,23 @@
 }
 
 .input-wrapper svg {
-  color: #374151 !important;
+  color: #334155;
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   opacity: 1;
   display: block;
 }
 
-/* Ensure all icons in form fields are visible */
+/* Keep field icons consistent and subtle */
 .form-group-enhanced svg {
-  color: #374151 !important;
-  opacity: 1 !important;
-  display: block !important;
-  width: 20px !important;
-  height: 20px !important;
-  background-color: rgba(59, 130, 246, 0.1) !important;
-  border-radius: 4px !important;
-  padding: 2px !important;
-  z-index: 5 !important;
-  position: relative !important;
+  color: #334155;
+  opacity: 1;
+  display: block;
+  width: 18px;
+  height: 18px;
+  z-index: 1;
+  position: relative;
 }
 
 /* Icon container - perfect centering inside the square */
@@ -532,25 +530,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  background-color: rgba(59, 130, 246, 0.1);
-  border-radius: 4px;
-  border: 10px solid rgba(59, 130, 246, 0.2);
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
   flex-shrink: 0;
   position: relative;
 }
 
 .icon-container svg {
-  color: #e0e2e6;
-  width: 20px;
-  height: 20px;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  margin: 0;
-  padding: 0;
+  color: #1e3a8a;
+  width: 18px;
+  height: 18px;
+  position: static;
+  transform: none;
 }
 
 /* Field containers - perfect vertical alignment */
@@ -598,27 +592,27 @@
 
 .editable-input {
   flex: 1;
-  padding: 0.75rem;
-  border: 2px solid #3b82f6;
-  border-radius: 8px;
+  padding: 0.72rem 0.8rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
   font-size: 0.875rem;
-  background: white;
+  background: #ffffff;
   transition: all 0.2s ease;
-  height: 40px;
+  height: 42px;
   box-sizing: border-box;
   line-height: 1;
 }
 
 .readonly-input {
   flex: 1;
-  padding: 0.75rem;
-  border: 2px solid #d1d5db;
+  padding: 0.72rem 0.8rem;
+  border: 1px solid #dbe3ee;
   border-radius: 10px;
   font-size: 0.875rem;
-  background: #f9fafb;
-  color: #6b7280;
+  background: #f8fafc;
+  color: #475569;
   cursor: not-allowed;
-  height: 40px;
+  height: 42px;
   box-sizing: border-box;
   line-height: 1;
   align-self: center;
@@ -632,7 +626,7 @@
 .editable-input:focus {
   outline: none;
   border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }
 
 .field-actions {
@@ -646,8 +640,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 40px;
+  width: 34px;
+  height: 42px;
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -686,10 +680,10 @@
 }
 
 .edit-btn {
-  background: #3b82f6;
+  background: #2563eb;
   color: white;
-  border: 1px solid #3b82f6;
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+  border: 1px solid #1d4ed8;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.22);
   margin-left: 0.5rem;
   flex-shrink: 0;
 }
@@ -704,7 +698,7 @@
 /* Help Text */
 .help-text {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: #64748b;
   margin-top: 0.25rem;
 }
 
@@ -856,9 +850,9 @@
   margin-top: 0.85rem;
   padding: 1rem 1.1rem;
   border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  background: linear-gradient(135deg, #f9fafb 0%, #ffffff 60%, #eef2ff 100%);
-  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.03);
+  border: 1px solid #dbe3ee;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
   animation: wage-request-enter 220ms ease-out;
   transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
 }
@@ -880,8 +874,8 @@
 .wage-request-chip {
   padding: 0.25rem 0.7rem;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.08);
-  color: #1d4ed8;
+  background: #e0e7ff;
+  color: #3730a3;
   font-size: 0.78rem;
   font-weight: 500;
   white-space: nowrap;
