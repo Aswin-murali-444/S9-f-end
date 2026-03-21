@@ -591,12 +591,23 @@
 .save-btn svg,
 .cancel-btn svg,
 .edit-btn svg {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  position: static;
+  top: auto;
+  left: auto;
+  transform: none;
   margin: 0;
   padding: 0;
+  display: block;
+  line-height: 1;
+}
+
+.readonly-field-container .edit-btn {
+  align-self: center;
+}
+
+.readonly-field-container .edit-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .save-btn {
