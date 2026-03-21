@@ -4,7 +4,7 @@
 
 1. Go to [vercel.com/new](https://vercel.com/new).
 2. Import **`Aswin-murali-444/S9-f-end`** from GitHub.
-3. **Root directory:** leave as `.` (repo root is the app).
+3. **Root directory:** set to **`S9-f-end`** (this GitHub repo contains the monorepo; the Vite app lives in that folder). If your repo has the frontend files at the **repository root** only, use `.` instead.
 4. **Production branch:** if GitHub default is `main` but you deploy from **`master`**, set **Settings → Git → Production Branch** to `master` after the first import.
 
 Vercel will detect **Vite**. This repo includes `vercel.json` (SPA fallback so React Router routes work).
