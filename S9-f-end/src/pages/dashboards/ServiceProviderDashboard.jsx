@@ -920,6 +920,37 @@ const ServiceProviderDashboard = () => {
   });
 
   const [availabilityErrors, setAvailabilityErrors] = useState({});
+  const [adminMessageForm, setAdminMessageForm] = useState({
+    subject: '',
+    priority: 'normal',
+    message: ''
+  });
+  const [adminMessageSending, setAdminMessageSending] = useState(false);
+  const [adminMessages, setAdminMessages] = useState([]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const cached = localStorage.getItem(`provider_admin_messages_${user.id}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          setAdminMessages(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load provider-admin messages:', e);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      localStorage.setItem(`provider_admin_messages_${user.id}`, JSON.stringify(adminMessages.slice(0, 20)));
+    } catch (e) {
+      console.warn('Could not persist provider-admin messages:', e);
+    }
+  }, [adminMessages, user?.id]);
 
   const validateAvailabilitySlot = (day, start, end) => {
     let error = null;
@@ -1015,6 +1046,53 @@ const ServiceProviderDashboard = () => {
       toast.error(error?.message || 'Failed to submit leave request');
     } finally {
       setLeaveSubmitting(false);
+    }
+  };
+
+  const handleSendAdminMessage = async () => {
+    const subject = adminMessageForm.subject.trim();
+    const message = adminMessageForm.message.trim();
+    const priority = adminMessageForm.priority;
+
+    if (!message || message.length < 10) {
+      toast.error('Please enter at least 10 characters in your message.');
+      return;
+    }
+
+    if (!subject) {
+      toast.error('Please add a subject for your message.');
+      return;
+    }
+
+    try {
+      setAdminMessageSending(true);
+      const composedMessage = `[Priority: ${priority.toUpperCase()}]\nSubject: ${subject}\n\n${message}`;
+      await apiService.submitContactMessage({
+        fullName: profile?.name || 'Service Provider',
+        email: profile?.email || user?.email || '',
+        phoneNumber: profile?.phone || '',
+        serviceType: profile?.service || profile?.specialization || 'Service Provider',
+        message: composedMessage,
+        source: 'provider_dashboard_settings',
+        page: '/dashboard/provider/settings',
+        authUserId: user?.id
+      });
+
+      const record = {
+        id: Date.now(),
+        subject,
+        message,
+        priority,
+        createdAt: new Date().toISOString(),
+        status: 'sent'
+      };
+      setAdminMessages(prev => [record, ...prev].slice(0, 20));
+      setAdminMessageForm({ subject: '', priority: 'normal', message: '' });
+      toast.success('Message sent to admin successfully.');
+    } catch (error) {
+      toast.error(error?.message || 'Failed to send message to admin.');
+    } finally {
+      setAdminMessageSending(false);
     }
   };
 
@@ -3545,46 +3623,76 @@ const ServiceProviderDashboard = () => {
                     </div>
                   ))}
                 </div>
-
                 <div className="settings-card">
-                  <h3>Privacy & Security</h3>
-                  <div className="setting-item">
-                    <div className="setting-info">
-                      <h4>Profile Visibility</h4>
-                      <p>Allow customers to see your profile</p>
+                  <h3>Admin Communication</h3>
+                  <p className="settings-card-subtext">
+                    Send updates, concerns, or support requests directly to the admin team.
+                  </p>
+                  <div className="admin-message-form">
+                    <div className="admin-message-row">
+                      <div className="admin-message-field">
+                        <label>Subject</label>
+                        <input
+                          type="text"
+                          value={adminMessageForm.subject}
+                          onChange={(e) => setAdminMessageForm(prev => ({ ...prev, subject: e.target.value }))}
+                          placeholder="Example: Need help with job assignment"
+                        />
+                      </div>
+                      <div className="admin-message-field admin-message-priority">
+                        <label>Priority</label>
+                        <select
+                          value={adminMessageForm.priority}
+                          onChange={(e) => setAdminMessageForm(prev => ({ ...prev, priority: e.target.value }))}
+                        >
+                          <option value="low">Low</option>
+                          <option value="normal">Normal</option>
+                          <option value="high">High</option>
+                        </select>
+                      </div>
                     </div>
-                    <label className="toggle-switch">
-                      <input type="checkbox" defaultChecked />
-                      <span className="slider"></span>
-                    </label>
+                    <div className="admin-message-field">
+                      <label>Message</label>
+                      <textarea
+                        rows={4}
+                        value={adminMessageForm.message}
+                        onChange={(e) => setAdminMessageForm(prev => ({ ...prev, message: e.target.value }))}
+                        placeholder="Write your message to admin..."
+                      />
+                    </div>
+                    <div className="admin-message-actions">
+                      <button
+                        className="btn-primary"
+                        onClick={handleSendAdminMessage}
+                        disabled={adminMessageSending}
+                      >
+                        <Send size={16} />
+                        {adminMessageSending ? 'Sending...' : 'Send to Admin'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="setting-item">
-                    <div className="setting-info">
-                      <h4>Two-Factor Authentication</h4>
-                      <p>Add extra security to your account</p>
-                    </div>
-                    <label className="toggle-switch">
-                      <input type="checkbox" />
-                      <span className="slider"></span>
-                    </label>
+                  <div className="admin-message-history">
+                    <h4>Recent Messages</h4>
+                    {adminMessages.length === 0 ? (
+                      <p className="admin-message-empty">No messages yet.</p>
+                    ) : (
+                      adminMessages.slice(0, 5).map((item) => (
+                        <div key={item.id} className="admin-message-item">
+                          <div className="admin-message-item-head">
+                            <strong>{item.subject}</strong>
+                            <span className={`admin-priority ${item.priority}`}>{item.priority}</span>
+                          </div>
+                          <p>{item.message}</p>
+                          <span className="admin-message-meta">
+                            {new Date(item.createdAt).toLocaleString()} - {item.status}
+                          </span>
+                        </div>
+                      ))
+                    )}
                   </div>
-                </div>
-
-                <div className="settings-card">
-                  <h3>Account Management</h3>
-                  <div className="setting-item">
-                    <div className="setting-info">
-                      <h4>Change Password</h4>
-                      <p>Update your account password</p>
-                    </div>
-                    <button className="btn-outline">Change</button>
-                  </div>
-                  <div className="setting-item">
-                    <div className="setting-info">
-                      <h4>Delete Account</h4>
-                      <p>Permanently delete your account</p>
-                    </div>
-                    <button className="btn-danger">Delete</button>
+                  <div className="admin-contact-note">
+                    <Mail size={16} />
+                    <span>For urgent issues, admin may follow up via email or dashboard notifications.</span>
                   </div>
                 </div>
               </div>
