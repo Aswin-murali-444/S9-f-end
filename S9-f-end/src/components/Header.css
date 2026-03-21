@@ -233,6 +233,16 @@
 .btn-register:hover {
   background: #3b82f6;
   border-color: #3b82f6;
+  color: #ffffff;
+}
+
+/* Keep CTA text visible against blue backgrounds despite global a:hover color rule */
+.btn-register:link,
+.btn-register:visited,
+.btn-register:hover,
+.btn-register:active,
+.btn-register:focus {
+  color: #ffffff;
 }
 
 /* Mobile Menu Button */
