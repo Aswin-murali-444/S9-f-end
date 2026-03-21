@@ -114,6 +114,7 @@ const AdminDashboard = () => {
     serviceRequests: { current: 0, change: "+0%" },
     customerSatisfaction: { current: 0, change: "+0.0" }
   });
+  const [analyticsRangeDays, setAnalyticsRangeDays] = useState(30);
   // Ratings summary from backend (for Average Rating card)
   const [ratingSummary, setRatingSummary] = useState({
     average_rating: 0,
@@ -499,14 +500,6 @@ const AdminDashboard = () => {
     
     setAlerts(alertsFromNotifications);
 
-    setAnalytics(prev => ({
-      ...prev,
-      userGrowth: { current: 1247, previous: 1189, change: "+4.9%" },
-      revenueGrowth: { current: 456000, previous: 432000, change: "+5.6%" },
-      serviceRequests: { current: 892, previous: 756, change: "+18.0%" },
-      customerSatisfaction: { current: 4.7, previous: 4.5, change: "+4.4%" }
-    }));
-
     setSystemHealth({
       servers: { status: "healthy", uptime: "99.97%", lastCheck: "2 minutes ago" },
       database: { status: "healthy", uptime: "99.99%", lastCheck: "1 minute ago" },
@@ -520,7 +513,9 @@ const AdminDashboard = () => {
       responseTime: [45, 42, 48, 51, 47, 43, 46, 49, 44, 45, 47, 48],
       cpuUsage: [23, 25, 28, 31, 27, 24, 26, 29, 22, 25, 27, 23],
       memoryUsage: [67, 65, 68, 71, 69, 66, 67, 70, 64, 67, 69, 67],
-      activeUsers: [456, 442, 468, 481, 473, 458, 465, 472, 451, 463, 470, 456]
+      activeUsers: [456, 442, 468, 481, 473, 458, 465, 472, 451, 463, 470, 456],
+      systemPerformance: [],
+      securityScore: []
     });
 
     // Services & Categories
@@ -592,6 +587,50 @@ const AdminDashboard = () => {
     }
   };
 
+  const formatChangeLabel = (value) => {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n)) return '+0%';
+    const sign = n > 0 ? '+' : '';
+    return `${sign}${n.toFixed(1)}%`;
+  };
+
+  const fetchAnalyticsSummary = async (days = analyticsRangeDays) => {
+    try {
+      const response = await apiService.getAdminAnalyticsSummary(days);
+      if (!response?.success || !response?.data) return;
+      const d = response.data;
+      setAnalytics({
+        userGrowth: {
+          current: Number(d?.userGrowth?.current || 0),
+          previous: Number(d?.userGrowth?.previous || 0),
+          change: formatChangeLabel(d?.userGrowth?.change)
+        },
+        revenueGrowth: {
+          current: Number(d?.revenueGrowth?.current || 0),
+          previous: Number(d?.revenueGrowth?.previous || 0),
+          change: formatChangeLabel(d?.revenueGrowth?.change)
+        },
+        serviceRequests: {
+          current: Number(d?.serviceRequests?.current || 0),
+          previous: Number(d?.serviceRequests?.previous || 0),
+          change: formatChangeLabel(d?.serviceRequests?.change)
+        },
+        customerSatisfaction: {
+          current: Number(d?.customerSatisfaction?.current || 0),
+          previous: Number(d?.customerSatisfaction?.previous || 0),
+          change: formatChangeLabel(d?.customerSatisfaction?.change)
+        }
+      });
+      setPerformanceData((prev) => ({
+        ...prev,
+        systemPerformance: Array.isArray(d?.trends?.systemPerformance) ? d.trends.systemPerformance : [],
+        securityScore: Array.isArray(d?.trends?.securityScore) ? d.trends.securityScore : []
+      }));
+    } catch (error) {
+      console.error('Failed to fetch analytics summary:', error);
+    }
+  };
+
   // Live system metrics polling
   useEffect(() => {
     fetchMetrics();
@@ -621,6 +660,12 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchSecurityEvents();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'analytics') {
+      fetchAnalyticsSummary(analyticsRangeDays);
+    }
+  }, [activeTab, analyticsRangeDays]);
 
   // Fetch allocations when Allocation tab is active
   const fetchAllocations = async () => {
@@ -2946,50 +2991,77 @@ const AdminDashboard = () => {
                     <div className="card-header">
                       <h3>Allocations (Individual & Team)</h3>
                     </div>
-                    <div className="list-table">
+                    <div className="list-table allocation-table-card">
                       {allocations.length === 0 && (
                         <div className="empty">No allocations found.</div>
                       )}
-                      {allocations.map(a => (
-                        <div key={a.booking_id} className="list-row">
-                          <div className="list-main">
-                            <strong>#{String(a.booking_id).slice(0, 8)}</strong>
-                            <span className="text-muted">
-                              {a.service_name} • {a.allocation_type === 'team' ? 'Team' : a.allocation_type === 'individual' ? 'Individual' : 'Unassigned'} • {a.booking_status}
-                            </span>
-                            <span className="text-muted">
-                              {a.customer_name} • {a.scheduled_date} · {a.scheduled_time || '—'}
-                            </span>
+                      {allocations.length > 0 && (
+                        <div className="allocation-table-wrap">
+                          <div className="allocation-table-header">
+                            <div>Booking</div>
+                            <div>Customer & Service</div>
+                            <div>Schedule</div>
+                            <div>Allocation</div>
+                            <div>Assignment Details</div>
                           </div>
-                          <div className="list-actions">
-                            {a.allocation_type === 'individual' && a.individual && (
-                              <div className="allocation-individual">
-                                <span className="badge">Provider</span>
-                                <span>{a.individual.provider_name}</span>
-                              </div>
-                            )}
-                            {a.allocation_type === 'team' && a.team && (
-                              <div className="allocation-team-details">
-                                <div>
-                                  <span className="badge">Team</span>
-                                  <span>{a.team.team_name}</span>
-                                </div>
-                                <div className="allocation-team-status">
-                                  <span className={`status-badge ${a.team.assignment_status || 'pending'}`}>
-                                    {a.team.assignment_status || 'pending'}
-                                  </span>
-                                  <span className="text-muted">
-                                    {a.team.responses.accepted} accepted · {a.team.responses.declined} declined · {a.team.responses.pending} pending
+                          {allocations.map((a) => {
+                            const allocationTypeLabel = a.allocation_type === 'team'
+                              ? 'Team'
+                              : a.allocation_type === 'individual'
+                                ? 'Individual'
+                                : 'Unassigned';
+                            return (
+                              <div key={a.booking_id} className="allocation-table-row">
+                                <div className="allocation-col booking">
+                                  <strong>#{String(a.booking_id).slice(0, 8)}</strong>
+                                  <span className={`booking-status-badge ${a.booking_status || 'pending'}`}>
+                                    {String(a.booking_status || 'pending').replace('_', ' ')}
                                   </span>
                                 </div>
+
+                                <div className="allocation-col service">
+                                  <span className="allocation-main-text">{a.customer_name || 'Unknown customer'}</span>
+                                  <span className="text-muted">{a.service_name || 'Unknown service'}</span>
+                                </div>
+
+                                <div className="allocation-col schedule">
+                                  <span className="allocation-main-text">{a.scheduled_date || '—'}</span>
+                                  <span className="text-muted">{a.scheduled_time || '—'}</span>
+                                </div>
+
+                                <div className="allocation-col type">
+                                  <span className={`status-badge ${a.allocation_type === 'unassigned' ? 'pending' : 'info'}`}>
+                                    {allocationTypeLabel}
+                                  </span>
+                                </div>
+
+                                <div className="allocation-col details">
+                                  {a.allocation_type === 'individual' && a.individual && (
+                                    <>
+                                      <span className="allocation-main-text">{a.individual.provider_name || '—'}</span>
+                                      <span className="text-muted">Assigned Provider</span>
+                                    </>
+                                  )}
+                                  {a.allocation_type === 'team' && a.team && (
+                                    <>
+                                      <span className="allocation-main-text">{a.team.team_name || '—'}</span>
+                                      <div className="allocation-team-metrics text-muted">
+                                        {a.team.responses.accepted} accepted · {a.team.responses.declined} declined · {a.team.responses.pending} pending
+                                      </div>
+                                      <span className={`status-badge ${a.team.assignment_status || 'pending'}`}>
+                                        {a.team.assignment_status || 'pending'}
+                                      </span>
+                                    </>
+                                  )}
+                                  {a.allocation_type === 'unassigned' && (
+                                    <span className="text-muted">No team or provider assigned yet.</span>
+                                  )}
+                                </div>
                               </div>
-                            )}
-                            {a.allocation_type === 'unassigned' && (
-                              <span className="status-badge pending">Unassigned</span>
-                            )}
-                          </div>
+                            );
+                          })}
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3843,11 +3915,15 @@ const AdminDashboard = () => {
                 <div className="analytics-header">
                   <h3>Platform Analytics</h3>
                   <div className="analytics-filters">
-                    <select className="filter-select">
-                      <option>Last 30 Days</option>
-                      <option>Last 90 Days</option>
-                      <option>Last 6 Months</option>
-                      <option>Last Year</option>
+                    <select
+                      className="filter-select"
+                      value={String(analyticsRangeDays)}
+                      onChange={(e) => setAnalyticsRangeDays(Number(e.target.value))}
+                    >
+                      <option value="30">Last 30 Days</option>
+                      <option value="90">Last 90 Days</option>
+                      <option value="180">Last 6 Months</option>
+                      <option value="365">Last Year</option>
                     </select>
                     <button className="btn-secondary">
                       <Download size={20} />
@@ -3917,7 +3993,9 @@ const AdminDashboard = () => {
                         <LineChart size={48} />
                         <p>System performance over time</p>
                         <div className="chart-data">
-                          {[98.5, 97.2, 98.1, 97.8, 98.9, 98.3, 97.9, 98.7, 98.2, 98.6, 98.4, 98.5].map((value, index) => (
+                          {(Array.isArray(performanceData.systemPerformance) && performanceData.systemPerformance.length > 0
+                            ? performanceData.systemPerformance
+                            : [0]).map((value, index) => (
                             <div key={index} className="data-point" style={{ height: `${value}px` }}></div>
                           ))}
                         </div>
@@ -3930,7 +4008,9 @@ const AdminDashboard = () => {
                         <BarChart size={48} />
                         <p>Security score over time</p>
                         <div className="chart-data">
-                          {[91, 92, 90, 93, 91, 94, 92, 93, 91, 94, 93, 94].map((value, index) => (
+                          {(Array.isArray(performanceData.securityScore) && performanceData.securityScore.length > 0
+                            ? performanceData.securityScore
+                            : [0]).map((value, index) => (
                             <div key={index} className="data-point" style={{ height: `${value}px` }}></div>
                           ))}
                         </div>
