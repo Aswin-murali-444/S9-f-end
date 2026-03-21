@@ -11,10 +11,17 @@ const API_BASE_URL = (() => {
   }
   return '/api';
 })();
+const normalizeBase = (base) => String(base || '').replace(/\/$/, '');
+const joinUrl = (base, endpoint) => `${normalizeBase(base)}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+const toggleApiPrefix = (base) => {
+  const normalized = normalizeBase(base);
+  if (normalized.endsWith('/api')) return normalized.slice(0, -4);
+  return `${normalized}/api`;
+};
 
 class ApiService {
   async request(endpoint, options = {}) {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = joinUrl(API_BASE_URL, endpoint);
     
     const config = {
       headers: {
@@ -25,19 +32,38 @@ class ApiService {
     };
 
     try {
-      const response = await fetch(url, config);
-      const contentType = response.headers.get('content-type') || '';
-      const isJson = contentType.includes('application/json');
+      const readJsonResponse = async (response) => {
+        const contentType = response.headers.get('content-type') || '';
+        const isJson = contentType.includes('application/json');
+        if (!isJson) {
+          const text = await response.text();
+          const snippet = text ? text.slice(0, 200) : '';
+          throw new Error(`Non-JSON response (status ${response.status}). Body: ${snippet}`);
+        }
+        return response.json();
+      };
 
-      if (!isJson) {
-        const text = await response.text();
-        const snippet = text ? text.slice(0, 200) : '';
-        throw new Error(`Non-JSON response (status ${response.status}). Body: ${snippet}`);
+      const buildRequestError = (response, data) => {
+        const err = new Error(data?.error || `HTTP error! status: ${response.status}`);
+        err.status = response.status;
+        err.response = { status: response.status, data };
+        return err;
+      };
+
+      let response = await fetch(url, config);
+      let data = await readJsonResponse(response);
+
+      if (!response.ok && response.status === 404 && data?.error === 'Route not found') {
+        const fallbackBase = toggleApiPrefix(API_BASE_URL);
+        const fallbackUrl = joinUrl(fallbackBase, endpoint);
+        if (fallbackUrl !== url) {
+          response = await fetch(fallbackUrl, config);
+          data = await readJsonResponse(response);
+        }
       }
 
-      const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error || `HTTP error! status: ${response.status}`);
+        throw buildRequestError(response, data);
       }
       return data;
     } catch (error) {
