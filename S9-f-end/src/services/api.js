@@ -1,5 +1,6 @@
 // API service for backend communication
 import { resolveApiBaseUrl } from '../lib/apiBaseUrl.js';
+import { supabase } from '../lib/supabase.js';
 
 const API_BASE_URL = resolveApiBaseUrl();
 const normalizeBase = (base) => String(base || '').replace(/\/$/, '');
@@ -851,10 +852,63 @@ class ApiService {
 
   // Public contact form + admin feedback inbox
   async submitContactMessage(payload) {
-    return this.request('/contact/message', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
+    try {
+      return await this.request('/contact/message', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    } catch (error) {
+      if (!(error?.status === 404 && String(error?.message || '').toLowerCase().includes('route not found'))) {
+        throw error;
+      }
+
+      const fullName = String(payload?.fullName || '').trim();
+      const email = String(payload?.email || '').trim().toLowerCase();
+      const phoneNumber = String(payload?.phoneNumber || '').trim();
+      const serviceType = String(payload?.serviceType || '').trim();
+      const message = String(payload?.message || '').trim();
+      const authUserId = payload?.authUserId ? String(payload.authUserId) : null;
+
+      let linkedUserId = null;
+      if (authUserId) {
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('id')
+          .eq('auth_user_id', authUserId)
+          .maybeSingle();
+        linkedUserId = userRow?.id || null;
+      }
+
+      const { data, error: insertError } = await supabase
+        .from('contact_messages')
+        .insert({
+          user_id: linkedUserId,
+          full_name: fullName,
+          email,
+          phone_number: phoneNumber,
+          service_type: serviceType,
+          message,
+          source: payload?.source || 'website_contact_form',
+          page: payload?.page || '/contact',
+          status: 'new',
+          metadata: {
+            fallback: 'frontend_supabase',
+            userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null
+          }
+        })
+        .select('*')
+        .single();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      return {
+        success: true,
+        data,
+        message: 'Message submitted successfully'
+      };
+    }
   }
 
   async getAdminContactMessages(limit = 100, status = null, adminAuthUserId = null) {
@@ -872,8 +926,25 @@ class ApiService {
         try {
           return await this.request(q ? `/api/contact/admin/messages?${q}` : '/api/contact/admin/messages');
         } catch (fallbackError) {
-          if (fallbackError?.status === 404) {
-            return { success: true, data: [] };
+          if (fallbackError?.status === 404 && adminAuthUserId) {
+            const { data: adminUser, error: adminLookupError } = await supabase
+              .from('users')
+              .select('id, role')
+              .eq('auth_user_id', adminAuthUserId)
+              .maybeSingle();
+            if (adminLookupError || !adminUser || String(adminUser.role || '').toLowerCase() !== 'admin') {
+              return { success: true, data: [] };
+            }
+
+            let query = supabase
+              .from('contact_messages')
+              .select('*')
+              .order('created_at', { ascending: false })
+              .limit(limit ?? 100);
+            if (status) query = query.eq('status', status);
+
+            const { data } = await query;
+            return { success: true, data: data || [] };
           }
           throw fallbackError;
         }
