@@ -6,7 +6,7 @@ import { validationUtils } from '../utils/validation';
 import { apiService } from '../services/api';
 import './ChangePasswordModal.css';
 
-const ChangePasswordModal = ({ isOpen, onClose, userId }) => {
+const ChangePasswordModal = ({ isOpen, onClose, userId, userEmail }) => {
   const [formData, setFormData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -94,6 +94,7 @@ const ChangePasswordModal = ({ isOpen, onClose, userId }) => {
       // Call the API to change password
       const response = await apiService.changePassword({
         userId,
+        email: userEmail || null,
         currentPassword: formData.currentPassword,
         newPassword: formData.newPassword
       });

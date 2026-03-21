@@ -3827,6 +3827,7 @@ const ServiceProviderDashboard = () => {
         isOpen={isChangePasswordModalOpen}
         onClose={() => setIsChangePasswordModalOpen(false)}
         userId={user?.id}
+        userEmail={user?.email}
       />
     </div>
   );

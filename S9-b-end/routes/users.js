@@ -1,19 +1,35 @@
 const express = require('express');
 const router = express.Router();
+const { createClient } = require('@supabase/supabase-js');
 const UserService = require('../services/userService');
 const { supabase } = require('../lib/supabase');
 const { sendSuspensionEmail, sendReactivationEmail } = require('../services/emailService');
+const { createNotification, notifyAdminsProviderTimeOffCreated, notifyAdminsProviderAvailabilityUpdated } = require('../services/notificationService');
 
 const userService = new UserService();
+const supabaseAuthClient = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null;
 
 // Helper function to check if provider profile is complete
+// This operates on the provider_profiles row shape (not the old combined profile)
 const checkProfileCompletion = (profile) => {
+  if (!profile) return false;
+
+  // We only validate fields that actually live in provider_profiles
   const requiredFields = [
-    'first_name', 'last_name', 'phone', 'address', 'city', 'state', 'pincode',
-    'specialization', 'years_of_experience', 'hourly_rate'
+    'first_name',
+    'last_name',
+    'phone',
+    'address',
+    'city',
+    'state',
+    'pincode',
+    'years_of_experience',
+    'hourly_rate'
   ];
-  
-  return requiredFields.every(field => {
+
+  return requiredFields.every((field) => {
     const value = profile[field];
     return value !== null && value !== undefined && value !== '';
   });
@@ -38,11 +54,38 @@ router.post('/change-password', async (req, res) => {
     }
 
     // Fetch user
-    let { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id, email, password_hash, supabase_auth, auth_user_id')
-      .eq(userId ? 'id' : 'email', userId || String(emailFromBody || '').toLowerCase())
-      .single();
+    let user = null;
+    let userError = null;
+    if (userId) {
+      const byIdResp = await supabase
+        .from('users')
+        .select('id, email, password_hash, supabase_auth, auth_user_id')
+        .eq('id', userId)
+        .maybeSingle();
+      user = byIdResp.data;
+      userError = byIdResp.error;
+
+      // When frontend sends auth.users id, resolve through auth_user_id too.
+      if (!user) {
+        const byAuthIdResp = await supabase
+          .from('users')
+          .select('id, email, password_hash, supabase_auth, auth_user_id')
+          .eq('auth_user_id', userId)
+          .maybeSingle();
+        user = byAuthIdResp.data;
+        userError = byAuthIdResp.error;
+      }
+    } else {
+      const normalizedEmail = String(emailFromBody || '').trim().toLowerCase();
+      const byEmailResp = await supabase
+        .from('users')
+        .select('id, email, password_hash, supabase_auth, auth_user_id')
+        .eq('email', normalizedEmail)
+        .maybeSingle();
+      user = byEmailResp.data;
+      userError = byEmailResp.error;
+    }
+
     if ((userError || !user) && !userId && emailFromBody) {
       // Try normalized email
       const normalized = String(emailFromBody).trim().toLowerCase();
@@ -50,7 +93,7 @@ router.post('/change-password', async (req, res) => {
         .from('users')
         .select('id, email, password_hash, supabase_auth, auth_user_id')
         .eq('email', normalized)
-        .single();
+        .maybeSingle();
       user = resp.data; userError = resp.error;
     }
 
@@ -58,17 +101,29 @@ router.post('/change-password', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Verify current password (demo uses base64 encoding)
+    // Verify current password
     const providedPlain = String(currentPassword || '').trim();
-    const providedHash = Buffer.from(providedPlain).toString('base64');
-    const storedHash = user.password_hash ? String(user.password_hash) : '';
-
-    // If no password is set yet (legacy/seeded users) OR account is supabase-auth, allow setting directly
     let isMatch = false;
-    if (!storedHash || user?.supabase_auth === true) {
-      isMatch = true;
-    } else {
-      // Accept either base64 match or plain-text match after decoding stored value
+    const isSupabaseLinked = user?.supabase_auth === true || Boolean(user?.auth_user_id);
+
+    // Prefer Supabase auth verification for linked accounts.
+    if (isSupabaseLinked && supabaseAuthClient && user?.email) {
+      const { data: signInData, error: signInError } = await supabaseAuthClient.auth.signInWithPassword({
+        email: String(user.email),
+        password: providedPlain
+      });
+
+      if (!signInError && signInData?.user) {
+        isMatch = true;
+        // Keep auth client clean; this does not affect browser session.
+        await supabaseAuthClient.auth.signOut();
+      }
+    }
+
+    // Fallback to legacy hash verification when not matched above.
+    if (!isMatch) {
+      const providedHash = Buffer.from(providedPlain).toString('base64');
+      const storedHash = user.password_hash ? String(user.password_hash) : '';
       const decodedStored = (() => {
         try { return Buffer.from(storedHash, 'base64').toString(); } catch (_) { return null; }
       })();
@@ -90,7 +145,7 @@ router.post('/change-password', async (req, res) => {
     const newHash = Buffer.from(String(newPassword)).toString('base64');
 
     // If this is a Supabase-auth user, update the auth password first via admin API
-    if (user?.supabase_auth === true && user?.auth_user_id) {
+    if (user?.auth_user_id) {
       const { error: adminUpdateError } = await supabase.auth.admin.updateUserById(user.auth_user_id, { password: String(newPassword) });
       if (adminUpdateError) {
         return res.status(500).json({ error: adminUpdateError.message || 'Failed to update Supabase auth password' });
@@ -434,29 +489,41 @@ router.post('/profile/complete-provider', async (req, res) => {
         hint: profileError.hint,
         code: profileError.code
       });
+      const hint = profileError.hint || profileError.details || '';
       return res.status(500).json({ 
         error: 'Failed to save provider profile',
-        details: profileError.message 
+        details: profileError.message,
+        hint: typeof hint === 'string' ? hint : JSON.stringify(hint)
       });
     }
 
     console.log('Profile upsert successful:', upsertData);
 
-    // Update the status to 'pending' after successful insert
-    // This works around the database default value issue
-    const { error: statusUpdateError } = await supabase
-      .from('provider_profiles')
-      .update({ 
-        status: 'pending',
-        updated_at: new Date().toISOString()
-      })
-      .eq('provider_id', providerId);
-    
-    if (statusUpdateError) {
-      console.warn('Failed to update status to pending:', statusUpdateError);
-      // Don't fail the request, just log the warning
+    // When a provider successfully completes the profile flow, treat it as verified
+    // (unless explicitly suspended by an admin). This makes re‑completing the
+    // profile after fixing data automatically move them back to a verified state.
+    const existingStatus = Array.isArray(upsertData) && upsertData[0]
+      ? upsertData[0].status
+      : null;
+
+    const shouldUpdateToVerified = existingStatus !== 'suspended';
+
+    if (shouldUpdateToVerified) {
+      const { error: statusUpdateError } = await supabase
+        .from('provider_profiles')
+        .update({ 
+          status: 'verified',
+          updated_at: new Date().toISOString()
+        })
+        .eq('provider_id', providerId);
+      
+      if (statusUpdateError) {
+        console.warn('Failed to update status to verified:', statusUpdateError);
+      } else {
+        console.log('Status updated to verified after profile completion');
+      }
     } else {
-      console.log('Status updated to pending successfully');
+      console.log('Profile status left as suspended; not auto‑verifying');
     }
 
     res.json({ 
@@ -666,17 +733,75 @@ router.put('/profile/provider/:providerId', async (req, res) => {
     // Add updated_at timestamp
     filteredUpdateData.updated_at = new Date().toISOString();
 
-    // Update the profile
-    const { data: updatedProfile, error: updateError } = await supabase
+    // Update the profile (with graceful fallback if some columns don't exist in older schemas)
+    let updatedProfile;
+    let updateError;
+
+    const primaryResult = await supabase
       .from('provider_profiles')
       .update(filteredUpdateData)
       .eq('provider_id', providerId)
       .select()
       .single();
 
+    updatedProfile = primaryResult.data;
+    updateError = primaryResult.error;
+
+    // If the first update failed because certain columns are missing (older DB schema),
+    // retry without the optional fields that were added in later migrations.
+    if (updateError) {
+      const message = String(updateError.message || '').toLowerCase();
+      const isUndefinedColumn =
+        updateError.code === '42703' ||
+        (message.includes('column') && message.includes('does not exist'));
+
+      if (isUndefinedColumn) {
+        console.warn(
+          'Provider profile update failed due to missing column, retrying without hourly_rate / years_of_experience:',
+          updateError
+        );
+
+        const fallbackData = { ...filteredUpdateData };
+        delete fallbackData.hourly_rate;
+        delete fallbackData.years_of_experience;
+
+        const fallbackResult = await supabase
+          .from('provider_profiles')
+          .update(fallbackData)
+          .eq('provider_id', providerId)
+          .select()
+          .single();
+
+        updatedProfile = fallbackResult.data;
+        updateError = fallbackResult.error;
+      }
+    }
+
     if (updateError) {
       console.error('Update provider profile error:', updateError);
-      return res.status(500).json({ error: 'Failed to update provider profile' });
+      return res.status(500).json({
+        error: 'Failed to update provider profile',
+        details: updateError.message,
+        code: updateError.code || undefined
+      });
+    }
+
+    // Keep service_provider_details.experience_years in sync when years_of_experience changes
+    if (filteredUpdateData.years_of_experience !== undefined) {
+      const years = parseInt(filteredUpdateData.years_of_experience, 10);
+      if (!Number.isNaN(years)) {
+        try {
+          await supabase
+            .from('service_provider_details')
+            .update({
+              experience_years: years,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', providerId);
+        } catch (syncErr) {
+          console.warn('Failed to sync experience_years to service_provider_details:', syncErr);
+        }
+      }
     }
 
     // Check if profile is now complete and should be set to pending
@@ -708,6 +833,284 @@ router.put('/profile/provider/:providerId', async (req, res) => {
   } catch (error) {
     console.error('Update provider profile error:', error);
     res.status(500).json({ error: error.message || 'Failed to update provider profile' });
+  }
+});
+
+// Create a wage increase request for a provider (worker)
+router.post('/provider/:providerId/wage-requests', async (req, res) => {
+  try {
+    const { providerId } = req.params;
+    const { requested_hourly_rate, reason } = req.body || {};
+
+    if (!providerId) {
+      return res.status(400).json({ error: 'providerId is required' });
+    }
+
+    const requestedRate = parseFloat(requested_hourly_rate);
+    if (!requestedRate || !Number.isFinite(requestedRate) || requestedRate <= 0) {
+      return res.status(400).json({ error: 'Requested hourly rate must be a positive number' });
+    }
+
+    // Load current provider profile to get current hourly rate
+    const { data: profile, error: profileError } = await supabase
+      .from('provider_profiles')
+      .select('provider_id, hourly_rate, first_name, last_name')
+      .eq('provider_id', providerId)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error('Error fetching provider profile for wage request:', profileError);
+      return res.status(500).json({ error: 'Failed to load provider profile' });
+    }
+
+    if (!profile) {
+      return res.status(404).json({ error: 'Provider profile not found' });
+    }
+
+    const currentRate = parseFloat(profile.hourly_rate) || 0;
+
+    // Only allow increase requests
+    if (requestedRate <= currentRate) {
+      return res.status(400).json({ error: 'Requested hourly rate must be greater than current rate' });
+    }
+
+    // Enforce maximum increase of ₹200 over current rate
+    const maxIncrease = 200;
+    if (requestedRate - currentRate > maxIncrease) {
+      return res.status(400).json({ error: `You can request at most ₹${maxIncrease} increase at a time` });
+    }
+
+    // Ensure there is no other pending wage request for this provider
+    const { data: existingPending, error: pendingError } = await supabase
+      .from('provider_wage_requests')
+      .select('id, status')
+      .eq('provider_id', providerId)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (pendingError && pendingError.code !== 'PGRST116') {
+      console.error('Error checking existing wage requests:', pendingError);
+      return res.status(500).json({ error: 'Failed to check existing wage requests' });
+    }
+
+    if (existingPending && existingPending.id) {
+      return res.status(400).json({ error: 'You already have a pending wage increase request' });
+    }
+
+    // Create wage request
+    const { data: newRequest, error: insertError } = await supabase
+      .from('provider_wage_requests')
+      .insert({
+        provider_id: providerId,
+        current_hourly_rate: currentRate,
+        requested_hourly_rate: requestedRate,
+        reason: reason || null,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Error creating wage request:', insertError);
+      return res.status(500).json({ error: 'Failed to create wage request' });
+    }
+
+    // Fetch provider user details for nicer admin message (optional)
+    let providerName = null;
+    try {
+      const { data: userRow, error: userError } = await supabase
+        .from('users')
+        .select('id, email, user_profiles(first_name, last_name)')
+        .eq('id', providerId)
+        .maybeSingle();
+
+      if (!userError && userRow) {
+        const profilePart = Array.isArray(userRow.user_profiles)
+          ? userRow.user_profiles[0]
+          : userRow.user_profiles;
+        const firstName = profilePart?.first_name || '';
+        const lastName = profilePart?.last_name || '';
+        const fullName = `${firstName} ${lastName}`.trim();
+        providerName = fullName || userRow.email || null;
+      }
+    } catch (e) {
+      console.warn('Unable to resolve provider display name for wage request:', e);
+    }
+
+    const currentRateStr = currentRate.toFixed(2);
+    const requestedRateStr = requestedRate.toFixed(2);
+
+    // Notify all active admins about this wage increase request
+    try {
+      const { data: admins, error: adminsError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'admin')
+        .eq('status', 'active');
+
+      if (adminsError) {
+        console.error('Error fetching admins for wage request notification:', adminsError);
+      } else if (admins && admins.length > 0) {
+        const title = 'Wage increase request';
+        const baseMessage = `${providerName || 'A service provider'} requested an hourly rate increase from ₹${currentRateStr} to ₹${requestedRateStr}.`;
+        const fullMessage = reason
+          ? `${baseMessage} Reason: ${reason}`
+          : baseMessage;
+
+        const metadata = {
+          provider_id: providerId,
+          provider_name: providerName,
+          wage_request_id: newRequest.id,
+          current_hourly_rate: currentRate,
+          requested_hourly_rate: requestedRate
+        };
+
+        for (const admin of admins) {
+          await createNotification({
+            type: 'wage_increase_request',
+            title,
+            message: fullMessage,
+            recipient_id: admin.id,
+            sender_id: providerId,
+            status: 'unread',
+            priority: 'medium',
+            metadata
+          });
+        }
+      }
+    } catch (notifyError) {
+      console.error('Failed to send wage request notifications to admins:', notifyError);
+      // Do not fail the request because of notification issues
+    }
+
+    return res.json({
+      success: true,
+      message: 'Wage increase request submitted successfully',
+      data: newRequest
+    });
+  } catch (error) {
+    console.error('Create wage request error:', error);
+    res.status(500).json({ error: error.message || 'Failed to create wage request' });
+  }
+});
+
+// Create a time off / leave request for a provider (worker)
+router.post('/provider/:providerId/time-off', async (req, res) => {
+  try {
+    const { providerId } = req.params;
+    const { start_date, end_date, reason } = req.body || {};
+
+    if (!providerId) {
+      return res.status(400).json({ error: 'providerId is required' });
+    }
+
+    if (!start_date) {
+      return res.status(400).json({ error: 'start_date is required' });
+    }
+
+    const start = String(start_date);
+    const end = end_date ? String(end_date) : start;
+
+    if (isNaN(Date.parse(start)) || isNaN(Date.parse(end))) {
+      return res.status(400).json({ error: 'start_date and end_date must be valid dates' });
+    }
+
+    if (new Date(end) < new Date(start)) {
+      return res.status(400).json({ error: 'end_date cannot be before start_date' });
+    }
+
+    const { data: inserted, error: insertError } = await supabase
+      .from('provider_time_off')
+      .insert({
+        provider_id: providerId,
+        start_date: start,
+        end_date: end,
+        reason: reason || null,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Error creating provider time off:', insertError);
+      return res.status(500).json({ error: 'Failed to create time off request' });
+    }
+
+    // Resolve provider display name for nicer admin notification
+    let providerName = null;
+    try {
+      const { data: userRow, error: userError } = await supabase
+        .from('users')
+        .select('email, user_profiles(first_name, last_name)')
+        .eq('id', providerId)
+        .maybeSingle();
+
+      if (!userError && userRow) {
+        const profilePart = Array.isArray(userRow.user_profiles)
+          ? userRow.user_profiles[0]
+          : userRow.user_profiles;
+        const firstName = profilePart?.first_name || '';
+        const lastName = profilePart?.last_name || '';
+        const fullName = `${firstName} ${lastName}`.trim();
+        providerName = fullName || userRow.email || null;
+      }
+    } catch (e) {
+      console.warn('Unable to resolve provider display name for time off request:', e);
+    }
+
+    // Notify admins that this provider has requested time off
+    try {
+      await notifyAdminsProviderTimeOffCreated({
+        providerId,
+        providerName,
+        start_date: inserted.start_date,
+        end_date: inserted.end_date,
+        status: inserted.status,
+        reason: inserted.reason
+      });
+    } catch (notifyErr) {
+      console.warn('Failed to notify admins about provider time off:', notifyErr);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Time off request submitted successfully',
+      data: inserted
+    });
+  } catch (error) {
+    console.error('Create provider time off error:', error);
+    res.status(500).json({ error: error.message || 'Failed to create time off request' });
+  }
+});
+
+// Get time off / leave requests for a provider (worker dashboard)
+router.get('/provider/:providerId/time-off', async (req, res) => {
+  try {
+    const { providerId } = req.params;
+
+    if (!providerId) {
+      return res.status(400).json({ error: 'providerId is required' });
+    }
+
+    const { data, error } = await supabase
+      .from('provider_time_off')
+      .select('*')
+      .eq('provider_id', providerId)
+      .order('start_date', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching provider time off:', error);
+      return res.status(500).json({ error: 'Failed to fetch time off requests' });
+    }
+
+    return res.json({
+      success: true,
+      data: data || []
+    });
+  } catch (error) {
+    console.error('Get provider time off error:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch time off requests' });
   }
 });
 
@@ -805,11 +1208,127 @@ router.post('/profile/complete', async (req, res) => {
   }
 });
 
+// Update only availability for a provider (worker dashboard)
+router.put('/provider/:providerId/availability', async (req, res) => {
+  try {
+    const { providerId } = req.params;
+    const { availability } = req.body || {};
+
+    if (!providerId) {
+      return res.status(400).json({ error: 'providerId is required' });
+    }
+
+    if (!availability || typeof availability !== 'object') {
+      return res.status(400).json({ error: 'availability object is required' });
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const { error: spError } = await supabase
+      .from('service_provider_details')
+      .upsert(
+        {
+          id: providerId,
+          availability,
+          updated_at: nowIso
+        },
+        { onConflict: 'id' }
+      );
+
+    if (spError) {
+      console.error('Update provider availability error:', spError);
+      return res.status(500).json({ error: 'Failed to update provider availability' });
+    }
+
+    // Build upcoming slots (next 7 days only) for notifications
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const max = new Date(today);
+    max.setDate(max.getDate() + 7);
+
+    const slots = [];
+    const dayIndex = {
+      sunday: 0,
+      monday: 1,
+      tuesday: 2,
+      wednesday: 3,
+      thursday: 4,
+      friday: 5,
+      saturday: 6
+    };
+    try {
+      Object.entries(availability || {}).forEach(([dayKey, schedule]) => {
+        if (!schedule || schedule.available === false) return;
+        const targetIndex = dayIndex[dayKey];
+        if (targetIndex === undefined) return;
+        for (let offset = 0; offset <= 6; offset++) {
+          const d = new Date(today);
+          d.setDate(today.getDate() + offset);
+          if (d > max) break;
+          if (d.getDay() !== targetIndex) continue;
+          const dateStr = d.toISOString().slice(0, 10);
+          slots.push({
+            date: dateStr,
+            day: dayKey,
+            start: schedule.start || '08:00',
+            end: schedule.end || '17:00'
+          });
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to build provider availability slots for notification:', e);
+    }
+
+    // Resolve provider name for nicer admin message
+    let providerName = null;
+    try {
+      const { data: userRow, error: userError } = await supabase
+        .from('users')
+        .select('email, user_profiles(first_name, last_name)')
+        .eq('id', providerId)
+        .maybeSingle();
+
+      if (!userError && userRow) {
+        const profilePart = Array.isArray(userRow.user_profiles)
+          ? userRow.user_profiles[0]
+          : userRow.user_profiles;
+        const firstName = profilePart?.first_name || '';
+        const lastName = profilePart?.last_name || '';
+        const fullName = `${firstName} ${lastName}`.trim();
+        providerName = fullName || userRow.email || null;
+      }
+    } catch (e) {
+      console.warn('Unable to resolve provider display name for availability update:', e);
+    }
+
+    // Notify admins that availability has been updated (include dates/times)
+    if (slots.length > 0) {
+      try {
+        await notifyAdminsProviderAvailabilityUpdated({
+          providerId,
+          providerName,
+          slots
+        });
+      } catch (notifyErr) {
+        console.warn('Failed to notify admins about provider availability update:', notifyErr);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Availability updated successfully'
+    });
+  } catch (error) {
+    console.error('Update provider availability exception:', error);
+    res.status(500).json({ error: error.message || 'Failed to update provider availability' });
+  }
+});
+
 // Update provider profile status (Admin function)
 router.put('/admin/profile/:providerId/status', async (req, res) => {
   try {
     const { providerId } = req.params;
-    const { status, reason } = req.body;
+    let { status, reason } = req.body;
     
     console.log('Received status update request:', {
       providerId,
