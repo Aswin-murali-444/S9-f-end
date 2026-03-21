@@ -608,44 +608,112 @@ const AdminDashboard = () => {
     return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
   };
 
+  const computePaymentInsightsFromBilling = (billingData) => {
+    const customerPayments = Array.isArray(billingData?.customer_payments) ? billingData.customer_payments : [];
+    const providerPayouts = Array.isArray(billingData?.provider_payouts) ? billingData.provider_payouts : [];
+
+    const byBooking = new Map();
+    customerPayments.forEach((p) => byBooking.set(String(p.booking_id), p));
+
+    const isWorkerPaid = (status) => {
+      const s = String(status || '').toLowerCase();
+      return ['paid', 'completed', 'success', 'earned'].includes(s);
+    };
+
+    const byService = new Map();
+    const getBucket = (serviceName) => {
+      const key = serviceName || 'Unknown Service';
+      if (!byService.has(key)) {
+        byService.set(key, { serviceName: key, jobsCount: 0, customerPaid: 0, workerPaid: 0 });
+      }
+      return byService.get(key);
+    };
+
+    let customerPaid = 0;
+    let workerPaid = 0;
+    let pendingWorkerPayout = 0;
+
+    customerPayments.forEach((p) => {
+      const bucket = getBucket(p.service_name);
+      const amt = Number(p.total_amount || 0);
+      bucket.jobsCount += 1;
+      bucket.customerPaid += amt;
+      customerPaid += amt;
+    });
+
+    providerPayouts.forEach((p) => {
+      const linked = byBooking.get(String(p.booking_id));
+      const bucket = getBucket(linked?.service_name || p.service_name);
+      const amt = Number(p.amount || 0);
+      if (isWorkerPaid(p.status)) {
+        bucket.workerPaid += amt;
+        workerPaid += amt;
+      } else {
+        pendingWorkerPayout += amt;
+      }
+    });
+
+    const rows = Array.from(byService.values())
+      .map((r) => {
+        const companyProfit = r.customerPaid - r.workerPaid;
+        const marginPct = r.customerPaid > 0 ? (companyProfit / r.customerPaid) * 100 : 0;
+        return { ...r, companyProfit, marginPct };
+      })
+      .sort((a, b) => b.customerPaid - a.customerPaid);
+
+    setPaymentInsights({
+      totals: {
+        customerPaid,
+        workerPaid,
+        pendingWorkerPayout,
+        companyProfit: customerPaid - workerPaid
+      },
+      byService: rows
+    });
+  };
+
   const fetchAnalyticsSummary = async (days = analyticsRangeDays) => {
     try {
-      const [summaryResponse, paymentInsightsResponse] = await Promise.all([
+      const [summaryResponse, paymentInsightsResponse, billingResponse] = await Promise.all([
         apiService.getAdminAnalyticsSummary(days),
-        apiService.getAdminPaymentInsights(days)
+        apiService.getAdminPaymentInsights(days),
+        apiService.getAdminBillingSummary(500)
       ]);
       const response = summaryResponse;
-      if (!response?.success || !response?.data) return;
-      const d = response.data;
-      setAnalytics({
-        userGrowth: {
-          current: Number(d?.userGrowth?.current || 0),
-          previous: Number(d?.userGrowth?.previous || 0),
-          change: formatChangeLabel(d?.userGrowth?.change)
-        },
-        revenueGrowth: {
-          current: Number(d?.revenueGrowth?.current || 0),
-          previous: Number(d?.revenueGrowth?.previous || 0),
-          change: formatChangeLabel(d?.revenueGrowth?.change)
-        },
-        serviceRequests: {
-          current: Number(d?.serviceRequests?.current || 0),
-          previous: Number(d?.serviceRequests?.previous || 0),
-          change: formatChangeLabel(d?.serviceRequests?.change)
-        },
-        customerSatisfaction: {
-          current: Number(d?.customerSatisfaction?.current || 0),
-          previous: Number(d?.customerSatisfaction?.previous || 0),
-          change: formatChangeLabel(d?.customerSatisfaction?.change)
-        }
-      });
-      setPerformanceData((prev) => ({
-        ...prev,
-        systemPerformance: Array.isArray(d?.trends?.systemPerformance) ? d.trends.systemPerformance : [],
-        securityScore: Array.isArray(d?.trends?.securityScore) ? d.trends.securityScore : []
-      }));
+      if (response?.success && response?.data) {
+        const d = response.data;
+        setAnalytics({
+          userGrowth: {
+            current: Number(d?.userGrowth?.current || 0),
+            previous: Number(d?.userGrowth?.previous || 0),
+            change: formatChangeLabel(d?.userGrowth?.change)
+          },
+          revenueGrowth: {
+            current: Number(d?.revenueGrowth?.current || 0),
+            previous: Number(d?.revenueGrowth?.previous || 0),
+            change: formatChangeLabel(d?.revenueGrowth?.change)
+          },
+          serviceRequests: {
+            current: Number(d?.serviceRequests?.current || 0),
+            previous: Number(d?.serviceRequests?.previous || 0),
+            change: formatChangeLabel(d?.serviceRequests?.change)
+          },
+          customerSatisfaction: {
+            current: Number(d?.customerSatisfaction?.current || 0),
+            previous: Number(d?.customerSatisfaction?.previous || 0),
+            change: formatChangeLabel(d?.customerSatisfaction?.change)
+          }
+        });
+        setPerformanceData((prev) => ({
+          ...prev,
+          systemPerformance: Array.isArray(d?.trends?.systemPerformance) ? d.trends.systemPerformance : [],
+          securityScore: Array.isArray(d?.trends?.securityScore) ? d.trends.securityScore : []
+        }));
+      }
       if (paymentInsightsResponse?.success && paymentInsightsResponse?.data) {
         setPaymentInsights(paymentInsightsResponse.data);
+      } else if (billingResponse?.success && billingResponse?.data) {
+        computePaymentInsightsFromBilling(billingResponse.data);
       } else {
         setPaymentInsights({
           totals: {
@@ -659,6 +727,14 @@ const AdminDashboard = () => {
       }
     } catch (error) {
       console.error('Failed to fetch analytics summary:', error);
+      try {
+        const billingFallback = await apiService.getAdminBillingSummary(500);
+        if (billingFallback?.success && billingFallback?.data) {
+          computePaymentInsightsFromBilling(billingFallback.data);
+        }
+      } catch (_) {
+        // fallback failed; keep current values
+      }
     }
   };
 
