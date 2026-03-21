@@ -915,6 +915,10 @@ class ApiService {
       const serviceType = String(payload?.serviceType || '').trim();
       const message = String(payload?.message || '').trim();
       const authUserId = payload?.authUserId ? String(payload.authUserId) : null;
+      const source = String(payload?.source || 'website_contact_form');
+      const supportSubject = String(payload?.subject || '').trim();
+      const supportPriority = String(payload?.priority || 'normal').trim().toLowerCase();
+      const isProviderSupport = source === 'provider_dashboard_settings';
 
       let linkedUserId = null;
       if (authUserId) {
@@ -935,7 +939,7 @@ class ApiService {
           phone_number: phoneNumber,
           service_type: serviceType,
           message,
-          source: payload?.source || 'website_contact_form',
+          source,
           page: payload?.page || '/contact',
           status: 'new',
           metadata: {
@@ -948,6 +952,21 @@ class ApiService {
 
       if (insertError) {
         throw insertError;
+      }
+
+      if (isProviderSupport && linkedUserId) {
+        const { error: supportInsertError } = await supabase
+          .from('provider_admin_support_messages')
+          .insert({
+            contact_message_id: data.id,
+            provider_user_id: linkedUserId,
+            subject: supportSubject || 'Provider support request',
+            priority: ['low', 'normal', 'high'].includes(supportPriority) ? supportPriority : 'normal',
+            status: 'open'
+          });
+        if (supportInsertError) {
+          throw supportInsertError;
+        }
       }
 
       return {
@@ -985,7 +1004,20 @@ class ApiService {
 
             let query = supabase
               .from('contact_messages')
-              .select('*')
+              .select(`
+                *,
+                provider_admin_support_messages (
+                  id,
+                  provider_user_id,
+                  subject,
+                  priority,
+                  status,
+                  admin_user_id,
+                  admin_reply,
+                  replied_at,
+                  created_at
+                )
+              `)
               .order('created_at', { ascending: false })
               .limit(limit ?? 100);
             if (status) query = query.eq('status', status);

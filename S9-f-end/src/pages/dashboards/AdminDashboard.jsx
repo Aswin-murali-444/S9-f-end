@@ -3748,7 +3748,7 @@ const AdminDashboard = () => {
                 <div className="content-grid feedback-single-column">
                   <div className="content-card feedback-inbox-card">
                     <div className="feedback-inbox-header">
-                      <h3>Contact Form Messages</h3>
+                      <h3>Contact & Provider Support Messages</h3>
                       <span className="status-badge info">{contactMessages.length} total</span>
                     </div>
                     {feedbackLoading ? (
@@ -3757,7 +3757,11 @@ const AdminDashboard = () => {
                       <div className="empty">No contact messages yet</div>
                     ) : (
                       <div className="list-table feedback-message-list">
-                        {contactMessages.map((msg) => (
+                        {contactMessages.map((msg) => {
+                          const supportMetaRaw = msg.provider_admin_support_messages;
+                          const supportMeta = Array.isArray(supportMetaRaw) ? supportMetaRaw[0] : supportMetaRaw;
+                          const supportPriority = String(supportMeta?.priority || '').toLowerCase();
+                          return (
                           <article key={msg.id} className="feedback-message-row">
                             <div className="feedback-message-top">
                               <div className="feedback-sender-wrap">
@@ -3789,6 +3793,14 @@ const AdminDashboard = () => {
                                     .join(' ')}
                                 </span>
                               </div>
+                              {supportMeta && (
+                                <div className="feedback-field-group">
+                                  <span className="feedback-field-label">Provider Support</span>
+                                  <span className={`status-badge ${supportPriority === 'high' ? 'warning' : supportPriority === 'low' ? 'info' : 'success'}`}>
+                                    {supportMeta.subject || 'Support request'} ({supportPriority || 'normal'})
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             <div className="feedback-contact-meta">
@@ -3827,7 +3839,8 @@ const AdminDashboard = () => {
                               </span>
                             </div>
                           </article>
-                        ))}
+                        );
+                        })}
                       </div>
                     )}
                   </div>

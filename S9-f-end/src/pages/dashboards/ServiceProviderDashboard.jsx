@@ -1052,27 +1052,43 @@ const ServiceProviderDashboard = () => {
   const handleSendAdminMessage = async () => {
     const subject = adminMessageForm.subject.trim();
     const message = adminMessageForm.message.trim();
-    const priority = adminMessageForm.priority;
+    const priority = String(adminMessageForm.priority || 'normal').toLowerCase();
 
-    if (!message || message.length < 10) {
-      toast.error('Please enter at least 10 characters in your message.');
+    if (!subject || subject.length < 5) {
+      toast.error('Please add a subject with at least 5 characters.');
       return;
     }
 
-    if (!subject) {
-      toast.error('Please add a subject for your message.');
+    if (subject.length > 120) {
+      toast.error('Subject must be within 120 characters.');
+      return;
+    }
+
+    if (!['low', 'normal', 'high'].includes(priority)) {
+      toast.error('Please select a valid priority.');
+      return;
+    }
+
+    if (!message || message.length < 20) {
+      toast.error('Please enter at least 20 characters in your message.');
+      return;
+    }
+
+    if (message.length > 1500) {
+      toast.error('Message must be within 1500 characters.');
       return;
     }
 
     try {
       setAdminMessageSending(true);
-      const composedMessage = `[Priority: ${priority.toUpperCase()}]\nSubject: ${subject}\n\n${message}`;
       await apiService.submitContactMessage({
         fullName: profile?.name || 'Service Provider',
         email: profile?.email || user?.email || '',
         phoneNumber: profile?.phone || '',
         serviceType: profile?.service || profile?.specialization || 'Service Provider',
-        message: composedMessage,
+        message,
+        subject,
+        priority,
         source: 'provider_dashboard_settings',
         page: '/dashboard/provider/settings',
         authUserId: user?.id
@@ -3610,6 +3626,7 @@ const ServiceProviderDashboard = () => {
                           value={adminMessageForm.subject}
                           onChange={(e) => setAdminMessageForm(prev => ({ ...prev, subject: e.target.value }))}
                           placeholder="Example: Need help with job assignment"
+                          maxLength={120}
                         />
                       </div>
                       <div className="admin-message-field admin-message-priority">
@@ -3631,6 +3648,8 @@ const ServiceProviderDashboard = () => {
                         value={adminMessageForm.message}
                         onChange={(e) => setAdminMessageForm(prev => ({ ...prev, message: e.target.value }))}
                         placeholder="Write your message to admin..."
+                        minLength={20}
+                        maxLength={1500}
                       />
                     </div>
                     <div className="admin-message-actions">
