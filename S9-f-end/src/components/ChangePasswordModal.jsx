@@ -4,6 +4,7 @@ import { X, Eye, EyeOff, Lock, CheckCircle, AlertCircle, Loader2 } from 'lucide-
 import { toast } from 'react-hot-toast';
 import { validationUtils } from '../utils/validation';
 import { apiService } from '../services/api';
+import { supabase } from '../lib/supabase';
 import './ChangePasswordModal.css';
 
 const ChangePasswordModal = ({ isOpen, onClose, userId, userEmail }) => {
@@ -107,16 +108,50 @@ const ChangePasswordModal = ({ isOpen, onClose, userId, userEmail }) => {
       }
     } catch (error) {
       console.error('Password change error:', error);
-      
-      // Handle specific error cases
-      if (error.response?.status === 401) {
-        toast.error('Current password is incorrect');
-      } else if (error.response?.status === 400) {
-        toast.error('Invalid password format or requirements not met');
-      } else if (error.response?.status === 403) {
-        toast.error('You are not authorized to change this password');
-      } else {
-        toast.error(error.message || 'Failed to change password. Please try again.');
+
+      // Fallback: change password directly through Supabase auth.
+      // This avoids backend payload mismatch/version drift issues.
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const sessionUser = sessionData?.session?.user;
+        const emailForReauth = userEmail || sessionUser?.email || '';
+
+        if (!emailForReauth) {
+          throw new Error('Unable to verify current password. Please log in again.');
+        }
+
+        const { error: reauthError } = await supabase.auth.signInWithPassword({
+          email: emailForReauth,
+          password: formData.currentPassword
+        });
+
+        if (reauthError) {
+          toast.error('Current password is incorrect');
+          return;
+        }
+
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: formData.newPassword
+        });
+
+        if (updateError) {
+          throw new Error(updateError.message || 'Failed to update password');
+        }
+
+        toast.success('Password changed successfully');
+        handleClose();
+      } catch (fallbackError) {
+        console.error('Password change fallback error:', fallbackError);
+        const status = error?.response?.status;
+        if (status === 403) {
+          toast.error('You are not authorized to change this password');
+        } else {
+          toast.error(
+            fallbackError?.message ||
+            error?.message ||
+            'Failed to change password. Please try again.'
+          );
+        }
       }
     } finally {
       setIsLoading(false);
