@@ -8,6 +8,7 @@ Create a `.env` file in the `S9-b-end` directory with the following variables:
 # Supabase Configuration
 SUPABASE_URL=https://zbscbvrklkntlbtefkgw.supabase.co
 SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpic2NidnJrbGtudGxidGVma2d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwODgzOTIsImV4cCI6MjA2ODY2NDM5Mn0.EJbPGMn7kXFgj5IahA2GIiEcA3dTDCbgj9cF09rcsuY
+# Required for server-side reads (recommendations, admin). Anon key + RLS often exposes only 1–2 rows.
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 
 # Server Configuration

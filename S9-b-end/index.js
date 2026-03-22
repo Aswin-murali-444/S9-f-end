@@ -1,4 +1,9 @@
 require('dotenv').config();
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.warn(
+    '[S9-b-end] SUPABASE_SERVICE_ROLE_KEY is not set — client may use anon key; recommendations/admin can return very few rows due to RLS on services.'
+  );
+}
 const express = require('express');
 const cors = require('cors');
 const { supabase } = require('./lib/supabase');

@@ -180,6 +180,13 @@ async function fetchAllActiveServicesForRecommendations(supabase) {
     if (data.length < pageSize) break;
     from += pageSize;
   }
+  if (all.length <= 1) {
+    console.warn(
+      '[recommendations] Loaded',
+      all.length,
+      'catalog service(s). Use SUPABASE_SERVICE_ROLE_KEY on the API if you expect more (anon + RLS often hides rows).'
+    );
+  }
   return all;
 }
 
@@ -194,6 +201,59 @@ async function resolveRecommendationCatalogRows(allCatalogRows, supabase) {
   const fresh = await fetchAllActiveServicesForRecommendations(supabase);
   if (fresh.length > 0) return fresh;
   return Array.isArray(allCatalogRows) ? allCatalogRows : [];
+}
+
+/**
+ * Last-resort fill: fresh `services` read (bypasses stale/wrong in-memory catalog).
+ * Hosted issues are often RLS (anon key) → only 1 row; logs a hint when the pool is tiny.
+ */
+async function forceTopUpRecommendationsIfShort(
+  supabase,
+  recommendations,
+  bookedOnlyExcludeSet,
+  limit,
+  catalogRotationKey,
+  recommendationContext
+) {
+  const cap = Math.max(1, Number(limit) || RECOMMENDATIONS_DEFAULT_LIMIT);
+  let out = Array.isArray(recommendations) ? [...recommendations] : [];
+  if (out.length >= cap) return out.slice(0, cap);
+
+  const { data: rows, error } = await supabase
+    .from('services')
+    .select(SERVICES_SELECT_RECOMMENDATIONS)
+    .order('id', { ascending: true })
+    .limit(500);
+
+  if (error) {
+    console.warn('[recommendations] force top-up query failed:', error.message);
+    return out.slice(0, cap);
+  }
+
+  const rawCount = (rows || []).length;
+  const visible = (rows || []).filter(rowIsRecommendationCatalogVisible);
+  if (rawCount <= 1) {
+    console.warn(
+      '[recommendations] services query returned',
+      rawCount,
+      'row(s). Set SUPABASE_SERVICE_ROLE_KEY on the API host (not anon) so RLS does not hide catalog rows.'
+    );
+  }
+
+  const have = new Set(out.map((r) => normalizeRecServiceId(r.serviceId)).filter(Boolean));
+  const month = recommendationContext?.month;
+  const country =
+    recommendationContext?.country_code || recommendationContext?.countryCode || 'IN';
+  const more = appendCatalogFloatRecs({
+    allCatalogRows: visible,
+    have,
+    excludeSet: bookedOnlyExcludeSet,
+    need: cap - out.length,
+    rotationKey: `${String(catalogRotationKey)}|force`,
+    month,
+    country
+  });
+  return [...out, ...more].slice(0, cap);
 }
 
 /**
@@ -1000,6 +1060,16 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       return stripAlreadyBooked(r);
     };
 
+    const finalizeRecs = async (list) =>
+      forceTopUpRecommendationsIfShort(
+        supabase,
+        list,
+        bookedOnlyExcludeSet,
+        payload.limit,
+        catalogRotationKey,
+        recommendationContext
+      );
+
     const { data: mlData, error: mlError } = await recommendServicesForUser(payload);
 
     if (mlError || !mlData) {
@@ -1007,7 +1077,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       // Simple popularity-based fallback excluding already used services
       const usedSet = bookedOnlyExcludeSet;
       const fallback = popularServices
-        .filter((p) => !usedSet.has(String(p.service_id)))
+        .filter((p) => !usedSet.has(normalizeRecServiceId(p.service_id)))
         .slice(0, payload.limit)
         .map((p) => ({
           service_id: p.service_id,
@@ -1029,7 +1099,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
         );
         return res.json(
           withSeasonalPresentation(
-            await applyDiversity(paddedNone),
+            await finalizeRecs(await applyDiversity(paddedNone)),
             recommendationContext,
             {
               userId,
@@ -1086,7 +1156,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       );
 
       return res.json(
-        withSeasonalPresentation(await applyDiversity(padded), recommendationContext, {
+        withSeasonalPresentation(await finalizeRecs(await applyDiversity(padded)), recommendationContext, {
           userId,
           currentServiceId,
           usedMlService: false,
@@ -1111,7 +1181,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
         recommendationContext
       );
       return res.json(
-        withSeasonalPresentation(await applyDiversity(paddedEmpty), recommendationContext, {
+        withSeasonalPresentation(await finalizeRecs(await applyDiversity(paddedEmpty)), recommendationContext, {
           userId,
           currentServiceId,
           usedMlService: true,
@@ -1166,7 +1236,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     recommendations = await applyDiversity(recommendations);
 
     return res.json(
-      withSeasonalPresentation(recommendations, recommendationContext, {
+      withSeasonalPresentation(await finalizeRecs(recommendations), recommendationContext, {
         userId,
         currentServiceId,
         usedMlService: true,
