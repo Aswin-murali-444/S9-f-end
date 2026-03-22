@@ -87,6 +87,43 @@ import { apiService } from '../../services/api';
 import { supabase } from '../../lib/supabase';
 import aiAssistantService from '../../services/aiAssistantService';
 
+/** Supabase/jsonb sometimes returns `{}` or odd shapes; old logic did `preferred ? [preferred] : []` → [{}] = "has prefs" and skipped the modal in production. */
+function normalizePreferredServiceIds(preferred) {
+  if (preferred == null || preferred === '') return [];
+  if (Array.isArray(preferred)) {
+    return preferred.filter(
+      (x) =>
+        x !== null &&
+        x !== undefined &&
+        x !== '' &&
+        (typeof x === 'string' || typeof x === 'number')
+    );
+  }
+  if (typeof preferred === 'string') {
+    const t = preferred.trim();
+    if (!t) return [];
+    if (t.startsWith('[') || t.startsWith('{')) {
+      try {
+        return normalizePreferredServiceIds(JSON.parse(t));
+      } catch {
+        /* fall through */
+      }
+    }
+    return [t];
+  }
+  if (typeof preferred === 'object') {
+    if (Object.keys(preferred).length === 0) return [];
+    return Object.values(preferred).filter(
+      (v) =>
+        v !== null &&
+        v !== undefined &&
+        v !== '' &&
+        (typeof v === 'string' || typeof v === 'number')
+    );
+  }
+  return [];
+}
+
 const CustomerDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -297,7 +334,8 @@ const CustomerDashboard = () => {
   const onboardingPromptTimersRef = useRef({ showTimer: null, repeatTimer: null, skipReshowTimer: null });
   const onboardingRequiredRef = useRef(false);
 
-  const ONBOARDING_FIRST_SHOW_MS = 30000;
+  /** Shorter first nudge so hosted users aren’t waiting 30s to verify; interval unchanged */
+  const ONBOARDING_FIRST_SHOW_MS = 10000;
   const ONBOARDING_REPEAT_MS = 30000;
 
   const onboardingIssueOptions = [
@@ -1013,23 +1051,44 @@ const CustomerDashboard = () => {
 
   // Check if the user is "new/cold-start" (no preferred services yet).
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setOnboardingCheckLoading(false);
+      setOnboardingRequired(false);
+      return;
+    }
     let isCancelled = false;
     setOnboardingCheckLoading(true);
     setOnboardingRequired(false);
 
+    const PROFILE_CHECK_MS = 20000;
+
     const check = async () => {
       try {
-        const complete = await getCompleteUserProfileRef.current?.();
+        const fetchProfile = () =>
+          getCompleteUserProfileRef.current?.() ?? Promise.resolve(null);
+        const complete = await Promise.race([
+          fetchProfile(),
+          new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('onboarding_profile_timeout')), PROFILE_CHECK_MS);
+          }),
+        ]).catch(() => null);
+
+        if (isCancelled) return;
+
         setDbUserId(complete?.id || user.id);
         const customerDetails = complete?.customer_details
           ? (Array.isArray(complete.customer_details) ? complete.customer_details[0] : complete.customer_details)
           : null;
 
-        const preferred = customerDetails?.preferred_services;
-        const preferredArray = Array.isArray(preferred) ? preferred : (preferred ? [preferred] : []);
+        const preferredArray = normalizePreferredServiceIds(customerDetails?.preferred_services);
         const doneKey = `onboarding_done_${user.id}`;
-        const permanentlyDismissed = localStorage.getItem(doneKey) === '1';
+        const neverKey = `cd_onboarding_never_${user.id}`;
+
+        // Explicit “don’t ask again” (new key — old builds reused onboarding_done for this + legacy bugs).
+        if (localStorage.getItem(neverKey) === '1') {
+          setOnboardingRequired(false);
+          return;
+        }
 
         // If user already has preferences, no modal needed.
         if (preferredArray.length > 0) {
@@ -1038,37 +1097,21 @@ const CustomerDashboard = () => {
           return;
         }
 
-        if (permanentlyDismissed) {
-          setOnboardingRequired(false);
-          return;
+        // Old logic set onboarding_done_* for “legacy account >48h” without prefs — that blocked hosted forever.
+        // If DB says no prefs but flag is set, drop the stale flag so the modal can run again.
+        if (localStorage.getItem(doneKey) === '1') {
+          try {
+            localStorage.removeItem(doneKey);
+          } catch {
+            /* ignore */
+          }
         }
 
-        // Account age: only used to stop nagging *legacy* users. Never set onboarding_done on
-        // unknown/missing profile (e.g. profile fetch slow right after login) — that used to
-        // block the modal forever after skip + re-login.
-        const createdAt = complete?.created_at ? new Date(complete.created_at) : null;
-        const createdAtMs =
-          createdAt instanceof Date && !Number.isNaN(createdAt.getTime()) ? createdAt.getTime() : null;
-        const FORTY_EIGHT_H = 1000 * 60 * 60 * 48;
-        let accountAgeKnown = false;
-        let isRecentSignup = false;
-        if (createdAtMs != null) {
-          accountAgeKnown = true;
-          isRecentSignup = Date.now() - createdAtMs < FORTY_EIGHT_H;
-        }
-
-        if (accountAgeKnown && !isRecentSignup) {
-          // Known older account, still no prefs — don’t keep prompting
-          localStorage.setItem(doneKey, '1');
-          setOnboardingRequired(false);
-          return;
-        }
-
-        // Recent signup OR profile/created_at missing (treat as eligible — skip does not set doneKey)
         setOnboardingRequired(true);
       } catch (e) {
-        // If we cannot read preferences, don't block the user.
+        // Hosted: flaky network/RLS can throw; still show onboarding so cold-start isn’t silently skipped.
         console.warn('Onboarding check failed:', e?.message || e);
+        if (!isCancelled) setOnboardingRequired(true);
       } finally {
         if (!isCancelled) setOnboardingCheckLoading(false);
       }
@@ -1315,6 +1358,11 @@ const CustomerDashboard = () => {
       if (error) throw error;
 
       localStorage.setItem(`onboarding_done_${user.id}`, '1');
+      try {
+        localStorage.removeItem(`cd_onboarding_never_${user.id}`);
+      } catch {
+        /* ignore */
+      }
 
       // Use the first selected service as the anchor so recommendations become personalized immediately.
       setOnboardingAnchorServiceId(preferredServiceIds[0]);
@@ -1373,7 +1421,12 @@ const CustomerDashboard = () => {
     const ref = onboardingPromptTimersRef.current;
     if (ref.skipReshowTimer) clearTimeout(ref.skipReshowTimer);
     ref.skipReshowTimer = null;
-    localStorage.setItem(`onboarding_done_${user.id}`, '1');
+    try {
+      localStorage.setItem(`cd_onboarding_never_${user.id}`, '1');
+      localStorage.setItem(`onboarding_done_${user.id}`, '1');
+    } catch {
+      /* ignore */
+    }
     setOnboardingRequired(false);
     setOnboardingModalOpen(false);
     setPreferredServiceIds([]);
@@ -2517,7 +2570,7 @@ const CustomerDashboard = () => {
         />
       )}
 
-      {/* Cold-start onboarding: first show after 30s, then every 30s until saved or dismissed forever */}
+      {/* Cold-start onboarding: first show after ONBOARDING_FIRST_SHOW_MS, then every 30s until saved or dismissed forever */}
       {!onboardingCheckLoading && onboardingRequired && onboardingModalOpen && (
         <div
           className="cd-onboarding-overlay"
