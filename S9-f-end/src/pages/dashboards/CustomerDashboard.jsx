@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -224,6 +224,12 @@ const CustomerDashboard = () => {
   }, []);
   const [activeTab, setActiveTab] = useState('home');
   const categoriesScrollRef = useRef(null);
+  const offersScrollRef = useRef(null);
+  const [offersCarouselNav, setOffersCarouselNav] = useState({
+    show: false,
+    canLeft: false,
+    canRight: false
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -433,6 +439,70 @@ const CustomerDashboard = () => {
   );
 
   /** Bookings + browsed services (localStorage + optional `customer_service_views`), one card per service by latest activity */
+  /** Services with real offer pricing from the catalog (no referral / promo codes). */
+  const topOfferServices = useMemo(() => {
+    if (!Array.isArray(services) || services.length === 0) return [];
+    return services
+      .filter((s) => {
+        if (!s?.offer_enabled) return false;
+        const price = Number(s.price);
+        const op = Number(s.offer_price);
+        if (Number.isFinite(price) && price > 0 && Number.isFinite(op) && op >= 0 && op < price) return true;
+        const pct = Number(s.offer_percentage);
+        return Number.isFinite(pct) && pct > 0;
+      })
+      .sort((a, b) => {
+        const savings = (x) => {
+          const p = Number(x.price) || 0;
+          const o = Number(x.offer_price);
+          if (Number.isFinite(o) && p > o) return p - o;
+          return Number(x.offer_percentage) || 0;
+        };
+        return savings(b) - savings(a);
+      })
+      .slice(0, 8);
+  }, [services]);
+
+  const updateOffersCarouselNav = useCallback(() => {
+    const el = offersScrollRef.current;
+    if (!el) {
+      setOffersCarouselNav({ show: false, canLeft: false, canRight: false });
+      return;
+    }
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    const max = Math.max(0, scrollWidth - clientWidth);
+    const show = scrollWidth > clientWidth + 8;
+    setOffersCarouselNav({
+      show,
+      canLeft: show && scrollLeft > 8,
+      canRight: show && scrollLeft < max - 8
+    });
+  }, []);
+
+  useEffect(() => {
+    updateOffersCarouselNav();
+    const raf = requestAnimationFrame(() => updateOffersCarouselNav());
+    const delayed = window.setTimeout(updateOffersCarouselNav, 450);
+    const el = offersScrollRef.current;
+    if (!el) {
+      return () => {
+        cancelAnimationFrame(raf);
+        window.clearTimeout(delayed);
+      };
+    }
+    el.addEventListener('scroll', updateOffersCarouselNav, { passive: true });
+    const ro = new ResizeObserver(() => updateOffersCarouselNav());
+    ro.observe(el);
+    window.addEventListener('resize', updateOffersCarouselNav);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(delayed);
+      el.removeEventListener('scroll', updateOffersCarouselNav);
+      ro.disconnect();
+      window.removeEventListener('resize', updateOffersCarouselNav);
+    };
+  }, [topOfferServices, updateOffersCarouselNav]);
+
   const recentActivityCombined = useMemo(() => {
     const authId = user?.id;
 
@@ -3808,33 +3878,116 @@ const CustomerDashboard = () => {
                     </div>
                   )}
 
-                  {/* Top Offers Section */}
+                  {/* Top Offers: live services with offer_enabled / offer_price from DB — no referral codes */}
                   <div className="top-offers-section full-bleed">
                     <div className="section-header">
                       <h3>Top Offers</h3>
                     </div>
-                    <div className="offers-grid">
-                      <div className="offer-card">
-                        <div className="offer-content">
-                          <h4>Flat ₹200 Off</h4>
-                          <p>On first home cleaning service</p>
-                          <span className="offer-code">Code: FIRST200</span>
+                    {topOfferServices.length === 0 ? (
+                      <p className="top-offers-empty" role="status">
+                        No service offers are active right now. Browse categories for the latest pricing.
+                      </p>
+                    ) : (
+                      <div className="top-offers-carousel" style={{ position: 'relative' }}>
+                        {offersCarouselNav.show && offersCarouselNav.canLeft ? (
+                          <button
+                            type="button"
+                            aria-label="Scroll offers left"
+                            className="carousel-arrow left"
+                            onClick={() => {
+                              const el = offersScrollRef.current;
+                              if (!el) return;
+                              const step = Math.min(360, Math.max(200, el.clientWidth * 0.72));
+                              el.scrollBy({ left: -step, behavior: 'smooth' });
+                            }}
+                          >
+                            <span className="arrow-icon-stack">
+                              <LayoutGrid className="arrow-badge" />
+                              <ChevronLeft className="arrow-chevron" />
+                            </span>
+                          </button>
+                        ) : null}
+                        <div
+                          ref={offersScrollRef}
+                          className="offers-scroll-track categories-scroll"
+                        >
+                        {topOfferServices.map((svc) => {
+                          const price = Number(svc.price) || 0;
+                          const offerP = Number(svc.offer_price);
+                          const hasSlash =
+                            Number.isFinite(offerP) && offerP >= 0 && price > 0 && offerP < price;
+                          const pct = Number(svc.offer_percentage);
+                          const pctLabel = Number.isFinite(pct) && pct > 0 ? Math.round(pct) : null;
+                          return (
+                            <button
+                              key={svc.id}
+                              type="button"
+                              className="offer-card offer-card--clickable offer-card--scroll-item"
+                              onClick={() => handleOpenBookingModal(svc)}
+                            >
+                              <div className="offer-content">
+                                <h4>{svc.name}</h4>
+                                <p className="offer-service-meta">
+                                  {svc.category ? `${svc.category}` : 'Service offer'}
+                                </p>
+                                {hasSlash ? (
+                                  <p className="offer-price-line">
+                                    <span className="offer-price-now">₹{offerP.toLocaleString('en-IN')}</span>
+                                    <span className="offer-price-was">₹{price.toLocaleString('en-IN')}</span>
+                                    <span className="offer-save-tag">
+                                      Save ₹{Math.round(price - offerP).toLocaleString('en-IN')}
+                                    </span>
+                                  </p>
+                                ) : pctLabel != null ? (
+                                  <p className="offer-price-line offer-price-line--pct">
+                                    <span className="offer-pct-badge">{pctLabel}% off</span>
+                                    {price > 0 ? (
+                                      <span className="offer-list-price">List ₹{price.toLocaleString('en-IN')}</span>
+                                    ) : null}
+                                  </p>
+                                ) : (
+                                  <p className="offer-price-line">Limited-time offer</p>
+                                )}
+                              </div>
+                              <div className="offer-icon offer-icon--stacked" aria-hidden>
+                                {svc.icon_url ? (
+                                  <img
+                                    src={svc.icon_url}
+                                    alt=""
+                                    className="offer-icon-img"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                ) : null}
+                                <span className="offer-icon-zap">
+                                  <Zap size={40} />
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
                         </div>
-                        <div className="offer-icon">
-                          <Settings size={40} />
-                        </div>
+                        {offersCarouselNav.show && offersCarouselNav.canRight ? (
+                          <button
+                            type="button"
+                            aria-label="Scroll offers right"
+                            className="carousel-arrow right"
+                            onClick={() => {
+                              const el = offersScrollRef.current;
+                              if (!el) return;
+                              const step = Math.min(360, Math.max(200, el.clientWidth * 0.72));
+                              el.scrollBy({ left: step, behavior: 'smooth' });
+                            }}
+                          >
+                            <span className="arrow-icon-stack">
+                              <LayoutGrid className="arrow-badge" />
+                              <ChevronRight className="arrow-chevron" />
+                            </span>
+                          </button>
+                        ) : null}
                       </div>
-                      <div className="offer-card">
-                        <div className="offer-content">
-                          <h4>Buy 2 Get 1 Free</h4>
-                          <p>On all maintenance services</p>
-                          <span className="offer-code">Code: MAINTAIN</span>
-                        </div>
-                        <div className="offer-icon">
-                          <Zap size={40} />
-                        </div>
-                      </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* Recently viewed: latest activity per service = real bookings + tracked opens (local + optional DB table) */}
