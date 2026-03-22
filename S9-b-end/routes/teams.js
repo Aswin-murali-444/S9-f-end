@@ -107,7 +107,19 @@ const createTeamWithExistingProviders = async (req, res) => {
     }
 
     // Add team members to team_members table
-    // Note: Team leader is automatically added by database trigger
+    // Ensure team leader is a member (DB trigger may or may not exist)
+    const { error: leaderMemberError } = await supabase
+      .from('team_members')
+      .upsert(
+        [{ team_id: team.id, user_id: team_leader_id, role: 'leader', status: 'active' }],
+        { onConflict: 'team_id,user_id' }
+      );
+
+    if (leaderMemberError) {
+      await supabase.from('teams').delete().eq('id', team.id);
+      return res.status(500).json({ error: 'Failed to add team leader as member: ' + leaderMemberError.message });
+    }
+
     const membersToAdd = team_member_ids
       .filter(memberId => memberId !== team_leader_id) // Filter out team leader to avoid duplicate
       .map(memberId => ({
@@ -117,14 +129,16 @@ const createTeamWithExistingProviders = async (req, res) => {
         status: 'active'
       }));
 
-    const { error: membersError } = await supabase
-      .from('team_members')
-      .insert(membersToAdd);
+    if (membersToAdd.length > 0) {
+      const { error: membersError } = await supabase
+        .from('team_members')
+        .upsert(membersToAdd, { onConflict: 'team_id,user_id' });
 
-    if (membersError) {
-      // Clean up team if adding members fails
-      await supabase.from('teams').delete().eq('id', team.id);
-      return res.status(500).json({ error: 'Failed to add team members: ' + membersError.message });
+      if (membersError) {
+        // Clean up team if adding members fails
+        await supabase.from('teams').delete().eq('id', team.id);
+        return res.status(500).json({ error: 'Failed to add team members: ' + membersError.message });
+      }
     }
 
     // Fetch the complete team data with members
@@ -189,7 +203,7 @@ const createTeamWithExistingProviders = async (req, res) => {
     return res.status(201).json({
       message: 'Team created successfully',
       team: completeTeam,
-      memberCount: membersToAdd.length
+      memberCount: 1 + membersToAdd.length
     });
 
   } catch (error) {
@@ -314,7 +328,7 @@ const createTeam = async (req, res) => {
       }
     }
 
-    // Add team leader and members to team_members table
+    // Add team leader and members to team_members table (robust even if DB trigger is missing)
     const membersToAdd = [
       { team_id: team.id, user_id: team_leader_id, role: 'leader', status: 'active' },
       ...createdMembers
@@ -322,7 +336,7 @@ const createTeam = async (req, res) => {
 
     const { error: membersError } = await supabase
       .from('team_members')
-      .insert(membersToAdd);
+      .upsert(membersToAdd, { onConflict: 'team_id,user_id' });
 
     if (membersError) {
       // Clean up created accounts if adding to team fails
@@ -538,10 +552,29 @@ const addTeamMember = async (req, res) => {
       return res.status(400).json({ error: 'Invalid user. Must be a service provider.' });
     }
 
+    // Enforce: service providers can only be part of one active team at a time
+    const { data: existingMembershipRows, error: membershipError } = await supabase
+      .from('team_members')
+      .select('team_id, teams(name)')
+      .eq('user_id', user_id)
+      .eq('status', 'active')
+      .limit(1);
+
+    if (membershipError) {
+      return res.status(500).json({ error: membershipError.message });
+    }
+
+    const existingMembership = (existingMembershipRows || [])[0];
+    if (existingMembership && existingMembership.team_id && existingMembership.team_id !== teamId) {
+      return res.status(400).json({
+        error: `User is already part of team "${existingMembership.teams?.name || existingMembership.team_id}". Service providers can only be part of one team at a time.`
+      });
+    }
+
     // Check if team exists and has space
     const { data: team, error: teamError } = await supabase
       .from('teams')
-      .select('max_members')
+      .select('id, max_members, team_leader_id')
       .eq('id', teamId)
       .single();
 
@@ -558,6 +591,11 @@ const addTeamMember = async (req, res) => {
 
     if (currentCount >= team.max_members) {
       return res.status(400).json({ error: 'Team has reached maximum capacity' });
+    }
+
+    // Prevent downgrading/overwriting leader role via member insert
+    if (team.team_leader_id === user_id) {
+      return res.status(400).json({ error: 'User is already the team leader and should already be in the team.' });
     }
 
     // Add member

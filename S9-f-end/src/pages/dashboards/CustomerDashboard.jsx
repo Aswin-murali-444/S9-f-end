@@ -2854,6 +2854,100 @@ const CustomerDashboard = () => {
                         </button>
                       ))}
                     </div>
+
+                    {/* Personalized recommendations — same hero section as search */}
+                    <div className="home-recommendations-panel" aria-label="Recommended services for you">
+                      <div className="home-recommendations-head">
+                        <div className="home-recommendations-title-block">
+                          <div className="home-recommendations-icon-wrap">
+                            <Zap size={18} aria-hidden />
+                          </div>
+                          <div>
+                            <h3 className="home-recommendations-title">Picked for you</h3>
+                            <p className="home-recommendations-sub">
+                              Smart matches from your activity, preferences &amp; survey
+                            </p>
+                          </div>
+                        </div>
+                        {recommendedLoading && (
+                          <span className="home-recommendations-status">Updating…</span>
+                        )}
+                      </div>
+
+                      {recommendedError && !recommendedLoading && (
+                        <p className="home-recommendations-error" role="status">
+                          {recommendedError}
+                        </p>
+                      )}
+
+                      {recommendedLoading && (!recommendedServices || recommendedServices.length === 0) && (
+                        <div className="home-recommendations-skeleton" aria-hidden>
+                          {[1, 2, 3, 4, 5, 6].map((i) => (
+                            <div key={i} className="home-recommendations-skeleton-card" />
+                          ))}
+                        </div>
+                      )}
+
+                      {!recommendedLoading && recommendedServices && recommendedServices.length > 0 && (
+                        <div className="home-recommendations-grid">
+                          {recommendedServices.slice(0, 6).map((rec) => {
+                            const full = services.find((s) => String(s.id) === String(rec.serviceId));
+                            const categoryLabel = full?.category || '';
+                            const hasOffer = rec.offer_enabled && rec.offer_price != null && Number(rec.price) > Number(rec.offer_price);
+                            const displayPrice = hasOffer ? rec.offer_price : rec.price;
+                            return (
+                              <button
+                                type="button"
+                                key={rec.serviceId || rec.id || rec.name}
+                                className="home-recommendation-card"
+                                onClick={() => {
+                                  setSearchQuery(rec.name);
+                                  handleSearch();
+                                }}
+                              >
+                                <div className="home-recommendation-card-top">
+                                  {rec.icon_url ? (
+                                    <img
+                                      src={rec.icon_url}
+                                      alt=""
+                                      className="home-recommendation-thumb"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                      }}
+                                    />
+                                  ) : (
+                                    <span className="home-recommendation-thumb-fallback">
+                                      <Settings size={22} />
+                                    </span>
+                                  )}
+                                  <span className="home-recommendation-badge">For you</span>
+                                </div>
+                                <span className="home-recommendation-name">{rec.name}</span>
+                                {categoryLabel ? (
+                                  <span className="home-recommendation-meta">{categoryLabel}</span>
+                                ) : null}
+                                {displayPrice != null && displayPrice !== '' && (
+                                  <span className="home-recommendation-price">
+                                    {hasOffer && (
+                                      <span className="home-recommendation-price-was">₹{Number(rec.price).toLocaleString()}</span>
+                                    )}
+                                    ₹{Number(displayPrice).toLocaleString()}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {!recommendedLoading &&
+                        (!recommendedServices || recommendedServices.length === 0) &&
+                        !recommendedError && (
+                          <p className="home-recommendations-empty">
+                            Save preferences in onboarding or book a service to see personalized picks here. Popular tags above are a quick start.
+                          </p>
+                        )}
+                    </div>
                   </div>
 
                   {/* Promotional Banner */}
@@ -3344,60 +3438,6 @@ const CustomerDashboard = () => {
                             </button>
                           </div>
                         </div>
-
-                        {/* ML suggestions row, aligned near the search bar */}
-                        {recommendedServices && recommendedServices.length > 0 && (
-                          <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-                            <div
-                              style={{
-                                display: 'flex',
-                                flexWrap: 'wrap',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                maxWidth: '640px'
-                              }}
-                            >
-                              <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>
-                                  Recommended for you
-                                </span>
-                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                                  Powered by smart matching (ML)
-                                </span>
-                              </div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                {recommendedServices.slice(0, 5).map((rec) => (
-                                  <button
-                                    key={rec.serviceId || rec.id || rec.name}
-                                    onClick={() => setSearchQuery(rec.name)}
-                                    style={{
-                                      background: '#f1f5f9',
-                                      border: '1px solid #e2e8f0',
-                                      borderRadius: '999px',
-                                      padding: '0.4rem 0.9rem',
-                                      fontSize: '0.75rem',
-                                      color: '#475569',
-                                      cursor: 'pointer',
-                                      transition: 'all 0.2s ease'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.background = '#3b82f6';
-                                      e.currentTarget.style.color = 'white';
-                                      e.currentTarget.style.borderColor = '#3b82f6';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.background = '#f1f5f9';
-                                      e.currentTarget.style.color = '#475569';
-                                      e.currentTarget.style.borderColor = '#e2e8f0';
-                                    }}
-                                  >
-                                    {rec.name}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>

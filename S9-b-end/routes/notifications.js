@@ -2,6 +2,15 @@ const express = require('express');
 const router = express.Router();
 const { supabase } = require('../lib/supabase');
 
+// Resolve userId (auth UID or users.id) to users.id for recipient_id lookups
+async function resolveUserId(idOrAuthUid) {
+  if (!idOrAuthUid) return null;
+  const { data: byId } = await supabase.from('users').select('id').eq('id', idOrAuthUid).maybeSingle();
+  if (byId?.id) return byId.id;
+  const { data: byAuth } = await supabase.from('users').select('id').eq('auth_user_id', idOrAuthUid).maybeSingle();
+  return byAuth?.id || null;
+}
+
 // Get all notifications (for admin dashboard)
 router.get('/', async (req, res) => {
   try {
@@ -102,9 +111,18 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get unread notifications count
+// Get unread notifications count (global – for admin; use /user/:userId/unread-count for per-user)
 router.get('/unread-count', async (req, res) => {
   try {
+    const { data: testData, error: testError } = await supabase
+      .from('notifications')
+      .select('id')
+      .limit(1);
+
+    if (testError && testError.code === 'PGRST116') {
+      return res.json({ success: true, data: { unread_count: 0 } });
+    }
+
     const { count, error } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
@@ -276,7 +294,8 @@ router.put('/:notificationId/dismiss', async (req, res) => {
 // Dismiss notification for a specific user
 router.put('/user/:userId/:notificationId/dismiss', async (req, res) => {
   try {
-    const { userId, notificationId } = req.params;
+    const { userId: rawUserId, notificationId } = req.params;
+    const userId = await resolveUserId(rawUserId) || rawUserId;
 
     console.log(`Dismissing notification ${notificationId} for user ${userId}`);
 
@@ -397,16 +416,21 @@ router.get('/provider/:providerId', async (req, res) => {
 // Get notifications for a specific customer/user
 router.get('/user/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId: rawUserId } = req.params;
     const { page = 1, limit = 20, status } = req.query;
     const offset = (page - 1) * limit;
 
-    console.log(`Fetching notifications for user: ${userId}, page: ${page}, limit: ${limit}, status: ${status}`);
+    // Resolve auth UID to users.id (notifications.recipient_id is usually users.id)
+    const resolvedId = await resolveUserId(rawUserId);
+    const userIdsToQuery = [resolvedId, rawUserId].filter(Boolean);
+    const uniqueIds = [...new Set(userIdsToQuery)];
 
-    // Validate userId format (should be UUID)
+    console.log(`Fetching notifications for user: raw=${rawUserId}, resolved=${resolvedId || 'none'}, page: ${page}, limit: ${limit}, status: ${status}`);
+
+    // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(userId)) {
-      console.error('Invalid userId format:', userId);
+    if (!uuidRegex.test(rawUserId)) {
+      console.error('Invalid userId format:', rawUserId);
       return res.status(400).json({ error: 'Invalid user ID format' });
     }
 
@@ -432,11 +456,11 @@ router.get('/user/:userId', async (req, res) => {
       });
     }
 
-    // Build query to get notifications for this user
+    // Query by resolved users.id and/or raw (auth UID) so we find notifications either way
     let query = supabase
       .from('notifications')
       .select('*')
-      .eq('recipient_id', userId)
+      .in('recipient_id', uniqueIds)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -455,9 +479,9 @@ router.get('/user/:userId', async (req, res) => {
       });
     }
 
-    console.log(`Found ${notifications?.length || 0} notifications for user ${userId}`);
+    console.log(`Found ${notifications?.length || 0} notifications for user (ids: ${uniqueIds.join(', ')})`);
 
-    // Format notifications for frontend
+    // Format notifications for frontend (ensure created_at exists)
     const formattedNotifications = (notifications || []).map(notification => ({
       id: notification.id,
       type: notification.type,
@@ -465,16 +489,16 @@ router.get('/user/:userId', async (req, res) => {
       message: notification.message,
       status: notification.status,
       priority: notification.priority,
-      time: formatTimeAgo(notification.created_at),
-      createdAt: notification.created_at,
+      time: formatTimeAgo(notification.created_at || notification.createdAt || new Date().toISOString()),
+      createdAt: notification.created_at || notification.createdAt || new Date().toISOString(),
       metadata: notification.metadata
     }));
 
-    // Get total count
+    // Get total count (same recipient_id set)
     let countQuery = supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('recipient_id', userId);
+      .in('recipient_id', uniqueIds);
 
     if (status) {
       countQuery = countQuery.eq('status', status);
@@ -510,8 +534,12 @@ router.get('/user/:userId', async (req, res) => {
 
 // Helper function to format time ago
 function formatTimeAgo(dateString) {
+  if (!dateString) return 'Recently';
   const now = new Date();
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) {
+    return 'Recently';
+  }
   const diffInSeconds = Math.floor((now - date) / 1000);
 
   if (diffInSeconds < 60) {
@@ -533,14 +561,18 @@ function formatTimeAgo(dateString) {
 // Get unread notifications count for a specific user
 router.get('/user/:userId/unread-count', async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId: rawUserId } = req.params;
 
-    console.log(`Fetching unread notification count for user: ${userId}`);
+    // Resolve auth UID to users.id; query by both so we count either way
+    const resolvedId = await resolveUserId(rawUserId);
+    const uniqueIds = [...new Set([resolvedId, rawUserId].filter(Boolean))];
+
+    console.log(`Fetching unread notification count for user: raw=${rawUserId}, resolved=${resolvedId || 'none'}`);
 
     // Validate userId format (should be UUID)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(userId)) {
-      console.error('Invalid userId format:', userId);
+    if (!uuidRegex.test(rawUserId)) {
+      console.error('Invalid userId format:', rawUserId);
       return res.status(400).json({ error: 'Invalid user ID format' });
     }
 
@@ -560,11 +592,11 @@ router.get('/user/:userId/unread-count', async (req, res) => {
       });
     }
 
-    // Get unread count for this user
+    // Get unread count for this user (recipient_id = resolved or raw)
     const { count, error } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('recipient_id', userId)
+      .in('recipient_id', uniqueIds)
       .eq('status', 'unread');
 
     if (error) {
@@ -576,7 +608,7 @@ router.get('/user/:userId/unread-count', async (req, res) => {
       });
     }
 
-    console.log(`Found ${count || 0} unread notifications for user ${userId}`);
+    console.log(`Found ${count || 0} unread notifications for user (ids: ${uniqueIds.join(', ')})`);
 
     res.json({
       success: true,
@@ -597,7 +629,8 @@ router.get('/user/:userId/unread-count', async (req, res) => {
 // Mark notification as read for a specific user
 router.put('/user/:userId/:notificationId/read', async (req, res) => {
   try {
-    const { userId, notificationId } = req.params;
+    const { userId: rawUserId, notificationId } = req.params;
+    const userId = await resolveUserId(rawUserId) || rawUserId;
 
     console.log(`Marking notification ${notificationId} as read for user ${userId}`);
 
@@ -632,18 +665,20 @@ router.put('/user/:userId/:notificationId/read', async (req, res) => {
 // Mark all notifications as read for a specific user
 router.put('/user/:userId/mark-all-read', async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId: rawUserId } = req.params;
+    const resolvedId = await resolveUserId(rawUserId);
+    const uniqueIds = [...new Set([resolvedId, rawUserId].filter(Boolean))];
 
-    console.log(`Marking all notifications as read for user ${userId}`);
+    console.log(`Marking all notifications as read for user: ${uniqueIds.join(', ')}`);
 
-    // Update all unread notifications to read status
+    // Update all unread notifications to read status (recipient_id may be users.id or auth UID)
     const { data, error } = await supabase
       .from('notifications')
       .update({
         status: 'read',
         read_at: new Date().toISOString()
       })
-      .eq('recipient_id', userId)
+      .in('recipient_id', uniqueIds)
       .eq('status', 'unread')
       .select();
 

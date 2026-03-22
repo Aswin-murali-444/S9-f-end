@@ -15,7 +15,9 @@ const aadhaarRouter = require('./routes/aadhaar');
 const cartWishlistRouter = require('./routes/cart-wishlist');
 const aiAssistantRouter = require('./routes/ai-assistant');
 const notificationsRouter = require('./routes/notifications');
+const reviewsRouter = require('./routes/reviews');
 const adminRouter = require('./routes/admin');
+const contactRouter = require('./routes/contact');
 
 // Import middleware modules
 const { getSystemMetrics } = require('./middleware/systemMetrics');
@@ -34,7 +36,7 @@ const {
   getDashboardRoute
 } = require('./middleware/userManagement');
 const { uploadProfilePicture } = require('./middleware/profileUpload');
-const { createServiceProvider, updateServiceProviderDetails, listServiceProviders, getServiceProvider } = require('./middleware/providerAdmin');
+const { createServiceProvider, updateServiceProviderDetails, listServiceProviders, getServiceProvider, resendProviderCredentials } = require('./middleware/providerAdmin');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -47,7 +49,20 @@ const allowedOrigins = [
   'https://s9-f-end.vercel.app'
 ];
 
-// Allow any Vercel preview deployment
+// Extra origins from Render/env (comma-separated), e.g. your real Vercel production URL
+const envCorsOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+for (const u of envCorsOrigins) {
+  if (u && !allowedOrigins.includes(u)) allowedOrigins.push(u);
+}
+if (process.env.FRONTEND_URL) {
+  const front = process.env.FRONTEND_URL.replace(/\/$/, '');
+  if (front && !allowedOrigins.includes(front)) allowedOrigins.push(front);
+}
+
+// Allow any Vercel preview deployment for this project name pattern
 const vercelPreviewPattern = /^https:\/\/s9-f-end.*\.vercel\.app$/;
 
 app.use(cors({
@@ -62,6 +77,11 @@ app.use(cors({
     
     // Check if it's a Vercel preview deployment
     if (vercelPreviewPattern.test(origin)) {
+      return callback(null, true);
+    }
+
+    // Any Vercel deployment (*.vercel.app) — previews and production aliases
+    if (/^https:\/\/[^/]+\.vercel\.app$/i.test(origin)) {
       return callback(null, true);
     }
     
@@ -143,15 +163,22 @@ app.post('/users/profile-picture-upload', uploadProfilePicture);
 
 // Provider admin endpoints (must be before modular routers to avoid conflicts)
 app.post('/admin/providers', createServiceProvider);
+app.post('/admin/providers/:userId/resend-credentials', resendProviderCredentials);
 app.put('/admin/providers/:userId', updateServiceProviderDetails);
 app.get('/admin/providers', listServiceProviders);
 app.get('/admin/providers/:providerId', getServiceProvider);
 
+// Admin bookings (explicit route so it always matches)
+const { getAdminBookings } = require('./routes/admin');
+app.get('/admin/bookings', getAdminBookings);
+
 // Optional: Mirror under /api for dev proxies that expect /api prefix
 app.post('/api/admin/providers', createServiceProvider);
+app.post('/api/admin/providers/:userId/resend-credentials', resendProviderCredentials);
 app.put('/api/admin/providers/:userId', updateServiceProviderDetails);
 app.get('/api/admin/providers', listServiceProviders);
 app.get('/api/admin/providers/:providerId', getServiceProvider);
+app.get('/api/admin/bookings', getAdminBookings);
 
 // Mount modular routers
 app.use('/categories', categoriesRouter);
@@ -165,7 +192,9 @@ app.use('/aadhaar', aadhaarRouter);
 app.use('/cart-wishlist', cartWishlistRouter);
 app.use('/ai-assistant', aiAssistantRouter);
 app.use('/notifications', notificationsRouter);
+app.use('/reviews', reviewsRouter);
 app.use('/admin', adminRouter);
+app.use('/contact', contactRouter);
 
 // Optional mirrors for dev proxies expecting /api prefix
 app.use('/api/categories', categoriesRouter);
@@ -179,7 +208,9 @@ app.use('/api/aadhaar', aadhaarRouter);
 app.use('/api/cart-wishlist', cartWishlistRouter);
 app.use('/api/ai-assistant', aiAssistantRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/reviews', reviewsRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/contact', contactRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

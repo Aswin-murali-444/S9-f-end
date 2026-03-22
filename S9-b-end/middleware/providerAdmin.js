@@ -98,7 +98,7 @@ const createServiceProvider = async (req, res) => {
     // Auto-generate secure password
     const passwordPlain = generateTempPassword();
 
-    // Create Supabase Auth user (preferred)
+    // Create Supabase Auth user (required - login uses Supabase Auth)
     let authUserId = null;
     try {
       const { data: createdAuth, error: authErr } = await supabase.auth.admin.createUser({
@@ -110,10 +110,14 @@ const createServiceProvider = async (req, res) => {
       if (authErr) throw authErr;
       authUserId = createdAuth?.user?.id || null;
     } catch (authCreateErr) {
-      console.warn('Auth create failed, falling back to app users table only:', authCreateErr?.message || authCreateErr);
+      const msg = authCreateErr?.message || String(authCreateErr);
+      console.error('Auth create failed:', msg);
+      return res.status(500).json({
+        error: 'Failed to create login credentials. Service provider login uses Supabase Auth. ' + msg
+      });
     }
 
-    // Create application user row (id links to auth user when available)
+    // Create application user row (id and auth_user_id link to Supabase Auth)
     const appUserInsert = {
       email: normalizedEmail,
       role: 'service_provider',
@@ -124,7 +128,10 @@ const createServiceProvider = async (req, res) => {
       // keep legacy column satisfied for NOT NULL constraint
       password_hash: Buffer.from(passwordPlain).toString('base64')
     };
-    if (authUserId) appUserInsert.id = authUserId;
+    if (authUserId) {
+      appUserInsert.id = authUserId;
+      appUserInsert.auth_user_id = authUserId; // Link to Supabase Auth for login lookup
+    }
     const { data: user, error: userError } = await supabase
       .from('users')
       .insert(appUserInsert)
@@ -269,6 +276,93 @@ const listServiceProviders = async (req, res) => {
   }
 };
 
+// Admin endpoint: resend/fix provider credentials (creates Auth user if missing)
+const resendProviderCredentials = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { sendEmail = true } = req.body || {};
+
+    if (!userId) return res.status(400).json({ error: 'User ID is required' });
+
+    const { data: user, error: userErr } = await supabase
+      .from('users')
+      .select('id, email, auth_user_id, user_profiles!inner(first_name, last_name)')
+      .eq('role', 'service_provider')
+      .eq('id', userId)
+      .single();
+
+    if (userErr || !user) return res.status(404).json({ error: 'Service provider not found' });
+
+    const normalizedEmail = String(user.email).toLowerCase().trim();
+    const fullName = [user.user_profiles?.first_name, user.user_profiles?.last_name].filter(Boolean).join(' ');
+    const passwordPlain = generateTempPassword();
+
+    // Create or update Supabase Auth user
+    let authUserId = user.auth_user_id;
+    try {
+      const { data: authLookup } = await supabase.auth.admin.getUserByEmail(normalizedEmail);
+      const existingAuthUser = authLookup?.user;
+
+      if (existingAuthUser) {
+        await supabase.auth.admin.updateUserById(existingAuthUser.id, { password: passwordPlain });
+        authUserId = existingAuthUser.id;
+      } else {
+        const { data: createdAuth, error: authErr } = await supabase.auth.admin.createUser({
+          email: normalizedEmail,
+          password: passwordPlain,
+          email_confirm: true,
+          user_metadata: { role: 'service_provider' }
+        });
+        if (authErr) throw authErr;
+        authUserId = createdAuth?.user?.id || null;
+      }
+    } catch (authErr) {
+      const msg = authErr?.message || String(authErr);
+      console.error('Auth create/update failed:', msg);
+      return res.status(500).json({
+        error: 'Failed to set login credentials. ' + msg
+      });
+    }
+
+    // Update users table: password_hash and auth_user_id
+    const { error: updateErr } = await supabase
+      .from('users')
+      .update({
+        password_hash: Buffer.from(passwordPlain).toString('base64'),
+        auth_user_id: authUserId
+      })
+      .eq('id', userId);
+
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+    // Send credentials email if requested
+    let emailResult = { skipped: !sendEmail };
+    let emailError = null;
+    if (sendEmail) {
+      try {
+        emailResult = await sendProviderCredentialsEmail({
+          to: normalizedEmail,
+          email: normalizedEmail,
+          password: passwordPlain,
+          fullName: fullName || 'Service Provider'
+        });
+      } catch (mailErr) {
+        console.warn('Email send failed:', mailErr?.message || mailErr);
+        emailError = mailErr?.message || 'Email send failed';
+      }
+    }
+
+    return res.json({
+      message: 'Credentials updated successfully',
+      emailSent: Boolean(emailResult?.sent),
+      emailError,
+      tempPassword: !sendEmail || emailError ? passwordPlain : undefined
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // Get single service provider with full profile data including profile picture
 const getServiceProvider = async (req, res) => {
   try {
@@ -341,7 +435,8 @@ module.exports = {
   createServiceProvider,
   updateServiceProviderDetails,
   listServiceProviders,
-  getServiceProvider
+  getServiceProvider,
+  resendProviderCredentials
 };
 
 

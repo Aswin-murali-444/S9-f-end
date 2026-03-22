@@ -4446,6 +4446,230 @@ mark.search-match {
   border-color: #4f9cf9;
 }
 
+/* Home hero — personalized recommendations (with Find Professional Services) */
+.home-recommendations-panel {
+  margin-top: 1.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e8eef5;
+}
+
+.home-recommendations-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.home-recommendations-title-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  text-align: left;
+}
+
+.home-recommendations-icon-wrap {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #eef6ff 0%, #dbeafe 100%);
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.home-recommendations-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.home-recommendations-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.8125rem;
+  color: #64748b;
+  line-height: 1.4;
+  max-width: 28rem;
+}
+
+.home-recommendations-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #3b82f6;
+  padding: 0.35rem 0.65rem;
+  background: #eff6ff;
+  border-radius: 999px;
+  align-self: center;
+}
+
+.home-recommendations-error {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  color: #b91c1c;
+  text-align: center;
+}
+
+.home-recommendations-empty {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  color: #64748b;
+  text-align: center;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px dashed #e2e8f0;
+  line-height: 1.45;
+}
+
+.home-recommendations-skeleton {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 0.75rem;
+}
+
+.home-recommendations-skeleton-card {
+  height: 118px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #f1f5f9 0%, #e8eef5 50%, #f1f5f9 100%);
+  background-size: 200% 100%;
+  animation: home-rec-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes home-rec-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.home-recommendations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 0.75rem;
+}
+
+.home-recommendation-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
+  padding: 0.75rem;
+  border-radius: 14px;
+  border: 1px solid #e8eef5;
+  background: #fafbfd;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.home-recommendation-card:hover {
+  transform: translateY(-2px);
+  border-color: #93c5fd;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.12);
+}
+
+.home-recommendation-card:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.home-recommendation-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.home-recommendation-thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.home-recommendation-thumb-fallback {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #e8eef5;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.home-recommendation-badge {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #1d4ed8;
+  background: #dbeafe;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.home-recommendation-name {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.home-recommendation-meta {
+  margin-top: 0.25rem;
+  font-size: 0.6875rem;
+  color: #64748b;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.home-recommendation-price {
+  margin-top: 0.45rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #059669;
+}
+
+.home-recommendation-price-was {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: #94a3b8;
+  text-decoration: line-through;
+  margin-right: 0.35rem;
+}
+
+@media (max-width: 640px) {
+  .home-recommendations-title-block {
+    width: 100%;
+  }
+
+  .home-recommendations-grid,
+  .home-recommendations-skeleton {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 /* Promotional Banner */
 .promotional-banner {
   background: linear-gradient(135deg, #4f9cf9 0%, #3b82f6 100%);
