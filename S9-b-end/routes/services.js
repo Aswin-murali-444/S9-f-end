@@ -709,6 +709,60 @@ router.get('/catalog-meta', async (req, res) => {
   }
 });
 
+/**
+ * Side-by-side local vs hosted checks (no secrets). Open local + prod URLs and compare JSON.
+ */
+router.get('/diagnostics', async (req, res) => {
+  try {
+    let supabaseHost = '';
+    try {
+      supabaseHost = new URL(process.env.SUPABASE_URL || 'http://x').hostname || '';
+    } catch {
+      supabaseHost = '';
+    }
+    let mlHost = '';
+    try {
+      const raw = String(process.env.ML_SERVICE_URL || '').trim();
+      if (raw) mlHost = new URL(raw).hostname || '';
+    } catch {
+      mlHost = '';
+    }
+    const client = supabaseAdmin || supabase;
+    const { count, error } = await client
+      .from('services')
+      .select('id', { count: 'exact', head: true });
+
+    const mlLocal =
+      !mlHost ||
+      /^(localhost|127\.0\.0\.1)$/i.test(mlHost) ||
+      mlHost.endsWith('.local');
+
+    res.json({
+      supabaseServiceRoleConfigured: Boolean(supabaseAdmin),
+      supabaseProjectHost: supabaseHost || null,
+      servicesVisibleCount: count,
+      servicesQueryError: error?.message || null,
+      nodeEnv: process.env.NODE_ENV || null,
+      mlServiceHost: mlHost || null,
+      mlServiceHostIsUnreachableFromHosted: mlLocal,
+      checks: {
+        sameSupabaseAsLocal:
+          'Compare supabaseProjectHost with your local /services/diagnostics — must match.',
+        serviceRoleOnHosted:
+          'supabaseServiceRoleConfigured must be true on production API.',
+        catalogCount:
+          'servicesVisibleCount should match Supabase Table Editor row count (visible services).',
+        mlOnHosted:
+          mlLocal
+            ? 'ML_SERVICE_URL looks local — Render cannot reach it; recommendations differ vs laptop.'
+            : 'ML host looks non-local — OK if that URL is reachable from the API host.'
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message || 'diagnostics failed' });
+  }
+});
+
 // Recommend services for a user (for dashboards / booking page)
 router.get('/user/:userId/recommendations', async (req, res) => {
   try {

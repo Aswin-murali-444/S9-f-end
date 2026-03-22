@@ -188,6 +188,16 @@ While `node index.js` runs, the daily seasonal job refreshes **scores** then **p
   - `servicesVisibleCount`: should match (roughly) the number of services in Supabase **Table Editor** for that project. If this is **1** locally vs many in the dashboard, the API is using the **wrong Supabase project** or **anon + RLS**.
 - The recommendations route uses a **dedicated service-role client** when `SUPABASE_SERVICE_ROLE_KEY` or **`SUPABASE_SERVICE_ROLE`** is set (alias for common env typos).
 
+### Still different: local vs hosted?
+
+1. **Same API build?** Hosted must **redeploy** after `git push`. Compare `GET .../health` → `deployCommit` (if set) to GitHub `main`.
+2. **Same Supabase project?** Compare **`GET http://localhost:3001/services/diagnostics`** vs **`GET https://YOUR-API/services/diagnostics`**:  
+   - **`supabaseProjectHost`** must be **identical** (e.g. `xxxx.supabase.co`).  
+   - If different, local and production are pointing at **different databases**.
+3. **Service role on host:** **`supabaseServiceRoleConfigured`: `true`** on production `diagnostics` / `catalog-meta`. If `false`, set **`SUPABASE_SERVICE_ROLE_KEY`** on Render (etc.) and redeploy.
+4. **Same browser → API URL?** Production frontend uses **`VITE_API_URL`** in Vercel (or falls back to `S9-f-end/src/lib/apiBaseUrl.js`). If it still hits an **old** Render URL or wrong service, behaviour won’t match local.
+5. **ML service:** If **`mlServiceHostIsUnreachableFromHosted`** is `true`, hosted cannot call your laptop’s ML; set **`ML_SERVICE_URL`** to a **public** ML base URL on the API host, or accept different recommendation ordering vs local.
+
 ## Security Notes
 
 - Never commit the `.env` file to version control
