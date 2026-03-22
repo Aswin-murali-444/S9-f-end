@@ -295,6 +295,48 @@ def _momentum(recent: float, prior: float) -> float:
     return (recent + 0.5) / (prior + 0.5)
 
 
+def _parse_service_category_map(raw: Any) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    if not isinstance(raw, dict):
+        return out
+    for k, v in raw.items():
+        if k is None or v is None:
+            continue
+        out[str(k)] = str(v)
+    return out
+
+
+def _affinity_category_set(raw: Any) -> set:
+    if not raw:
+        return set()
+    if isinstance(raw, list):
+        return {str(x) for x in raw if x is not None}
+    return set()
+
+
+def _candidate_has_real_signal(
+    raw_similarity: float,
+    pop_count: float,
+    recent: float,
+    prior: float,
+) -> bool:
+    """
+    Only recommend services backed by data: booked in sample, trend activity,
+    or non-trivial co-occurrence with the user's profile (not random catalog).
+    """
+    if pop_count >= 1.0:
+        return True
+    if recent + prior >= 1.0:
+        return True
+    # Meaningful overlap with aggregated user co-occurrence vector
+    if float(raw_similarity) >= 0.02:
+        return True
+    return False
+
+
+CATEGORY_ALIGNMENT_BOOST = 0.2
+
+
 def _insight_from_components(
     p_norm: float,
     t_norm: float,
@@ -422,15 +464,25 @@ def recommend_services_logic(
     popular_services: List[Dict[str, Any]],
     limit: int = 5,
     service_trends: Optional[Dict[str, Any]] = None,
+    service_category_ids: Optional[Dict[str, Any]] = None,
+    user_affinity_category_ids: Optional[List[Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Item-item CF with cosine similarity, blended with trend momentum and popularity.
 
     Optional `service_trends`: { service_id: { "recent": n7, "prior": p7 } }
     counts (e.g. bookings last 7 days vs previous 7 days) for demand signals.
+
+    Candidates must show a real signal: booked (popularity), trend windows, or
+    meaningful co-occurrence — not never-booked catalog filler.
+
+    `service_category_ids`: { service_id: category_id } for ranking boost into the
+    same categories as the user's history.
     """
     limit = max(1, limit)
     trends = _parse_service_trends(service_trends)
+    cat_map = _parse_service_category_map(service_category_ids)
+    affinity = _affinity_category_set(user_affinity_category_ids)
 
     # Build sparse service co-occurrence vectors (keys are service_id strings).
     service_vecs: Dict[str, Dict[str, float]] = {}
@@ -490,27 +542,54 @@ def recommend_services_logic(
     # Precompute user norm once.
     user_norm = math.sqrt(sum(float(v) * float(v) for v in user_vec.values()))
     if user_norm == 0.0:
-        return []
+        used_set = history_set
+        pairs_fb: List[Tuple[str, float]] = []
+        for svc in popular_services or []:
+            sid = str(svc.get("service_id"))
+            if not sid or sid in used_set:
+                continue
+            pairs_fb.append((sid, float(svc.get("count") or 0.0)))
+        return _blend_recommendations(pairs_fb, trends, popular_services, limit, history_set, has_personalization=False)
 
-    # Candidate services: union of:
-    # - global co-occurrence rows
-    # - popularity list (to ensure we can recommend popular items even if vectors are empty)
+    pop_map, _ = _popularity_map(popular_services)
+
+    # Candidate services: union of co-occurrence keys + services with real booking counts
     candidate_set = set(service_vecs.keys())
     for svc in popular_services or []:
         sid = svc.get("service_id")
         if sid is not None:
             candidate_set.add(str(sid))
 
-    # KNN (top-k nearest) via cosine similarity — take more than limit for re-ranking
+    # KNN via cosine similarity; drop candidates with no bookings, no trend, and no real similarity
     scored: List[Tuple[str, float]] = []
     for sid in candidate_set:
         if sid in history_set:
             continue
         vec = service_vecs.get(sid, {})
-        sim = _cosine_similarity_sparse_dict(vec, user_vec, b_norm=user_norm)
-        scored.append((sid, sim))
+        sim = float(_cosine_similarity_sparse_dict(vec, user_vec, b_norm=user_norm))
+        pop = float(pop_map.get(sid, 0.0))
+        tr = trends.get(sid, {})
+        recent = float(tr.get("recent", 0.0))
+        prior = float(tr.get("prior", 0.0))
+        if not _candidate_has_real_signal(sim, pop, recent, prior):
+            continue
+        cid = cat_map.get(sid, "")
+        cat_match = bool(cid and cid in affinity)
+        sim_adj = min(1.0, sim + (CATEGORY_ALIGNMENT_BOOST if cat_match else 0.0))
+        scored.append((sid, sim_adj))
 
     scored.sort(key=lambda kv: kv[1], reverse=True)
+
+    if not scored:
+        used_set = history_set
+        pairs_fb2: List[Tuple[str, float]] = []
+        for svc in popular_services or []:
+            sid = str(svc.get("service_id"))
+            if not sid or sid in used_set:
+                continue
+            pairs_fb2.append((sid, float(svc.get("count") or 0.0)))
+        return _blend_recommendations(pairs_fb2, trends, popular_services, limit, history_set, has_personalization=False)
+
     pool = scored[: max(limit * 4, limit + 8)]
     return _blend_recommendations(pool, trends, popular_services, limit, history_set, has_personalization=True)
 
@@ -540,6 +619,8 @@ def recommend_services() -> Any:
     global_cooccurrence = payload.get("global_cooccurrence") or {}
     popular_services = payload.get("popular_services") or []
     service_trends = payload.get("service_trends") or payload.get("serviceTrends") or {}
+    service_category_ids = payload.get("service_category_ids") or payload.get("serviceCategoryIds") or {}
+    user_affinity_category_ids = payload.get("user_affinity_category_ids") or payload.get("userAffinityCategoryIds") or []
     limit = int(payload.get("limit") or 5)
 
     if not isinstance(user_history, list):
@@ -554,6 +635,12 @@ def recommend_services() -> Any:
     if not isinstance(service_trends, dict):
         service_trends = {}
 
+    if not isinstance(service_category_ids, dict):
+        service_category_ids = {}
+
+    if not isinstance(user_affinity_category_ids, list):
+        user_affinity_category_ids = []
+
     recommendations = recommend_services_logic(
         user_id=user_id,
         current_service_id=current_service_id,
@@ -562,6 +649,8 @@ def recommend_services() -> Any:
         popular_services=popular_services,
         limit=limit,
         service_trends=service_trends,
+        service_category_ids=service_category_ids,
+        user_affinity_category_ids=user_affinity_category_ids,
     )
 
     return jsonify(
