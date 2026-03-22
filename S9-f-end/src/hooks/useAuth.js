@@ -3,6 +3,7 @@ import React, { useState, useEffect, createContext, useContext, useCallback } fr
 import { apiService } from '../services/api';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
+import { resolveAuthRedirectOrigin } from '../lib/appOrigin';
 
 // Test Supabase connection
 console.log('🔍 Supabase configuration:', {
@@ -867,7 +868,7 @@ export const AuthProvider = ({ children }) => {
           data: {
             full_name: userData.name || userData.full_name || '',
           },
-          emailRedirectTo: window.location.origin + '/login',
+          emailRedirectTo: `${resolveAuthRedirectOrigin()}/login`,
         },
       });
       if (error) {
@@ -918,7 +919,7 @@ export const AuthProvider = ({ children }) => {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin + '/auth/callback',
+          redirectTo: `${resolveAuthRedirectOrigin()}/auth/callback`,
         },
       });
       if (error) {
@@ -1163,7 +1164,7 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + '/reset-password',
+        redirectTo: `${resolveAuthRedirectOrigin()}/reset-password`,
       });
       if (error) {
         toast.error(error.message || 'Failed to send reset email');

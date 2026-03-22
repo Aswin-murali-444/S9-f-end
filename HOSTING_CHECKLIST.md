@@ -6,7 +6,7 @@ Use this so **Vercel**, **Render**, and **Supabase** stay aligned. MCP servers: 
 
 | Layer | URL |
 |-------|-----|
-| API (Render) | `https://nexus-d2dx.onrender.com` |
+| API (Render) | `https://nexus-d2dx.onrender.com` (**not** `d2hx` — common typo) |
 | ML (Render) | `https://nexus-ml-services.onrender.com` |
 | Frontend (Vercel) | Your project domain, e.g. `https://s9-f-end.vercel.app` |
 | Supabase | Project URL from Supabase dashboard |

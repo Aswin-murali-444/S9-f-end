@@ -2868,32 +2868,34 @@ const CustomerDashboard = () => {
                     <div className="home-recommendations-panel" aria-label="Recommended services for you">
                       <div className="home-recommendations-head">
                         <div className="home-recommendations-title-block">
-                          <div className="home-recommendations-icon-wrap">
-                            <Zap size={18} aria-hidden />
+                          <div className="home-recommendations-icon-wrap" aria-hidden>
+                            <Zap size={20} strokeWidth={2.25} />
                           </div>
-                          <div>
-                            <h3 className="home-recommendations-title">Intelligent recommendations</h3>
+                          <div className="home-recommendations-copy">
+                            <h3 className="home-recommendations-title">Recommended for you</h3>
                             <p className="home-recommendations-sub">
-                              Season row comes from your catalog (DB season profiles), rotated daily so different
-                              services show over time; then personalised picks from your activity
+                              A mix of timely picks for this season, popular services, and choices tailored to your
+                              preferences. Your list updates regularly so you can discover more.
                             </p>
                             {recommendationSeasonalContext?.headline && (
-                              <p className="home-recommendations-seasonal-banner" role="status">
-                                <span className="home-recommendations-seasonal-title">
-                                  {recommendationSeasonalContext.headline}
-                                </span>
-                                {recommendationSeasonalContext.subline ? (
-                                  <span className="home-recommendations-seasonal-detail">
-                                    {' '}
-                                    {recommendationSeasonalContext.subline}
+                              <div className="home-recommendations-seasonal-banner" role="status">
+                                <span className="home-recommendations-seasonal-accent" aria-hidden />
+                                <div className="home-recommendations-seasonal-text">
+                                  <span className="home-recommendations-seasonal-title">
+                                    {recommendationSeasonalContext.headline}
                                   </span>
-                                ) : null}
-                              </p>
+                                  {recommendationSeasonalContext.subline ? (
+                                    <span className="home-recommendations-seasonal-detail">
+                                      {recommendationSeasonalContext.subline}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
                             )}
                           </div>
                         </div>
                         {recommendedLoading && (
-                          <span className="home-recommendations-status">Updating…</span>
+                          <span className="home-recommendations-status">Updating recommendations…</span>
                         )}
                       </div>
 
@@ -2929,30 +2931,34 @@ const CustomerDashboard = () => {
                                 }}
                               >
                                 <div className="home-recommendation-card-top">
-                                  {rec.icon_url ? (
-                                    <img
-                                      src={rec.icon_url}
-                                      alt=""
-                                      className="home-recommendation-thumb"
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                      }}
-                                    />
-                                  ) : (
-                                    <span className="home-recommendation-thumb-fallback">
-                                      <Settings size={22} />
-                                    </span>
-                                  )}
+                                  <div className="home-recommendation-thumb-wrap">
+                                    {rec.icon_url ? (
+                                      <img
+                                        src={rec.icon_url}
+                                        alt=""
+                                        className="home-recommendation-thumb"
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = 'none';
+                                        }}
+                                      />
+                                    ) : (
+                                      <span className="home-recommendation-thumb-fallback">
+                                        <Settings size={22} />
+                                      </span>
+                                    )}
+                                  </div>
                                   <span
                                     className={`home-recommendation-badge home-recommendation-badge--${rec.insightKey || 'default'}`}
                                   >
                                     {rec.insightLabel || 'For you'}
                                   </span>
                                 </div>
-                                <span className="home-recommendation-name">{rec.name}</span>
-                                {categoryLabel ? (
-                                  <span className="home-recommendation-meta">{categoryLabel}</span>
-                                ) : null}
+                                <div className="home-recommendation-card-body">
+                                  <span className="home-recommendation-name">{rec.name}</span>
+                                  {categoryLabel ? (
+                                    <span className="home-recommendation-meta">{categoryLabel}</span>
+                                  ) : null}
+                                </div>
                                 {displayPrice != null && displayPrice !== '' && (
                                   <span className="home-recommendation-price">
                                     {hasOffer && (
@@ -2971,7 +2977,8 @@ const CustomerDashboard = () => {
                         (!recommendedServices || recommendedServices.length === 0) &&
                         !recommendedError && (
                           <p className="home-recommendations-empty">
-                            Save preferences in onboarding or book a service to see personalized picks here. Popular tags above are a quick start.
+                            Tell us what you’re interested in during onboarding, or book a service once — we’ll start
+                            tailoring suggestions. You can also tap a popular tag above to explore.
                           </p>
                         )}
                     </div>

@@ -4449,8 +4449,11 @@ mark.search-match {
 /* Home hero — personalized recommendations (with Find Professional Services) */
 .home-recommendations-panel {
   margin-top: 1.75rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #e8eef5;
+  padding: 1.25rem 1.35rem 1.35rem;
+  background: #ffffff;
+  border: 1px solid #e8edf4;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
 .home-recommendations-head {
@@ -4459,53 +4462,66 @@ mark.search-match {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .home-recommendations-title-block {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
+  gap: 1rem;
   text-align: left;
+  min-width: 0;
+  flex: 1;
+}
+
+.home-recommendations-copy {
+  min-width: 0;
+  flex: 1;
 }
 
 .home-recommendations-icon-wrap {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #eef6ff 0%, #dbeafe 100%);
-  color: #2563eb;
-  border: 1px solid #bfdbfe;
+  background: linear-gradient(145deg, #f0f7ff 0%, #e0efff 100%);
+  color: #1d4ed8;
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
 }
 
 .home-recommendations-title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.125rem;
   font-weight: 700;
   color: #0f172a;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
 }
 
 .home-recommendations-sub {
-  margin: 0.2rem 0 0;
-  font-size: 0.8125rem;
+  margin: 0.4rem 0 0;
+  font-size: 0.875rem;
   color: #64748b;
-  line-height: 1.4;
-  max-width: 28rem;
+  line-height: 1.55;
+  max-width: 36rem;
 }
 
 .home-recommendations-status {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #3b82f6;
-  padding: 0.35rem 0.65rem;
-  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 0.4rem 0.85rem;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
   border-radius: 999px;
-  align-self: center;
+  align-self: flex-start;
+  white-space: nowrap;
 }
 
 .home-recommendations-error {
@@ -4517,28 +4533,29 @@ mark.search-match {
 
 .home-recommendations-empty {
   margin: 0;
-  padding: 0.75rem 1rem;
-  font-size: 0.8125rem;
+  padding: 1rem 1.15rem;
+  font-size: 0.875rem;
   color: #64748b;
   text-align: center;
   background: #f8fafc;
   border-radius: 12px;
-  border: 1px dashed #e2e8f0;
-  line-height: 1.45;
+  border: 1px dashed #cbd5e1;
+  line-height: 1.55;
 }
 
 .home-recommendations-skeleton {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
 }
 
 .home-recommendations-skeleton-card {
-  height: 118px;
+  height: 132px;
   border-radius: 14px;
   background: linear-gradient(90deg, #f1f5f9 0%, #e8eef5 50%, #f1f5f9 100%);
   background-size: 200% 100%;
   animation: home-rec-shimmer 1.2s ease-in-out infinite;
+  border: 1px solid #eef2f7;
 }
 
 @keyframes home-rec-shimmer {
@@ -4552,8 +4569,8 @@ mark.search-match {
 
 .home-recommendations-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
 }
 
 .home-recommendation-card {
@@ -4561,19 +4578,24 @@ mark.search-match {
   flex-direction: column;
   align-items: stretch;
   text-align: left;
-  padding: 0.75rem;
+  padding: 0.9rem 0.95rem 0.85rem;
+  min-height: 148px;
   border-radius: 14px;
-  border: 1px solid #e8eef5;
-  background: #fafbfd;
+  border: 1px solid #e8edf3;
+  background: #ffffff;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.22s ease, border-color 0.2s ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .home-recommendation-card:hover {
-  transform: translateY(-2px);
-  border-color: #93c5fd;
-  background: #fff;
-  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.12);
+  transform: translateY(-3px);
+  border-color: #c7d7f0;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(37, 99, 235, 0.08);
+}
+
+.home-recommendation-card:active {
+  transform: translateY(-1px);
 }
 
 .home-recommendation-card:focus-visible {
@@ -4585,43 +4607,59 @@ mark.search-match {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.35rem;
-  margin-bottom: 0.5rem;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.home-recommendation-thumb-wrap {
+  flex-shrink: 0;
 }
 
 .home-recommendation-thumb {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   object-fit: cover;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e8edf3;
+  background: #f8fafc;
+  display: block;
 }
 
 .home-recommendation-thumb-fallback {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: #e8eef5;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #f1f5f9 0%, #e8eef5 100%);
   color: #64748b;
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid #e8edf3;
+}
+
+.home-recommendation-card-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
 .home-recommendation-badge {
-  font-size: 0.5625rem;
-  font-weight: 700;
+  font-size: 0.625rem;
+  font-weight: 600;
   text-transform: none;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   color: #1d4ed8;
-  background: #dbeafe;
-  padding: 0.22rem 0.4rem;
-  border-radius: 6px;
-  max-width: 104px;
+  background: #eff6ff;
+  padding: 0.28rem 0.5rem;
+  border-radius: 999px;
+  max-width: 118px;
   text-align: right;
-  line-height: 1.25;
+  line-height: 1.3;
   white-space: normal;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
 }
 
 /* ML insight styles — trend vs personalization */
@@ -4664,25 +4702,48 @@ mark.search-match {
 }
 
 .home-recommendations-seasonal-banner {
-  margin: 0.5rem 0 0;
-  font-size: 0.75rem;
-  line-height: 1.45;
+  margin: 0.75rem 0 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
   color: #0f766e;
-  background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
-  border: 1px solid #99f6e4;
-  border-radius: 8px;
-  padding: 0.45rem 0.6rem;
-  max-width: 42rem;
+  background: #f6fffc;
+  border: 1px solid #b2f5ea;
+  border-radius: 12px;
+  padding: 0;
+  max-width: 40rem;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 118, 110, 0.06);
+}
+
+.home-recommendations-seasonal-accent {
+  width: 4px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #2dd4bf 0%, #14b8a6 100%);
+}
+
+.home-recommendations-seasonal-text {
+  padding: 0.65rem 0.85rem 0.7rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
 }
 
 .home-recommendations-seasonal-title {
   font-weight: 700;
-  display: inline;
+  color: #0f766e;
+  display: block;
 }
 
 .home-recommendations-seasonal-detail {
   font-weight: 500;
   color: #115e59;
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.45;
 }
 
 .home-recommendation-badge--discover {
@@ -4699,20 +4760,20 @@ mark.search-match {
 }
 
 .home-recommendation-name {
-  font-size: 0.8125rem;
-  font-weight: 700;
+  font-size: 0.875rem;
+  font-weight: 600;
   color: #0f172a;
-  line-height: 1.3;
+  line-height: 1.35;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  letter-spacing: -0.015em;
 }
 
 .home-recommendation-meta {
-  margin-top: 0.25rem;
-  font-size: 0.6875rem;
+  font-size: 0.72rem;
   color: #64748b;
   display: -webkit-box;
   -webkit-line-clamp: 1;
@@ -4722,10 +4783,12 @@ mark.search-match {
 }
 
 .home-recommendation-price {
-  margin-top: 0.45rem;
-  font-size: 0.8125rem;
+  margin-top: auto;
+  padding-top: 0.55rem;
+  font-size: 0.875rem;
   font-weight: 700;
-  color: #059669;
+  color: #047857;
+  letter-spacing: -0.02em;
 }
 
 .home-recommendation-price-was {
@@ -4737,13 +4800,33 @@ mark.search-match {
 }
 
 @media (max-width: 640px) {
+  .home-recommendations-panel {
+    padding: 1rem 1rem 1.15rem;
+    border-radius: 14px;
+  }
+
   .home-recommendations-title-block {
     width: 100%;
   }
 
+  .home-recommendations-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .home-recommendations-status {
+    align-self: flex-start;
+  }
+
   .home-recommendations-grid,
   .home-recommendations-skeleton {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .home-recommendation-card {
+    min-height: 140px;
+    padding: 0.8rem 0.85rem;
   }
 }
 
