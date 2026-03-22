@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import datetime
 import math
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, jsonify, request
@@ -92,9 +93,17 @@ def _season_multiplier_for_text(hay: str, phase: str, country: str) -> Tuple[flo
                 return 0.22, "season_down_paint_monsoon"
 
     if phase == "summer":
+        if (
+            re.search(r"\bac\b", h)
+            or "a/c" in h
+            or "air condition" in h
+            or "air-cool" in h
+            or "air cool" in h
+            or "hvac" in h
+        ):
+            return 1.24, "season_boost_summer_cooling"
         boost = (
             "ac service",
-            "air condition",
             "air conditioner",
             "cooler",
             "refrigerator",
@@ -104,6 +113,10 @@ def _season_multiplier_for_text(hay: str, phase: str, country: str) -> Tuple[flo
         for kw in boost:
             if kw in h:
                 return 1.22, "season_boost_summer_cooling"
+
+        for kw in ("painting", "painter", "whitewash", "putty", "wallpaper"):
+            if kw in h:
+                return 1.2, "season_boost_summer_painting"
 
         # Outdoor heavy work slightly less ideal peak summer (soft)
         if "exterior paint" in h or "outdoor paint" in h:
@@ -195,6 +208,7 @@ def _season_insight_label(reason: Optional[str]) -> Optional[Tuple[str, str]]:
         "season_down_paint_monsoon": ("seasonal", "Painting — usually easier after monsoon"),
         "season_boost_monsoon_relevant": ("trending", "Fits rainy-season needs"),
         "season_boost_summer_cooling": ("popular", "Popular in summer"),
+        "season_boost_summer_painting": ("seasonal", "Good season for painting & touch-ups"),
         "season_soft_down_exterior_summer": ("seasonal", "Heavy exterior work — plan timing"),
         "season_boost_winter_comfort": ("popular", "Handy in cooler months"),
         "season_soft_post_monsoon_exterior": ("seasonal", "Exterior work — check weather window"),

@@ -6,6 +6,23 @@
 - Computes a **multiplier** and optional **reason_key** for each **calendar month (1–12)** using the same India-centric rules as `S9-ml-service/app.py`.
 - **Upserts** into `service_seasonal_scores`. **New services** appear automatically on the next daily run.
 
+## Season profiles (DB — which services belong to which season)
+
+Recommendations **do not guess** services that are not in your catalog. The API reads **`service_season_profile`**, filled only from real `services` + `service_categories` rows.
+
+1. **One-time SQL:** run `create-service-season-profiles.sql` (same ways as the scores table — `run-sql`, SQL editor, or `setup` with `pg`).
+2. **Build / refresh profiles:**
+
+```bash
+npm run refresh-season-profiles
+```
+
+3. **Tune** category/text hints in **`lib/seasonProfileClassifier.js`** so they match **your** category names (e.g. “Home Maintenance”, “AC & Cooling”).
+
+The daily cron (while `node index.js` runs) refreshes **scores** then **profiles** so new catalog entries are classified.
+
+**Float / rotation:** for each user, season slots use a **stable shuffle** that changes by **day** so different in-season services surface over time instead of always the same IDs.
+
 ## One-time: create the table (**no Supabase MCP**)
 
 **Recommended:** add a Postgres URI to `.env` (Supabase Dashboard → **Project Settings → Database → Connection string → URI**):

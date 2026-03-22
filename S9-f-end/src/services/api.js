@@ -325,7 +325,7 @@ class ApiService {
   }
 
   // ML: personalized service recommendations for a user
-  async getServiceRecommendations(userId, { limit = 5, currentServiceId = null } = {}) {
+  async getServiceRecommendations(userId, { limit = 12, currentServiceId = null } = {}) {
     const params = new URLSearchParams();
     if (limit != null) params.set('limit', String(limit));
     if (currentServiceId) params.set('currentServiceId', currentServiceId);

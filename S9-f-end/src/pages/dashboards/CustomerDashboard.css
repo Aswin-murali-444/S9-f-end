@@ -4663,6 +4663,34 @@ mark.search-match {
   border: 1px solid #67e8f9;
 }
 
+.home-recommendations-seasonal-banner {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #0f766e;
+  background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+  border: 1px solid #99f6e4;
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  max-width: 42rem;
+}
+
+.home-recommendations-seasonal-title {
+  font-weight: 700;
+  display: inline;
+}
+
+.home-recommendations-seasonal-detail {
+  font-weight: 500;
+  color: #115e59;
+}
+
+.home-recommendation-badge--discover {
+  color: #5b21b6;
+  background: #ede9fe;
+  border: 1px solid #ddd6fe;
+}
+
 .home-recommendation-badge--recommended,
 .home-recommendation-badge--default {
   color: #475569;

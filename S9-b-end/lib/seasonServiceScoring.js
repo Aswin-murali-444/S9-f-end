@@ -72,9 +72,19 @@ function seasonMultiplierForText(hay, phase, country) {
   }
 
   if (phase === 'summer') {
+    // Word-boundary AC / air conditioning (matches "AC repair", "Split AC", etc.)
+    if (
+      /\bac\b/.test(h) ||
+      h.includes('a/c') ||
+      h.includes('air condition') ||
+      h.includes('air-cool') ||
+      h.includes('air cool') ||
+      h.includes('hvac')
+    ) {
+      return { multiplier: 1.24, reasonKey: 'season_boost_summer_cooling' };
+    }
     const boost = [
       'ac service',
-      'air condition',
       'air conditioner',
       'cooler',
       'refrigerator',
@@ -84,6 +94,13 @@ function seasonMultiplierForText(hay, phase, country) {
     for (const kw of boost) {
       if (h.includes(kw)) {
         return { multiplier: 1.22, reasonKey: 'season_boost_summer_cooling' };
+      }
+    }
+    // Dry heat: indoor painting / touch-ups are commonly booked in summer
+    const summerPaint = ['painting', 'painter', 'whitewash', 'putty', 'wallpaper'];
+    for (const kw of summerPaint) {
+      if (h.includes(kw)) {
+        return { multiplier: 1.2, reasonKey: 'season_boost_summer_painting' };
       }
     }
     if (h.includes('exterior paint') || h.includes('outdoor paint')) {
@@ -143,6 +160,131 @@ function computeSeasonScoreForService(name, description, month, country = 'IN') 
   return { multiplier: mult, reasonKey: reason };
 }
 
+/**
+ * Services with seasonal multiplier > 1 for this month (right season to promote).
+ * Used to build the top "season shelf" in recommendations.
+ */
+function rankSeasonalBoostedServices(rows, month, country, excludeSet, maxTake) {
+  const cc = String(country || 'IN').toUpperCase();
+  const m = Math.max(1, Math.min(12, parseInt(String(month), 10) || 1));
+  const ex = excludeSet instanceof Set ? excludeSet : new Set([...(excludeSet || [])].map(String));
+  const n = Math.max(0, parseInt(String(maxTake), 10) || 0);
+  if (n === 0) return [];
+
+  const scored = (rows || [])
+    .map((row) => {
+      const id = row?.id;
+      if (id == null || ex.has(String(id))) return null;
+      const { multiplier, reasonKey } = computeSeasonScoreForService(row.name, row.description, m, cc);
+      if (multiplier <= 1.0001) return null;
+      return { row, multiplier, reasonKey };
+    })
+    .filter(Boolean)
+    .sort(
+      (a, b) =>
+        b.multiplier - a.multiplier ||
+        String(a.row.name || '').localeCompare(String(b.row.name || ''))
+    );
+
+  return scored.slice(0, n).map((x) => ({
+    ...x.row,
+    _seasonMultiplier: x.multiplier,
+    _seasonReasonKey: x.reasonKey
+  }));
+}
+
+/** UI labels aligned with S9-ml-service `app.py` `_season_insight_label` (insightKey drives CSS). */
+const SEASON_REASON_UI = {
+  season_avoid_outdoor_work: {
+    insightKey: 'seasonal',
+    insightLabel: 'Outdoor work — better in dry weather'
+  },
+  season_down_paint_monsoon: {
+    insightKey: 'seasonal',
+    insightLabel: 'Painting — usually easier after monsoon'
+  },
+  season_boost_monsoon_relevant: {
+    insightKey: 'seasonal',
+    insightLabel: 'Fits rainy-season needs'
+  },
+  season_boost_summer_cooling: {
+    insightKey: 'seasonal',
+    insightLabel: 'Popular in summer — cooling'
+  },
+  season_boost_summer_painting: {
+    insightKey: 'seasonal',
+    insightLabel: 'Good season for painting & touch-ups'
+  },
+  season_soft_down_exterior_summer: {
+    insightKey: 'seasonal',
+    insightLabel: 'Heavy exterior work — plan timing'
+  },
+  season_boost_winter_comfort: {
+    insightKey: 'seasonal',
+    insightLabel: 'Handy in cooler months'
+  },
+  season_soft_post_monsoon_exterior: {
+    insightKey: 'seasonal',
+    insightLabel: 'Exterior work — check weather window'
+  }
+};
+
+/**
+ * Badge copy for a service when name/description matches seasonal rules (same as ML).
+ * @returns {{ insightKey: string, insightLabel: string } | null}
+ */
+function getSeasonUiInsight(name, description, month, country = 'IN') {
+  const { reasonKey } = computeSeasonScoreForService(name, description, month, country);
+  if (!reasonKey) return null;
+  return SEASON_REASON_UI[reasonKey] || {
+    insightKey: 'seasonal',
+    insightLabel: 'Seasonal pick for this month'
+  };
+}
+
+/**
+ * Panel copy so the dashboard always shows that seasonal rules are active (India calendar).
+ */
+function getSeasonalPanelContext(month, country = 'IN') {
+  const m = Math.max(1, Math.min(12, parseInt(String(month), 10) || 1));
+  const cc = String(country || 'IN').toUpperCase();
+  if (cc !== 'IN') {
+    return {
+      month: m,
+      phase: 'international',
+      headline: 'Recommendations',
+      subline: 'Ranked with demand signals and your activity.'
+    };
+  }
+  let phase = indiaSeasonPhase(m);
+  if (phase === 'neutral' && m === 10) phase = 'post_monsoon';
+
+  const headlines = {
+    monsoon: 'Monsoon-aware recommendations',
+    summer: 'Summer-aware recommendations',
+    winter: 'Winter-aware recommendations',
+    neutral: 'Season-aware recommendations',
+    post_monsoon: 'Post-monsoon recommendations'
+  };
+  const sublines = {
+    monsoon:
+      'Top slots prioritise waterproofing & leak fixes; outdoor painting is de-prioritised for this season.',
+    summer:
+      'Top slots use services tagged “summer” in your DB profiles (e.g. AC, painting) — rotated daily; then personal picks.',
+    winter: 'Top slots prioritise geysers, heaters & hot-water comfort; then your personalised picks.',
+    neutral:
+      'Neutral calendar month: seasonal boosts apply when service text matches; personal picks follow.',
+    post_monsoon: 'Exterior paint timing is flagged — check dry windows before booking.'
+  };
+
+  return {
+    month: m,
+    phase,
+    headline: headlines[phase] || headlines.neutral,
+    subline: sublines[phase] || sublines.neutral
+  };
+}
+
 /** Simple hash for change detection (not cryptographic). */
 function fingerprintServiceText(name, description) {
   const s = `${name || ''}\n${description || ''}`;
@@ -157,5 +299,8 @@ module.exports = {
   indiaSeasonPhase,
   seasonMultiplierForText,
   computeSeasonScoreForService,
-  fingerprintServiceText
+  fingerprintServiceText,
+  getSeasonUiInsight,
+  getSeasonalPanelContext,
+  rankSeasonalBoostedServices
 };

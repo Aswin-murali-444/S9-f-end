@@ -27,6 +27,7 @@
     "run-sql": "node scripts/run-sql.js",
     "create-test-table": "node scripts/run-sql.js create-test-table-manual.sql",
     "refresh-seasonal-scores": "node scripts/refresh-service-seasonal-scores.js",
+    "refresh-season-profiles": "node scripts/refresh-service-season-profiles.js",
     "setup:seasonal-table": "node scripts/create-seasonal-scores-table.js",
     "mcp:create-seasonal-table": "node scripts/create-seasonal-scores-table.js"
   },

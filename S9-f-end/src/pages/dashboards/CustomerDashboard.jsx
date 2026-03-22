@@ -269,6 +269,7 @@ const CustomerDashboard = () => {
   const [recommendedServices, setRecommendedServices] = useState([]);
   const [recommendedLoading, setRecommendedLoading] = useState(false);
   const [recommendedError, setRecommendedError] = useState(null);
+  const [recommendationSeasonalContext, setRecommendationSeasonalContext] = useState(null);
 
   // Cold-start onboarding (first-time customer)
   const [onboardingCheckLoading, setOnboardingCheckLoading] = useState(true);
@@ -1048,14 +1049,22 @@ const CustomerDashboard = () => {
         setRecommendedLoading(true);
         setRecommendedError(null);
         const resp = await apiService.getServiceRecommendations(user.id, {
-          limit: 6,
+          limit: 18,
           currentServiceId: onboardingAnchorServiceId || null
         });
         const recs = resp?.recommendations || [];
-        if (!isCancelled) setRecommendedServices(Array.isArray(recs) ? recs : []);
+        if (!isCancelled) {
+          setRecommendedServices(Array.isArray(recs) ? recs : []);
+          setRecommendationSeasonalContext(resp?.seasonalContext || null);
+          // One-time onboarding anchor narrows CF; clear after first load so later refreshes stay broader.
+          setOnboardingAnchorServiceId(null);
+        }
       } catch (e) {
         console.error('Failed to load service recommendations:', e);
-        if (!isCancelled) setRecommendedError(e?.message || 'Failed to load recommendations');
+        if (!isCancelled) {
+          setRecommendedError(e?.message || 'Failed to load recommendations');
+          setRecommendationSeasonalContext(null);
+        }
       } finally {
         if (!isCancelled) setRecommendedLoading(false);
       }
@@ -2865,8 +2874,22 @@ const CustomerDashboard = () => {
                           <div>
                             <h3 className="home-recommendations-title">Intelligent recommendations</h3>
                             <p className="home-recommendations-sub">
-                              Personalized for you and ranked with live booking trends &amp; demand signals
+                              Season row comes from your catalog (DB season profiles), rotated daily so different
+                              services show over time; then personalised picks from your activity
                             </p>
+                            {recommendationSeasonalContext?.headline && (
+                              <p className="home-recommendations-seasonal-banner" role="status">
+                                <span className="home-recommendations-seasonal-title">
+                                  {recommendationSeasonalContext.headline}
+                                </span>
+                                {recommendationSeasonalContext.subline ? (
+                                  <span className="home-recommendations-seasonal-detail">
+                                    {' '}
+                                    {recommendationSeasonalContext.subline}
+                                  </span>
+                                ) : null}
+                              </p>
+                            )}
                           </div>
                         </div>
                         {recommendedLoading && (
@@ -2882,7 +2905,7 @@ const CustomerDashboard = () => {
 
                       {recommendedLoading && (!recommendedServices || recommendedServices.length === 0) && (
                         <div className="home-recommendations-skeleton" aria-hidden>
-                          {[1, 2, 3, 4, 5, 6].map((i) => (
+                          {Array.from({ length: 18 }, (_, i) => i + 1).map((i) => (
                             <div key={i} className="home-recommendations-skeleton-card" />
                           ))}
                         </div>
@@ -2890,7 +2913,7 @@ const CustomerDashboard = () => {
 
                       {!recommendedLoading && recommendedServices && recommendedServices.length > 0 && (
                         <div className="home-recommendations-grid">
-                          {recommendedServices.slice(0, 6).map((rec) => {
+                          {recommendedServices.map((rec) => {
                             const full = services.find((s) => String(s.id) === String(rec.serviceId));
                             const categoryLabel = full?.category || '';
                             const hasOffer = rec.offer_enabled && rec.offer_price != null && Number(rec.price) > Number(rec.offer_price);

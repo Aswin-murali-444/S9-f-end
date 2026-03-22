@@ -32,7 +32,14 @@ function scheduleSeasonalScoresCron() {
           `[seasonal-cron] refresh OK: ${result.servicesCount} services, ${result.rowsCount} rows at ${new Date().toISOString()}`
         );
       } catch (e) {
-        console.error('[seasonal-cron] refresh failed:', e?.message || e);
+        console.error('[seasonal-cron] seasonal scores failed:', e?.message || e);
+      }
+      try {
+        const { runServiceSeasonProfileRefresh } = require('../scripts/refresh-service-season-profiles');
+        const pr = await runServiceSeasonProfileRefresh();
+        console.log('[seasonal-cron] season profiles OK:', pr?.summary || pr);
+      } catch (e) {
+        console.error('[seasonal-cron] season profiles failed:', e?.message || e);
       }
     },
     { timezone }

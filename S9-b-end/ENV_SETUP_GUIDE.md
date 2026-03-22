@@ -157,6 +157,19 @@ npm run refresh-seasonal-scores
 
 If `DATABASE_URL` is not set, `setup:seasonal-table` tries the **`mcp_execute_sql`** RPC. You can also paste `create-service-seasonal-scores.sql` in the Supabase SQL Editor.
 
+### Season profiles table (`service_season_profile`)
+
+Recommendations read **only real catalog services** tagged by phase (summer / monsoon / winter / neutral / all_year). Create the table once, then refresh after catalog changes:
+
+1. Run **`create-service-season-profiles.sql`** in the Supabase SQL Editor (or via your usual `run-sql` flow).
+2. From `S9-b-end`:
+
+```bash
+npm run refresh-season-profiles
+```
+
+While `node index.js` runs, the daily seasonal job refreshes **scores** then **profiles** automatically. Tune matching in **`lib/seasonProfileClassifier.js`** to your **`service_categories.name`** values.
+
 ## Security Notes
 
 - Never commit the `.env` file to version control
