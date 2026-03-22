@@ -41,6 +41,10 @@ TWILIO_PHONE_NUMBER=your_twilio_phone_number_here
 # AI Assistant Configuration
 OPENAI_API_KEY=your_openai_api_key_here
 
+# ML service (Python) — recommendations / ranking (hosted must use a public URL, not localhost)
+# ML_SERVICE_URL=https://your-ml-service.example.com
+# ML_SERVICE_TIMEOUT_MS=15000
+
 # File Upload Configuration
 MAX_FILE_SIZE=10485760
 UPLOAD_PATH=./uploads

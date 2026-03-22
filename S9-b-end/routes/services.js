@@ -123,30 +123,70 @@ async function fetchSeasonShelfCandidateIds(supabase, phases, excludeSet) {
   return acc;
 }
 
-/** Full active catalog for ML text + season shelf (paged). */
+const SERVICES_SELECT_RECOMMENDATIONS =
+  'id, category_id, name, description, icon_url, duration, price, offer_price, offer_enabled, active';
+
+/**
+ * Catalog for ML + season shelf + catalog-float padding.
+ * Treat NULL `active` as visible: `.eq('active', true)` alone hides most rows on DBs that default active to NULL.
+ */
 async function fetchAllActiveServicesForRecommendations(supabase) {
   const pageSize = 500;
-  let from = 0;
-  const all = [];
-  for (;;) {
-    const { data, error } = await supabase
-      .from('services')
-      .select(
-        'id, category_id, name, description, icon_url, duration, price, offer_price, offer_enabled, active'
-      )
-      .eq('active', true)
-      .order('id', { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) {
-      console.warn('fetchAllActiveServicesForRecommendations:', error.message);
-      break;
+  const fetchPages = async (activeOrNullOnly) => {
+    let from = 0;
+    const acc = [];
+    for (;;) {
+      let q = supabase
+        .from('services')
+        .select(SERVICES_SELECT_RECOMMENDATIONS)
+        .order('id', { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (activeOrNullOnly) {
+        q = q.or('active.eq.true,active.is.null');
+      }
+      const { data, error } = await q;
+      if (error) {
+        console.warn('fetchAllActiveServicesForRecommendations:', error.message);
+        break;
+      }
+      if (!data?.length) break;
+      acc.push(...data);
+      if (data.length < pageSize) break;
+      from += pageSize;
     }
-    if (!data?.length) break;
-    all.push(...data);
-    if (data.length < pageSize) break;
-    from += pageSize;
+    return acc;
+  };
+
+  let all = await fetchPages(true);
+  if (!all.length) {
+    console.warn(
+      '[recommendations] No services with active=true or active IS NULL; loading all services as catalog fallback'
+    );
+    let from = 0;
+    for (;;) {
+      const { data, error } = await supabase
+        .from('services')
+        .select(SERVICES_SELECT_RECOMMENDATIONS)
+        .order('id', { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error) {
+        console.warn('fetchAllActiveServicesForRecommendations (fallback):', error.message);
+        break;
+      }
+      if (!data?.length) break;
+      all.push(...data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
   }
   return all;
+}
+
+/** Use in-memory catalog when present; otherwise refetch (hosted edge cases). */
+async function resolveRecommendationCatalogRows(allCatalogRows, supabase) {
+  if (Array.isArray(allCatalogRows) && allCatalogRows.length > 0) return allCatalogRows;
+  if (!supabase) return [];
+  return fetchAllActiveServicesForRecommendations(supabase);
 }
 
 /**
@@ -181,12 +221,25 @@ async function composeSeasonFirstRecommendations({
   let candidateIds = await fetchSeasonShelfCandidateIds(supabase, phases, bookedOnlyExcludeSet);
   let shelfIds = floatOrderIds(candidateIds, rotationKey, seasonSlots);
 
-  const byId = new Map(allCatalogRows.map((r) => [String(r.id), r]));
+  const catalogRows = await resolveRecommendationCatalogRows(allCatalogRows, supabase);
+  const byId = new Map(catalogRows.map((r) => [String(r.id), r]));
   let shelfRows = shelfIds.map((id) => byId.get(String(id))).filter(Boolean);
+
+  // Profiles reference service IDs; if catalog map was empty/wrong, hydrate rows from DB.
+  if (shelfRows.length === 0 && shelfIds.length > 0 && supabase) {
+    const { data: hydrated, error: hydErr } = await supabase
+      .from('services')
+      .select(SERVICES_SELECT_RECOMMENDATIONS)
+      .in('id', shelfIds);
+    if (!hydErr && hydrated?.length) {
+      const hmap = new Map(hydrated.map((r) => [String(r.id), r]));
+      shelfRows = shelfIds.map((id) => hmap.get(String(id))).filter(Boolean);
+    }
+  }
 
   if (shelfRows.length === 0) {
     shelfRows = rankSeasonalBoostedServices(
-      allCatalogRows,
+      catalogRows,
       month,
       country,
       bookedOnlyExcludeSet,
@@ -234,7 +287,7 @@ async function composeSeasonFirstRecommendations({
       maxPop,
       serviceCategoryById,
       userAffinityCategoryIds,
-      allCatalogRows,
+      catalogRows,
       rotationKey,
       recommendationContext
     );
@@ -399,21 +452,24 @@ async function backfillRecommendationsEnriched(
   }
 
   let result = [...base, ...extra];
-  if (result.length < cap && allCatalogRows?.length && catalogRotationKey) {
-    const month = recommendationContext?.month;
-    const country =
-      recommendationContext?.country_code || recommendationContext?.countryCode || 'IN';
-    const have2 = new Set(result.map((r) => String(r.serviceId)));
-    const floatMore = appendCatalogFloatRecs({
-      allCatalogRows,
-      have: have2,
-      excludeSet,
-      need: cap - result.length,
-      rotationKey: `${catalogRotationKey}|backfill`,
-      month,
-      country
-    });
-    result = [...result, ...floatMore];
+  if (result.length < cap && catalogRotationKey) {
+    const catalogRows = await resolveRecommendationCatalogRows(allCatalogRows, supabase);
+    if (catalogRows?.length) {
+      const month = recommendationContext?.month;
+      const country =
+        recommendationContext?.country_code || recommendationContext?.countryCode || 'IN';
+      const have2 = new Set(result.map((r) => String(r.serviceId)));
+      const floatMore = appendCatalogFloatRecs({
+        allCatalogRows: catalogRows,
+        have: have2,
+        excludeSet,
+        need: cap - result.length,
+        rotationKey: `${catalogRotationKey}|backfill`,
+        month,
+        country
+      });
+      result = [...result, ...floatMore];
+    }
   }
 
   return result.slice(0, cap);
@@ -502,20 +558,23 @@ async function padRecommendationsToLimit(
     if (out.length === lenBefore) break;
   }
 
-  if (out.length < limit && allCatalogRows?.length && catalogRotationKey) {
-    const month = recommendationContext?.month;
-    const country =
-      recommendationContext?.country_code || recommendationContext?.countryCode || 'IN';
-    const floatRecs = appendCatalogFloatRecs({
-      allCatalogRows,
-      have,
-      excludeSet,
-      need: limit - out.length,
-      rotationKey: `${catalogRotationKey}|pad`,
-      month,
-      country
-    });
-    out = [...out, ...floatRecs];
+  if (out.length < limit && catalogRotationKey) {
+    const catalogRows = await resolveRecommendationCatalogRows(allCatalogRows, supabase);
+    if (catalogRows?.length) {
+      const month = recommendationContext?.month;
+      const country =
+        recommendationContext?.country_code || recommendationContext?.countryCode || 'IN';
+      const floatRecs = appendCatalogFloatRecs({
+        allCatalogRows: catalogRows,
+        have,
+        excludeSet,
+        need: limit - out.length,
+        rotationKey: `${catalogRotationKey}|pad`,
+        month,
+        country
+      });
+      out = [...out, ...floatRecs];
+    }
   }
 
   return out.slice(0, limit);
