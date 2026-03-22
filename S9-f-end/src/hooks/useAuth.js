@@ -1312,9 +1312,9 @@ export const AuthProvider = ({ children }) => {
     return fetchPromise;
   }, [user?.id]);
 
-  const getCompleteUserProfile = async () => {
+  const getCompleteUserProfile = useCallback(async () => {
     if (!user?.id) return null;
-    
+
     try {
       // Get user data with related profile information
       const { data: userData, error: userError } = await supabase
@@ -1344,20 +1344,19 @@ export const AuthProvider = ({ children }) => {
         `)
         .eq('auth_user_id', user.id)
         .single();
-      
+
       if (userError) {
         console.warn('⚠️ Failed to get complete user profile:', userError);
         return null;
       }
-      
+
       console.log('✅ Retrieved complete user profile:', userData);
       return userData;
-      
     } catch (error) {
       console.warn('⚠️ Error getting complete user profile:', error);
       return null;
     }
-  };
+  }, [user?.id]);
 
   const refreshUserData = async () => {
     if (!user?.id) return;

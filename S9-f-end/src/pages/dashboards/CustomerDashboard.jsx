@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -57,6 +57,7 @@ import {
   Smartphone,
   Globe,
   Zap,
+  Sparkles,
   Package,
   Activity,
   TrendingUp,
@@ -280,6 +281,21 @@ const CustomerDashboard = () => {
   const [surveyUrgency, setSurveyUrgency] = useState('normal');
   const [onboardingSubmitting, setOnboardingSubmitting] = useState(false);
   const [dbUserId, setDbUserId] = useState(null);
+  /** Modal visibility — delayed + recurring; recommendations still load in the background */
+  const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
+  const [onboardingPropertyType, setOnboardingPropertyType] = useState('');
+  const [onboardingServiceFrequency, setOnboardingServiceFrequency] = useState('');
+  const [onboardingBudgetComfort, setOnboardingBudgetComfort] = useState('');
+  const [onboardingPreferredTime, setOnboardingPreferredTime] = useState('');
+  const [onboardingNotes, setOnboardingNotes] = useState('');
+  const [onboardingServiceSearch, setOnboardingServiceSearch] = useState('');
+  /** Shown inside the modal (toasts sit under z-index overlay) */
+  const [onboardingInlineFeedback, setOnboardingInlineFeedback] = useState(null);
+  const onboardingPromptTimersRef = useRef({ showTimer: null, repeatTimer: null, skipReshowTimer: null });
+  const onboardingRequiredRef = useRef(false);
+
+  const ONBOARDING_FIRST_SHOW_MS = 30000;
+  const ONBOARDING_REPEAT_MS = 30000;
 
   const onboardingIssueOptions = [
     { id: 'plumbing', label: 'Water leakage / pipe or tap issue', keywords: ['plumb', 'leak', 'pipe', 'tap', 'drain'] },
@@ -288,8 +304,18 @@ const CustomerDashboard = () => {
     { id: 'cleaning', label: 'Home deep cleaning / hygiene need', keywords: ['clean', 'hygiene', 'sanitize', 'housekeeping'] },
     { id: 'pest', label: 'Pest/insect problem', keywords: ['pest', 'termite', 'cockroach', 'mosquito', 'insect'] },
     { id: 'carpentry', label: 'Furniture / wood / fitting issue', keywords: ['carpenter', 'wood', 'furniture', 'door', 'window', 'blind', 'curtain'] },
-    { id: 'painting', label: 'Wall/paint/interior finishing issue', keywords: ['paint', 'wall', 'interior', 'finish'] }
+    { id: 'painting', label: 'Wall/paint/interior finishing issue', keywords: ['paint', 'wall', 'interior', 'finish'] },
+    { id: 'moving', label: 'Moving, packing, or shifting', keywords: ['pack', 'move', 'movers', 'shift', 'packer', 'delivery'] },
+    { id: 'outdoor', label: 'Outdoor / gate / exterior work', keywords: ['gate', 'exterior', 'outdoor', 'porch', 'ceiling', 'welding'] }
   ];
+
+  const filteredOnboardingServices = useMemo(() => {
+    const q = onboardingServiceSearch.trim().toLowerCase();
+    if (!q) return services;
+    return services.filter((s) =>
+      `${s.name || ''} ${s.category || ''}`.toLowerCase().includes(q)
+    );
+  }, [services, onboardingServiceSearch]);
 
   const [bookingHistory, setBookingHistory] = useState([]);
   const [bills, setBills] = useState([]);
@@ -1000,28 +1026,43 @@ const CustomerDashboard = () => {
         const preferred = customerDetails?.preferred_services;
         const preferredArray = Array.isArray(preferred) ? preferred : (preferred ? [preferred] : []);
         const doneKey = `onboarding_done_${user.id}`;
-        const alreadyDone = localStorage.getItem(doneKey) === '1';
+        const permanentlyDismissed = localStorage.getItem(doneKey) === '1';
 
         // If user already has preferences, no modal needed.
         if (preferredArray.length > 0) {
           localStorage.setItem(doneKey, '1');
+          setOnboardingRequired(false);
           return;
         }
 
-        // Show onboarding only for truly new users.
-        // Existing users may not have preferred_services filled yet, and should not be blocked.
-        const createdAt = complete?.created_at ? new Date(complete.created_at) : null;
-        const createdAtMs = createdAt instanceof Date && !Number.isNaN(createdAt.getTime())
-          ? createdAt.getTime()
-          : null;
-        const recentlyCreated = createdAtMs ? (Date.now() - createdAtMs) < (1000 * 60 * 60 * 48) : false;
+        if (permanentlyDismissed) {
+          setOnboardingRequired(false);
+          return;
+        }
 
-        if (!alreadyDone && recentlyCreated) {
-          setOnboardingRequired(true);
-        } else {
+        // Account age: only used to stop nagging *legacy* users. Never set onboarding_done on
+        // unknown/missing profile (e.g. profile fetch slow right after login) — that used to
+        // block the modal forever after skip + re-login.
+        const createdAt = complete?.created_at ? new Date(complete.created_at) : null;
+        const createdAtMs =
+          createdAt instanceof Date && !Number.isNaN(createdAt.getTime()) ? createdAt.getTime() : null;
+        const FORTY_EIGHT_H = 1000 * 60 * 60 * 48;
+        let accountAgeKnown = false;
+        let isRecentSignup = false;
+        if (createdAtMs != null) {
+          accountAgeKnown = true;
+          isRecentSignup = Date.now() - createdAtMs < FORTY_EIGHT_H;
+        }
+
+        if (accountAgeKnown && !isRecentSignup) {
+          // Known older account, still no prefs — don’t keep prompting
           localStorage.setItem(doneKey, '1');
           setOnboardingRequired(false);
+          return;
         }
+
+        // Recent signup OR profile/created_at missing (treat as eligible — skip does not set doneKey)
+        setOnboardingRequired(true);
       } catch (e) {
         // If we cannot read preferences, don't block the user.
         console.warn('Onboarding check failed:', e?.message || e);
@@ -1036,12 +1077,53 @@ const CustomerDashboard = () => {
     };
   }, [user?.id, getCompleteUserProfile]);
 
+  useEffect(() => {
+    onboardingRequiredRef.current = onboardingRequired;
+  }, [onboardingRequired]);
+
+  // First prompt after 30s, then every 30s until user saves preferences or opts out permanently.
+  // getCompleteUserProfile is useCallback([user?.id]) so this effect is not wiped on every render.
+  useEffect(() => {
+    if (!user?.id || !onboardingRequired || onboardingCheckLoading) {
+      return undefined;
+    }
+    const ref = onboardingPromptTimersRef.current;
+    if (ref.showTimer) clearTimeout(ref.showTimer);
+    if (ref.repeatTimer) clearInterval(ref.repeatTimer);
+    if (ref.skipReshowTimer) clearTimeout(ref.skipReshowTimer);
+    ref.skipReshowTimer = null;
+
+    ref.showTimer = setTimeout(() => {
+      setOnboardingModalOpen(true);
+      ref.repeatTimer = setInterval(() => {
+        if (onboardingRequiredRef.current) {
+          setOnboardingModalOpen(true);
+        }
+      }, ONBOARDING_REPEAT_MS);
+    }, ONBOARDING_FIRST_SHOW_MS);
+
+    return () => {
+      clearTimeout(ref.showTimer);
+      clearInterval(ref.repeatTimer);
+      clearTimeout(ref.skipReshowTimer);
+      ref.showTimer = null;
+      ref.repeatTimer = null;
+      ref.skipReshowTimer = null;
+    };
+  }, [user?.id, onboardingRequired, onboardingCheckLoading]);
+
+  // Auto-hide inline success in the onboarding modal
+  useEffect(() => {
+    if (!onboardingInlineFeedback || onboardingInlineFeedback.variant !== 'success') return undefined;
+    const t = setTimeout(() => setOnboardingInlineFeedback(null), 5200);
+    return () => clearTimeout(t);
+  }, [onboardingInlineFeedback]);
+
   // Load ML-based personalized service recommendations for the logged-in customer.
-  // We delay this until onboarding preference check is complete (and onboarding modal is not required).
+  // Runs even while onboarding modal is open — backend cold-starts with popularity / season / catalog.
   useEffect(() => {
     if (!user?.id) return;
     if (onboardingCheckLoading) return;
-    if (onboardingRequired) return;
 
     let isCancelled = false;
     const fetchRecommendations = async () => {
@@ -1074,9 +1156,10 @@ const CustomerDashboard = () => {
     return () => {
       isCancelled = true;
     };
-  }, [user?.id, onboardingCheckLoading, onboardingRequired, onboardingAnchorServiceId]);
+  }, [user?.id, onboardingCheckLoading, onboardingAnchorServiceId]);
 
   const togglePreferredService = (serviceId) => {
+    setOnboardingInlineFeedback(null);
     setPreferredServiceIds((prev) => {
       const id = String(serviceId);
       if (prev.includes(id)) return prev.filter((x) => x !== id);
@@ -1085,6 +1168,7 @@ const CustomerDashboard = () => {
   };
 
   const toggleSurveyIssueAnswer = (issueId) => {
+    setOnboardingInlineFeedback(null);
     setSurveyIssueAnswers((prev) => {
       if (prev.includes(issueId)) return prev.filter((x) => x !== issueId);
       return [...prev, issueId];
@@ -1094,7 +1178,10 @@ const CustomerDashboard = () => {
   const autoSelectServicesFromSurvey = () => {
     if (!Array.isArray(services) || services.length === 0) return;
     if (!Array.isArray(surveyIssueAnswers) || surveyIssueAnswers.length === 0) {
-      toast.error('Select at least one problem area in the survey first.');
+      setOnboardingInlineFeedback({
+        variant: 'error',
+        text: 'Select at least one problem area in the survey first.'
+      });
       return;
     }
 
@@ -1122,30 +1209,83 @@ const CustomerDashboard = () => {
 
     const topIds = scored.slice(0, 6).map((x) => x.id);
     if (topIds.length === 0) {
-      toast.error('No exact service match found. Please pick services manually below.');
+      setOnboardingInlineFeedback({
+        variant: 'error',
+        text: 'No exact service match found. Please pick services manually in the list below.'
+      });
       return;
     }
 
     setPreferredServiceIds(topIds);
-    toast.success('Survey analyzed. Suggested services selected for you.');
+    setOnboardingInlineFeedback({
+      variant: 'success',
+      text: 'Suggested services selected. You can adjust the list before saving.'
+    });
+  };
+
+  const buildOnboardingPreferenceNotes = () => {
+    const parts = [];
+    const labels = {
+      apartment: 'Apartment / flat',
+      house: 'Independent house / villa',
+      commercial: 'Office / commercial space',
+      weekly: 'Weekly or more',
+      monthly: 'About once a month',
+      occasional: 'A few times a year',
+      one_time: 'One-time need right now',
+      economy: 'Budget-friendly options',
+      standard: 'Standard pricing',
+      premium: 'Premium / priority service',
+      morning: 'Morning (before noon)',
+      afternoon: 'Afternoon',
+      evening: 'Evening',
+      flexible: 'Any time'
+    };
+    if (onboardingPropertyType) parts.push(`Home: ${labels[onboardingPropertyType] || onboardingPropertyType}`);
+    if (onboardingServiceFrequency) parts.push(`Frequency: ${labels[onboardingServiceFrequency] || onboardingServiceFrequency}`);
+    if (onboardingBudgetComfort) parts.push(`Budget: ${labels[onboardingBudgetComfort] || onboardingBudgetComfort}`);
+    if (onboardingPreferredTime) parts.push(`Preferred visit: ${labels[onboardingPreferredTime] || onboardingPreferredTime}`);
+    if (surveyUrgency === 'urgent') parts.push('Urgency: ASAP');
+    const note = onboardingNotes.trim();
+    if (note) parts.push(`Notes: ${note}`);
+    return parts.length ? `[Preferences] ${parts.join(' · ')}` : '';
   };
 
   const handleOnboardingSubmit = async () => {
     if (!user?.id) return;
     if (preferredServiceIds.length === 0) {
-      toast.error('Please select at least one service preference.');
+      setOnboardingInlineFeedback({
+        variant: 'error',
+        text: 'Please select at least one service in the list below before saving.'
+      });
       return;
     }
 
     try {
       setOnboardingSubmitting(true);
+      setOnboardingInlineFeedback(null);
+      const rowId = dbUserId || user.id;
+
+      const { data: existingRow } = await supabase
+        .from('customer_details')
+        .select('special_requirements')
+        .eq('id', rowId)
+        .maybeSingle();
+
+      const prefBlock = buildOnboardingPreferenceNotes();
+      const prevNotes = (existingRow?.special_requirements && String(existingRow.special_requirements).trim()) || '';
+      const mergedSpecial =
+        prefBlock && prevNotes && !prevNotes.includes(prefBlock)
+          ? `${prevNotes}\n${prefBlock}`
+          : prefBlock || prevNotes || null;
 
       const { error } = await supabase
         .from('customer_details')
         .upsert(
           {
-            id: dbUserId || user.id,
-            preferred_services: preferredServiceIds
+            id: rowId,
+            preferred_services: preferredServiceIds,
+            ...(mergedSpecial != null ? { special_requirements: mergedSpecial } : {})
           },
           { onConflict: 'id' }
         );
@@ -1157,29 +1297,68 @@ const CustomerDashboard = () => {
       // Use the first selected service as the anchor so recommendations become personalized immediately.
       setOnboardingAnchorServiceId(preferredServiceIds[0]);
       setOnboardingRequired(false);
+      setOnboardingModalOpen(false);
       setPreferredServiceIds([]);
       setSurveyIssueAnswers([]);
       setSurveyUrgency('normal');
+      setOnboardingPropertyType('');
+      setOnboardingServiceFrequency('');
+      setOnboardingBudgetComfort('');
+      setOnboardingPreferredTime('');
+      setOnboardingNotes('');
+      setOnboardingServiceSearch('');
+      setOnboardingInlineFeedback(null);
 
-      toast.success('Preferences saved. Getting recommendations…');
+      toast.success('Preferences saved. Your recommendations are updating…');
     } catch (e) {
       console.error('Onboarding preference save failed:', e?.message || e);
-      toast.error('Failed to save preferences. Try again.');
+      setOnboardingInlineFeedback({
+        variant: 'error',
+        text: 'Could not save preferences. Check your connection and try again.'
+      });
       // Keep modal open on failure.
     } finally {
       setOnboardingSubmitting(false);
     }
   };
 
+  /** Close for now; modal opens again after ONBOARDING_REPEAT_MS (and interval keeps nudging). */
   const handleOnboardingSkip = () => {
     if (!user?.id) return;
+    setOnboardingInlineFeedback(null);
+    setOnboardingModalOpen(false);
+    const ref = onboardingPromptTimersRef.current;
+    if (ref.skipReshowTimer) clearTimeout(ref.skipReshowTimer);
+    ref.skipReshowTimer = setTimeout(() => {
+      ref.skipReshowTimer = null;
+      if (onboardingRequiredRef.current) {
+        setOnboardingModalOpen(true);
+      }
+    }, ONBOARDING_REPEAT_MS);
+    toast.success('No problem — we’re already showing smart picks below. We’ll remind you again shortly.');
+  };
+
+  /** Stop all onboarding prompts; use algorithm-only recommendations. */
+  const handleOnboardingDismissPermanently = () => {
+    if (!user?.id) return;
+    setOnboardingInlineFeedback(null);
+    const ref = onboardingPromptTimersRef.current;
+    if (ref.skipReshowTimer) clearTimeout(ref.skipReshowTimer);
+    ref.skipReshowTimer = null;
     localStorage.setItem(`onboarding_done_${user.id}`, '1');
     setOnboardingRequired(false);
+    setOnboardingModalOpen(false);
     setPreferredServiceIds([]);
     setSurveyIssueAnswers([]);
     setSurveyUrgency('normal');
     setOnboardingAnchorServiceId(null);
-    toast.success('Skipping preferences. Showing popular recommendations.');
+    setOnboardingPropertyType('');
+    setOnboardingServiceFrequency('');
+    setOnboardingBudgetComfort('');
+    setOnboardingPreferredTime('');
+    setOnboardingNotes('');
+    setOnboardingServiceSearch('');
+    toast.success('You’ll see seasonal and popular recommendations. You can set preferences anytime in your profile.');
   };
 
   // Load services and categories from database
@@ -2310,224 +2489,242 @@ const CustomerDashboard = () => {
         />
       )}
 
-      {/* Cold-start onboarding modal (first-time customer) */}
-      {!onboardingCheckLoading && onboardingRequired && (
+      {/* Cold-start onboarding: first show after 30s, then every 30s until saved or dismissed forever */}
+      {!onboardingCheckLoading && onboardingRequired && onboardingModalOpen && (
         <div
-          onClick={(e) => e.preventDefault()}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(15, 23, 42, 0.62)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 10000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.25rem'
+          className="cd-onboarding-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cd-onboarding-title"
+          onClick={handleOnboardingSkip}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') handleOnboardingSkip();
           }}
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 'min(820px, 100%)',
-              background: 'white',
-              borderRadius: 20,
-              boxShadow: '0 30px 80px rgba(2,6,23,0.35)',
-              border: '1px solid #e2e8f0',
-              overflow: 'hidden'
-            }}
-          >
-            <div style={{ padding: '1.15rem 1.4rem', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 45%, #1e40af 100%)' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', marginBottom: 6 }}>
-                Personalized Onboarding
+          <div className="cd-onboarding-card" onClick={(e) => e.stopPropagation()}>
+            <div className="cd-onboarding-header">
+              <div className="cd-onboarding-header-top">
+                <span className="cd-onboarding-kicker">
+                  <Sparkles size={14} aria-hidden />
+                  Personalize your experience
+                </span>
+                <button
+                  type="button"
+                  className="cd-onboarding-close"
+                  onClick={handleOnboardingSkip}
+                  aria-label="Close for now"
+                >
+                  <X size={20} strokeWidth={2.5} className="cd-onboarding-close-icon" aria-hidden />
+                </button>
               </div>
-              <h3 style={{ margin: 0, color: 'white', fontSize: '1.2rem', fontWeight: 800 }}>
-                Tell us your problem, we suggest the right service
-              </h3>
-              <p style={{ margin: '0.45rem 0 0', color: 'rgba(255,255,255,0.92)', fontSize: '0.92rem', lineHeight: 1.45 }}>
-                Select the services you’re interested in. We’ll use this to personalize your first recommendations.
-              </p>
+              <div className="cd-onboarding-header-text">
+                <h3 id="cd-onboarding-title" className="cd-onboarding-title">
+                  Help us match you with the right services
+                </h3>
+                <p className="cd-onboarding-lead">
+                  Your recommendations are already running below using season and popularity. Add a few details so we
+                  can tune them further — optional fields help providers serve you better.
+                </p>
+              </div>
             </div>
 
-            <div style={{ padding: '1.1rem 1.4rem 1.3rem' }}>
-              {services.length === 0 ? (
-                <div style={{ color: '#64748b', fontWeight: 700, padding: '0.75rem 0.25rem' }}>
-                  Loading available services…
+            <div className="cd-onboarding-body">
+              {onboardingInlineFeedback ? (
+                <div
+                  role="alert"
+                  className={`cd-onboarding-inline-alert cd-onboarding-inline-alert--${onboardingInlineFeedback.variant}`}
+                >
+                  {onboardingInlineFeedback.text}
                 </div>
+              ) : null}
+              {services.length === 0 ? (
+                <div className="cd-onboarding-loading-msg">Loading available services…</div>
               ) : (
                 <>
-                  <div
-                    style={{
-                      background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: 14,
-                      padding: '0.95rem',
-                      marginBottom: '1rem'
-                    }}
-                  >
-                    <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 10, fontSize: '0.95rem' }}>
-                      Quick survey: What problems do you need help with?
+                  <section className="cd-onboarding-section" aria-label="About your home">
+                    <h4 className="cd-onboarding-section-title">About you & your space</h4>
+                    <p className="cd-onboarding-section-hint">All optional — leave blank if you prefer not to say.</p>
+                    <div className="cd-onboarding-grid-2">
+                      <label className="cd-onboarding-field">
+                        <span>Type of space</span>
+                        <select
+                          value={onboardingPropertyType}
+                          onChange={(e) => setOnboardingPropertyType(e.target.value)}
+                        >
+                          <option value="">Select…</option>
+                          <option value="apartment">Apartment / flat</option>
+                          <option value="house">Independent house / villa</option>
+                          <option value="commercial">Office / commercial</option>
+                        </select>
+                      </label>
+                      <label className="cd-onboarding-field">
+                        <span>How often you need services</span>
+                        <select
+                          value={onboardingServiceFrequency}
+                          onChange={(e) => setOnboardingServiceFrequency(e.target.value)}
+                        >
+                          <option value="">Select…</option>
+                          <option value="weekly">Weekly or more</option>
+                          <option value="monthly">About monthly</option>
+                          <option value="occasional">A few times a year</option>
+                          <option value="one_time">One-time need now</option>
+                        </select>
+                      </label>
+                      <label className="cd-onboarding-field">
+                        <span>Budget comfort</span>
+                        <select
+                          value={onboardingBudgetComfort}
+                          onChange={(e) => setOnboardingBudgetComfort(e.target.value)}
+                        >
+                          <option value="">Select…</option>
+                          <option value="economy">Budget-friendly</option>
+                          <option value="standard">Standard</option>
+                          <option value="premium">Premium / priority</option>
+                        </select>
+                      </label>
+                      <label className="cd-onboarding-field">
+                        <span>Preferred visit time</span>
+                        <select
+                          value={onboardingPreferredTime}
+                          onChange={(e) => setOnboardingPreferredTime(e.target.value)}
+                        >
+                          <option value="">Select…</option>
+                          <option value="morning">Morning</option>
+                          <option value="afternoon">Afternoon</option>
+                          <option value="evening">Evening</option>
+                          <option value="flexible">Flexible</option>
+                        </select>
+                      </label>
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    <label className="cd-onboarding-field cd-onboarding-field--full">
+                      <span>Anything else we should know? (access, pets, parking…)</span>
+                      <textarea
+                        value={onboardingNotes}
+                        onChange={(e) => setOnboardingNotes(e.target.value)}
+                        rows={2}
+                        placeholder="Optional — helps teams prepare for your visit"
+                        maxLength={500}
+                      />
+                    </label>
+                  </section>
+
+                  <section className="cd-onboarding-section cd-onboarding-section--muted" aria-label="Problem survey">
+                    <h4 className="cd-onboarding-section-title">What do you need help with?</h4>
+                    <p className="cd-onboarding-section-hint">
+                      Tap all that apply — then use “Suggest services” to pre-select matches.
+                    </p>
+                    <div className="cd-onboarding-chips">
                       {onboardingIssueOptions.map((opt) => {
                         const selected = surveyIssueAnswers.includes(opt.id);
                         return (
                           <button
                             key={opt.id}
                             type="button"
+                            className={`cd-onboarding-chip${selected ? ' cd-onboarding-chip--on' : ''}`}
                             onClick={() => toggleSurveyIssueAnswer(opt.id)}
-                            style={{
-                              border: selected ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                              background: selected ? 'linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)' : 'white',
-                              color: selected ? '#1d4ed8' : '#334155',
-                              borderRadius: 999,
-                              padding: '0.4rem 0.8rem',
-                              fontSize: '0.79rem',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              boxShadow: selected ? '0 2px 8px rgba(37, 99, 235, 0.25)' : 'none',
-                              transition: 'all 0.2s ease'
-                            }}
                           >
                             {opt.label}
                           </button>
                         );
                       })}
                     </div>
-
-                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                      <span style={{ color: '#334155', fontWeight: 700, fontSize: '0.83rem' }}>Urgency</span>
-                      <select
-                        value={surveyUrgency}
-                        onChange={(e) => setSurveyUrgency(e.target.value)}
-                        style={{ border: '1px solid #cbd5e1', borderRadius: 10, padding: '0.38rem 0.62rem', fontWeight: 600, color: '#0f172a', background: 'white' }}
-                      >
-                        <option value="normal">Normal</option>
-                        <option value="urgent">Urgent (ASAP)</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={autoSelectServicesFromSurvey}
-                        style={{
-                          background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: 999,
-                          padding: '0.42rem 0.9rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          boxShadow: '0 4px 12px rgba(29, 78, 216, 0.35)'
-                        }}
-                      >
-                        Suggest Services from Survey
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.85rem' }}>
-                    {preferredServiceIds.length > 0 ? (
-                      preferredServiceIds.map((sid) => {
-                        const svc = services.find((s) => String(s.id) === String(sid));
-                        return (
-                          <span
-                            key={sid}
-                            style={{
-                              background: 'linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%)',
-                              border: '1px solid #bfdbfe',
-                              color: '#1d4ed8',
-                              borderRadius: 999,
-                              padding: '0.28rem 0.72rem',
-                              fontSize: '0.8rem',
-                              fontWeight: 700
-                            }}
-                          >
-                            {svc?.name || sid}
-                          </span>
-                        );
-                      })
-                    ) : (
-                      <span style={{ color: '#64748b', fontWeight: 600, fontSize: '0.88rem' }}>
-                        Choose at least one service to continue.
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{ maxHeight: 260, overflowY: 'auto', paddingRight: 6 }}>
-                    {services.map((svc) => {
-                      const sid = String(svc.id);
-                      const checked = preferredServiceIds.includes(sid);
-                      return (
-                        <label
-                          key={sid}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 10,
-                            padding: '0.58rem 0.72rem',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: 12,
-                            marginBottom: 8,
-                            cursor: 'pointer',
-                            background: checked ? '#eff6ff' : 'white',
-                            transition: 'all 0.15s ease'
+                    <div className="cd-onboarding-survey-actions">
+                      <label className="cd-onboarding-field cd-onboarding-field--inline">
+                        <span>Urgency</span>
+                        <select
+                          value={surveyUrgency}
+                          onChange={(e) => {
+                            setOnboardingInlineFeedback(null);
+                            setSurveyUrgency(e.target.value);
                           }}
                         >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => togglePreferredService(sid)}
-                          />
-                          <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.9rem' }}>{svc.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
+                          <option value="normal">Normal</option>
+                          <option value="urgent">Urgent — ASAP</option>
+                        </select>
+                      </label>
+                      <button type="button" className="cd-onboarding-btn-secondary" onClick={autoSelectServicesFromSurvey}>
+                        Suggest from survey
+                      </button>
+                    </div>
+                  </section>
+
+                  <section className="cd-onboarding-section" aria-label="Choose services">
+                    <h4 className="cd-onboarding-section-title">Choose services you’re interested in</h4>
+                    <p className="cd-onboarding-section-hint">
+                      Select at least one to save. You can search the list.
+                    </p>
+                    <div className="cd-onboarding-search-wrap">
+                      <Search size={16} className="cd-onboarding-search-icon" aria-hidden />
+                      <input
+                        type="search"
+                        className="cd-onboarding-search"
+                        placeholder="Search services…"
+                        value={onboardingServiceSearch}
+                        onChange={(e) => setOnboardingServiceSearch(e.target.value)}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="cd-onboarding-selected">
+                      {preferredServiceIds.length > 0 ? (
+                        preferredServiceIds.map((sid) => {
+                          const svc = services.find((s) => String(s.id) === String(sid));
+                          return (
+                            <span key={sid} className="cd-onboarding-pill">
+                              {svc?.name || sid}
+                            </span>
+                          );
+                        })
+                      ) : (
+                        <span className="cd-onboarding-selected-placeholder">No services selected yet</span>
+                      )}
+                    </div>
+                    <div className="cd-onboarding-service-list">
+                      {filteredOnboardingServices.map((svc) => {
+                        const sid = String(svc.id);
+                        const checked = preferredServiceIds.includes(sid);
+                        return (
+                          <label key={sid} className={`cd-onboarding-row${checked ? ' cd-onboarding-row--on' : ''}`}>
+                            <input
+                              type="checkbox"
+                              className="cd-onboarding-check"
+                              checked={checked}
+                              onChange={() => togglePreferredService(sid)}
+                            />
+                            <span className="cd-onboarding-row-name">{svc.name}</span>
+                            {svc.category ? (
+                              <span className="cd-onboarding-row-cat">{svc.category}</span>
+                            ) : null}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </section>
                 </>
               )}
 
               {onboardingSubmitting ? (
-                <div style={{ marginTop: '0.85rem', color: '#2563eb', fontWeight: 700 }}>
-                  Saving your preferences…
-                </div>
+                <div className="cd-onboarding-saving">Saving your preferences…</div>
               ) : (
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: '1.05rem', flexWrap: 'wrap' }}>
+                <div className="cd-onboarding-footer">
+                  <div className="cd-onboarding-footer-left">
+                    <button type="button" className="cd-onboarding-btn-ghost" onClick={handleOnboardingSkip}>
+                      Remind me later
+                    </button>
+                    <button
+                      type="button"
+                      className="cd-onboarding-btn-text"
+                      onClick={handleOnboardingDismissPermanently}
+                    >
+                      Don’t ask again — use smart picks only
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={handleOnboardingSkip}
-                    style={{
-                      background: 'white',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: 999,
-                      padding: '0.64rem 1rem',
-                      fontWeight: 700,
-                      color: '#334155',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    Skip for now
-                  </button>
-
-                  <button
-                    type="button"
+                    className="cd-onboarding-btn-primary"
                     onClick={handleOnboardingSubmit}
-                    style={{
-                      background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                      border: 'none',
-                      borderRadius: 999,
-                      padding: '0.64rem 1.12rem',
-                      fontWeight: 800,
-                      color: 'white',
-                      cursor: 'pointer',
-                      boxShadow: '0 8px 18px rgba(37, 99, 235, 0.35)',
-                      transition: 'all 0.2s ease'
-                    }}
                     disabled={onboardingSubmitting || services.length === 0}
                   >
-                    Save & Get Recommendations
+                    Save preferences
                   </button>
                 </div>
               )}
