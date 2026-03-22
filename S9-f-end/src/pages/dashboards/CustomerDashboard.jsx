@@ -124,6 +124,59 @@ function normalizePreferredServiceIds(preferred) {
   return [];
 }
 
+/** Minimal recommendation row from catalog when ML response omits a user-selected service */
+function recommendationFromCatalogService(svc) {
+  if (!svc) return null;
+  return {
+    serviceId: svc.id,
+    id: svc.id,
+    name: svc.name,
+    price: svc.price,
+    offer_enabled: svc.offer_enabled,
+    offer_price: svc.offer_price,
+    icon_url: svc.icon_url,
+    insightKey: 'your-picks',
+    insightLabel: 'From your preferences'
+  };
+}
+
+/** Show modal/profile preferred services first, then remaining ML recommendations in API order */
+function orderRecommendationsWithPreferredFirst(recs, priorityIds, servicesCatalog) {
+  const list = Array.isArray(recs) ? recs : [];
+  const ids = Array.isArray(priorityIds) ? priorityIds.map(String).filter(Boolean) : [];
+  if (ids.length === 0) return list;
+
+  const byId = new Map();
+  list.forEach((r) => {
+    const sid = String(r?.serviceId ?? r?.id ?? '');
+    if (sid) byId.set(sid, r);
+  });
+
+  const front = [];
+  const used = new Set();
+  for (const pid of ids) {
+    let row = byId.get(pid);
+    if (!row && Array.isArray(servicesCatalog) && servicesCatalog.length) {
+      const svc = servicesCatalog.find((s) => String(s.id) === pid);
+      row = recommendationFromCatalogService(svc);
+    }
+    if (row) {
+      const sid = String(row.serviceId ?? row.id ?? pid);
+      if (!used.has(sid)) {
+        front.push(row);
+        used.add(sid);
+      }
+    }
+  }
+
+  const tail = list.filter((r) => {
+    const sid = String(r?.serviceId ?? r?.id ?? '');
+    return sid && !used.has(sid);
+  });
+
+  return [...front, ...tail];
+}
+
 const CustomerDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -311,6 +364,8 @@ const CustomerDashboard = () => {
   const [recommendedLoading, setRecommendedLoading] = useState(false);
   const [recommendedError, setRecommendedError] = useState(null);
   const [recommendationSeasonalContext, setRecommendationSeasonalContext] = useState(null);
+  /** Preferred service IDs from onboarding/profile — rendered first in “For you” recommendations */
+  const [recommendationPriorityIds, setRecommendationPriorityIds] = useState([]);
 
   // Cold-start onboarding (first-time customer)
   const [onboardingCheckLoading, setOnboardingCheckLoading] = useState(true);
@@ -357,6 +412,16 @@ const CustomerDashboard = () => {
       `${s.name || ''} ${s.category || ''}`.toLowerCase().includes(q)
     );
   }, [services, onboardingServiceSearch]);
+
+  const orderedRecommendedServices = useMemo(
+    () =>
+      orderRecommendationsWithPreferredFirst(
+        recommendedServices,
+        recommendationPriorityIds,
+        services
+      ),
+    [recommendedServices, recommendationPriorityIds, services]
+  );
 
   const [bookingHistory, setBookingHistory] = useState([]);
   const [bills, setBills] = useState([]);
@@ -1084,6 +1149,13 @@ const CustomerDashboard = () => {
         const doneKey = `onboarding_done_${user.id}`;
         const neverKey = `cd_onboarding_never_${user.id}`;
 
+        // Home recommendations: always pin profile/onboarding picks to the front when present.
+        if (preferredArray.length > 0) {
+          setRecommendationPriorityIds(preferredArray.map(String));
+        } else {
+          setRecommendationPriorityIds([]);
+        }
+
         // Explicit “don’t ask again” (new key — old builds reused onboarding_done for this + legacy bugs).
         if (localStorage.getItem(neverKey) === '1') {
           setOnboardingRequired(false);
@@ -1137,6 +1209,7 @@ const CustomerDashboard = () => {
     ref.showTimer = null;
     ref.repeatTimer = null;
     ref.skipReshowTimer = null;
+    setRecommendationPriorityIds([]);
     return undefined;
   }, [user?.id]);
 
@@ -1364,6 +1437,8 @@ const CustomerDashboard = () => {
         /* ignore */
       }
 
+      // Pin the same picks to the top of “For you” (then ML fills the rest).
+      setRecommendationPriorityIds(preferredServiceIds.map(String));
       // Use the first selected service as the anchor so recommendations become personalized immediately.
       setOnboardingAnchorServiceId(preferredServiceIds[0]);
       setOnboardingRequired(false);
@@ -1439,6 +1514,7 @@ const CustomerDashboard = () => {
     setOnboardingPreferredTime('');
     setOnboardingNotes('');
     setOnboardingServiceSearch('');
+    setRecommendationPriorityIds([]);
     toast.success('You’ll see seasonal and popular recommendations. You can set preferences anytime in your profile.');
   };
 
@@ -3191,9 +3267,9 @@ const CustomerDashboard = () => {
                         </div>
                       )}
 
-                      {!recommendedLoading && recommendedServices && recommendedServices.length > 0 && (
+                      {!recommendedLoading && orderedRecommendedServices.length > 0 && (
                         <div className="home-recommendations-grid">
-                          {recommendedServices.map((rec) => {
+                          {orderedRecommendedServices.map((rec) => {
                             const full = services.find((s) => String(s.id) === String(rec.serviceId));
                             const categoryLabel = full?.category || '';
                             const hasOffer = rec.offer_enabled && rec.offer_price != null && Number(rec.price) > Number(rec.offer_price);
@@ -3252,7 +3328,7 @@ const CustomerDashboard = () => {
                       )}
 
                       {!recommendedLoading &&
-                        (!recommendedServices || recommendedServices.length === 0) &&
+                        orderedRecommendedServices.length === 0 &&
                         !recommendedError && (
                           <p className="home-recommendations-empty">
                             Tell us what you’re interested in during onboarding, or book a service once — we’ll start

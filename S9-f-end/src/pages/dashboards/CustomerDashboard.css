@@ -4689,6 +4689,12 @@ mark.search-match {
   border: 1px solid #93c5fd;
 }
 
+.home-recommendation-badge--your-picks {
+  color: #a16207;
+  background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
+  border: 1px solid #fde047;
+}
+
 .home-recommendation-badge--popular {
   color: #5b21b6;
   background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
