@@ -1,15 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { createClient } = require('@supabase/supabase-js');
 const UserService = require('../services/userService');
 const { supabase } = require('../lib/supabase');
 const { sendSuspensionEmail, sendReactivationEmail } = require('../services/emailService');
 const { createNotification, notifyAdminsProviderTimeOffCreated, notifyAdminsProviderAvailabilityUpdated } = require('../services/notificationService');
 
 const userService = new UserService();
-const supabaseAuthClient = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null;
 
 // Helper function to check if provider profile is complete
 // This operates on the provider_profiles row shape (not the old combined profile)
@@ -49,83 +45,16 @@ router.get('/', async (req, res) => {
 router.post('/change-password', async (req, res) => {
   try {
     const { userId, email: emailFromBody, currentPassword, newPassword } = req.body || {};
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'currentPassword and newPassword are required' });
-    }
-
-    // Decode caller from access token (preferred identity source).
-    let tokenUser = null;
-    try {
-      const authHeader = String(req.headers.authorization || '');
-      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-      if (token) {
-        const { data: tokenData, error: tokenError } = await supabase.auth.getUser(token);
-        if (!tokenError && tokenData?.user) {
-          tokenUser = tokenData.user;
-        }
-      }
-    } catch (_) {
-      tokenUser = null;
-    }
-
-    if (!userId && !emailFromBody && !tokenUser) {
-      return res.status(400).json({ error: 'userId or email is required' });
+    if ((!userId && !emailFromBody) || !currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'userId or email, currentPassword and newPassword are required' });
     }
 
     // Fetch user
-    let user = null;
-    let userError = null;
-    if (userId) {
-      const byIdResp = await supabase
-        .from('users')
-        .select('id, email, password_hash, supabase_auth, auth_user_id')
-        .eq('id', userId)
-        .maybeSingle();
-      user = byIdResp.data;
-      userError = byIdResp.error;
-
-      // When frontend sends auth.users id, resolve through auth_user_id too.
-      if (!user) {
-        const byAuthIdResp = await supabase
-          .from('users')
-          .select('id, email, password_hash, supabase_auth, auth_user_id')
-          .eq('auth_user_id', userId)
-          .maybeSingle();
-        user = byAuthIdResp.data;
-        userError = byAuthIdResp.error;
-      }
-    } else {
-      const normalizedEmail = String(emailFromBody || '').trim().toLowerCase();
-      const byEmailResp = await supabase
-        .from('users')
-        .select('id, email, password_hash, supabase_auth, auth_user_id')
-        .eq('email', normalizedEmail)
-        .maybeSingle();
-      user = byEmailResp.data;
-      userError = byEmailResp.error;
-    }
-
-    // Final fallback: resolve purely from bearer token identity.
-    if (!user && tokenUser) {
-      const byTokenAuthIdResp = await supabase
-        .from('users')
-        .select('id, email, password_hash, supabase_auth, auth_user_id')
-        .eq('auth_user_id', tokenUser.id)
-        .maybeSingle();
-      user = byTokenAuthIdResp.data;
-      userError = byTokenAuthIdResp.error;
-
-      if (!user && tokenUser.email) {
-        const byTokenEmailResp = await supabase
-          .from('users')
-          .select('id, email, password_hash, supabase_auth, auth_user_id')
-          .eq('email', String(tokenUser.email).toLowerCase())
-          .maybeSingle();
-        user = byTokenEmailResp.data;
-        userError = byTokenEmailResp.error;
-      }
-    }
-
+    let { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, email, password_hash, supabase_auth, auth_user_id')
+      .eq(userId ? 'id' : 'email', userId || String(emailFromBody || '').toLowerCase())
+      .single();
     if ((userError || !user) && !userId && emailFromBody) {
       // Try normalized email
       const normalized = String(emailFromBody).trim().toLowerCase();
@@ -133,7 +62,7 @@ router.post('/change-password', async (req, res) => {
         .from('users')
         .select('id, email, password_hash, supabase_auth, auth_user_id')
         .eq('email', normalized)
-        .maybeSingle();
+        .single();
       user = resp.data; userError = resp.error;
     }
 
@@ -141,45 +70,23 @@ router.post('/change-password', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Validate caller identity by access token when present.
-    let isRequesterSelf = false;
-    if (tokenUser?.id && user?.auth_user_id && tokenUser.id === user.auth_user_id) {
-      isRequesterSelf = true;
-    }
-
-    // Verify current password
+    // Verify current password (demo uses base64 encoding)
     const providedPlain = String(currentPassword || '').trim();
+    const providedHash = Buffer.from(providedPlain).toString('base64');
+    const storedHash = user.password_hash ? String(user.password_hash) : '';
+
+    // If no password is set yet (legacy/seeded users) OR account is supabase-auth, allow setting directly
     let isMatch = false;
-    const isSupabaseLinked = user?.supabase_auth === true || Boolean(user?.auth_user_id);
-
-    // Prefer Supabase auth verification for linked accounts.
-    if (isSupabaseLinked && supabaseAuthClient && user?.email) {
-      const { data: signInData, error: signInError } = await supabaseAuthClient.auth.signInWithPassword({
-        email: String(user.email),
-        password: providedPlain
-      });
-
-      if (!signInError && signInData?.user) {
-        isMatch = true;
-        // Keep auth client clean; this does not affect browser session.
-        await supabaseAuthClient.auth.signOut();
-      }
-    }
-
-    // Fallback to legacy hash verification when not matched above.
-    if (!isMatch) {
-      const providedHash = Buffer.from(providedPlain).toString('base64');
-      const storedHash = user.password_hash ? String(user.password_hash) : '';
+    if (!storedHash || user?.supabase_auth === true) {
+      isMatch = true;
+    } else {
+      // Accept either base64 match or plain-text match after decoding stored value
       const decodedStored = (() => {
         try { return Buffer.from(storedHash, 'base64').toString(); } catch (_) { return null; }
       })();
       if (storedHash === providedHash || (decodedStored && decodedStored === providedPlain)) {
         isMatch = true;
       }
-    }
-
-    if (!isMatch && isRequesterSelf) {
-      isMatch = true;
     }
 
     if (!isMatch) {
@@ -195,7 +102,7 @@ router.post('/change-password', async (req, res) => {
     const newHash = Buffer.from(String(newPassword)).toString('base64');
 
     // If this is a Supabase-auth user, update the auth password first via admin API
-    if (user?.auth_user_id) {
+    if (user?.supabase_auth === true && user?.auth_user_id) {
       const { error: adminUpdateError } = await supabase.auth.admin.updateUserById(user.auth_user_id, { password: String(newPassword) });
       if (adminUpdateError) {
         return res.status(500).json({ error: adminUpdateError.message || 'Failed to update Supabase auth password' });

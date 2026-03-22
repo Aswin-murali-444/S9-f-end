@@ -1,3 +1,9 @@
+# Dependencies (use package-lock.json only)
+node_modules/
+
+# Local / backup clones
+S9-b-end-sync/
+
 # Environment variables
 .env
 .env.*

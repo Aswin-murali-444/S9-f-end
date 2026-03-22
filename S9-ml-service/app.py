@@ -1,10 +1,205 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import datetime
 import math
 from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, jsonify, request
+
+# ---------------------------------------------------------------------------
+# Seasonal / weather-style constraints (India-centric defaults)
+# Down-ranks outdoor painting & similar in monsoon; boosts leakage/AC by season.
+# ---------------------------------------------------------------------------
+
+
+def _parse_service_text_map(raw: Any) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    if not isinstance(raw, dict):
+        return out
+    for k, v in raw.items():
+        if k is None or v is None:
+            continue
+        out[str(k)] = str(v).lower()[:2000]
+    return out
+
+
+def _india_season_phase(month: int) -> str:
+    """Rough India calendar: monsoon Jun–Sep, summer Mar–May, winter Nov–Feb."""
+    if month in (6, 7, 8, 9):
+        return "monsoon"
+    if month in (3, 4, 5):
+        return "summer"
+    if month in (11, 12, 1, 2):
+        return "winter"
+    return "neutral"  # Oct transitional
+
+
+def _season_multiplier_for_text(hay: str, phase: str, country: str) -> Tuple[float, Optional[str]]:
+    """
+    Returns (multiplier, optional reason_key for debugging).
+    multiplier in ~[0.05, 1.35]. Values below ~0.12 are treated as drop in blend.
+    """
+    if country != "IN":
+        return 1.0, None
+
+    h = hay or ""
+
+    if phase == "monsoon":
+        # Strong avoid: clearly outdoor / facade painting
+        strong_avoid = (
+            "exterior paint",
+            "outdoor paint",
+            "external paint",
+            "facade",
+            "outer wall",
+            "terrace paint",
+            "roof paint",
+        )
+        for kw in strong_avoid:
+            if kw in h:
+                return 0.06, "season_avoid_outdoor_work"
+
+        # Monsoon-friendly
+        boost = (
+            "waterproof",
+            "water proof",
+            "seepage",
+            "damp",
+            "dampness",
+            "leak",
+            "leakage",
+            "drain",
+            "drainage",
+            "gutter",
+            "flooding",
+            "basement water",
+        )
+        for kw in boost:
+            if kw in h:
+                return 1.28, "season_boost_monsoon_relevant"
+
+        # Broad painting / cosmetic exterior-unfriendly in wet season
+        paintish = (
+            "painter",
+            "painting",
+            "whitewash",
+            "putty",
+            "wallpaper install",
+        )
+        for kw in paintish:
+            if kw in h:
+                return 0.22, "season_down_paint_monsoon"
+
+    if phase == "summer":
+        boost = (
+            "ac service",
+            "air condition",
+            "air conditioner",
+            "cooler",
+            "refrigerator",
+            "fridge",
+            "cooling",
+        )
+        for kw in boost:
+            if kw in h:
+                return 1.22, "season_boost_summer_cooling"
+
+        # Outdoor heavy work slightly less ideal peak summer (soft)
+        if "exterior paint" in h or "outdoor paint" in h:
+            return 0.75, "season_soft_down_exterior_summer"
+
+    if phase == "winter":
+        boost = (
+            "geyser",
+            "water heater",
+            "heater",
+            "immersion",
+            "solar water",
+            "hot water",
+        )
+        for kw in boost:
+            if kw in h:
+                return 1.2, "season_boost_winter_comfort"
+
+    return 1.0, None
+
+
+def _build_season_multipliers(
+    service_ids: List[str],
+    service_text_by_id: Dict[str, str],
+    recommendation_context: Optional[Dict[str, Any]],
+) -> Tuple[Dict[str, float], Dict[str, Optional[str]]]:
+    z = {sid: 1.0 for sid in service_ids}
+    rz: Dict[str, Optional[str]] = {sid: None for sid in service_ids}
+    if not recommendation_context or not isinstance(recommendation_context, dict):
+        return z, rz
+
+    country = str(recommendation_context.get("country_code") or recommendation_context.get("countryCode") or "IN").upper()
+    month_raw = recommendation_context.get("month") or recommendation_context.get("calendar_month")
+    try:
+        if month_raw is not None:
+            month = int(month_raw)
+        else:
+            month = datetime.datetime.now(datetime.timezone.utc).month
+    except (TypeError, ValueError):
+        month = datetime.datetime.now(datetime.timezone.utc).month
+    month = max(1, min(12, month))
+
+    phase = _india_season_phase(month)
+    if phase == "neutral" and country == "IN":
+        if month == 10:
+            phase = "post_monsoon"
+
+    precomputed = recommendation_context.get("season_scores_by_service_id") or recommendation_context.get(
+        "seasonScoresByServiceId"
+    )
+
+    out: Dict[str, float] = {}
+    reasons: Dict[str, Optional[str]] = {}
+    for sid in service_ids:
+        sid_s = str(sid)
+        row: Optional[Any] = None
+        if isinstance(precomputed, dict):
+            row = precomputed.get(sid_s) or precomputed.get(sid)
+        if isinstance(row, dict):
+            raw_m = row.get("multiplier") if "multiplier" in row else row.get("mult")
+            if raw_m is not None:
+                try:
+                    mult_pc = float(raw_m)
+                except (TypeError, ValueError):
+                    mult_pc = 1.0
+                reason_pc = row.get("reason_key") or row.get("reasonKey")
+                out[sid_s] = mult_pc
+                reasons[sid_s] = reason_pc if isinstance(reason_pc, str) or reason_pc is None else str(reason_pc)
+                continue
+
+        hay = service_text_by_id.get(sid_s, "") or service_text_by_id.get(sid, "")
+        mult, reason = _season_multiplier_for_text(hay, phase, country)
+        if phase == "post_monsoon" and country == "IN":
+            if any(k in hay for k in ("exterior paint", "outdoor paint", "facade")):
+                mult = min(mult, 0.45)
+                if mult <= 0.45:
+                    reason = reason or "season_soft_post_monsoon_exterior"
+        out[sid_s] = mult
+        reasons[sid_s] = reason
+    return out, reasons
+
+
+def _season_insight_label(reason: Optional[str]) -> Optional[Tuple[str, str]]:
+    """Map internal season reason to UI insight."""
+    if not reason:
+        return None
+    labels = {
+        "season_avoid_outdoor_work": ("seasonal", "Outdoor work — better in dry weather"),
+        "season_down_paint_monsoon": ("seasonal", "Painting — usually easier after monsoon"),
+        "season_boost_monsoon_relevant": ("trending", "Fits rainy-season needs"),
+        "season_boost_summer_cooling": ("popular", "Popular in summer"),
+        "season_soft_down_exterior_summer": ("seasonal", "Heavy exterior work — plan timing"),
+        "season_boost_winter_comfort": ("popular", "Handy in cooler months"),
+        "season_soft_post_monsoon_exterior": ("seasonal", "Exterior work — check weather window"),
+    }
+    return labels.get(reason)
 
 
 app = Flask(__name__)
@@ -372,15 +567,20 @@ def _blend_recommendations(
     service_trends: Dict[str, Dict[str, float]],
     popular_services: List[Dict[str, Any]],
     limit: int,
-    history_set: set,
+    excluded_service_ids: set,
     has_personalization: bool,
+    service_text_by_id: Optional[Dict[str, str]] = None,
+    recommendation_context: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Combine personalization (cosine / co-occurrence), platform trend momentum,
-    and overall popularity into a single score and attach insight labels.
+    popularity, and optional seasonal constraints (India month + service text).
     """
     limit = max(1, limit)
     pop_map, max_pop = _popularity_map(popular_services)
+    pc_text = _parse_service_text_map(service_text_by_id or {})
+    pair_sids = [p[0] for p in personal_pairs]
+    season_mult, season_reason = _build_season_multipliers(pair_sids, pc_text, recommendation_context)
 
     # Normalize personalization scores across this candidate batch
     pers_vals = [float(p[1]) for p in personal_pairs]
@@ -392,7 +592,9 @@ def _blend_recommendations(
     log_moms: List[float] = []
     rows: List[Tuple[str, float, float, float, float, float, float]] = []
     for sid, raw_p in personal_pairs:
-        if sid in history_set:
+        if sid in excluded_service_ids:
+            continue
+        if season_mult.get(sid, 1.0) < 0.11:
             continue
         tr = service_trends.get(sid, {})
         recent = float(tr.get("recent", 0.0))
@@ -430,10 +632,15 @@ def _blend_recommendations(
     blended: List[Dict[str, Any]] = []
     for sid, raw_p, p_norm, lm, pop, recent, prior in rows:
         t_norm = (lm - lm_min) / lm_span if has_trend_data and log_moms else 0.0
-        combined = w_p * p_norm + w_t * t_norm + w_pop * pop
+        base = w_p * p_norm + w_t * t_norm + w_pop * pop
+        sm = float(season_mult.get(sid, 1.0))
+        combined = base * sm
         insight_key, insight_label = _insight_from_components(
             p_norm, t_norm, pop, _momentum(recent, prior), recent, has_trend_data, has_personalization
         )
+        sea = _season_insight_label(season_reason.get(sid))
+        if sea and season_reason.get(sid) is not None:
+            insight_key, insight_label = sea
         blended.append(
             {
                 "service_id": sid,
@@ -446,6 +653,7 @@ def _blend_recommendations(
                     "momentum": round(_momentum(recent, prior), 4),
                     "recent_window_bookings": int(recent),
                     "prior_window_bookings": int(prior),
+                    "season_multiplier": round(sm, 4),
                 },
                 "insight_key": insight_key,
                 "insight_label": insight_label,
@@ -466,6 +674,9 @@ def recommend_services_logic(
     service_trends: Optional[Dict[str, Any]] = None,
     service_category_ids: Optional[Dict[str, Any]] = None,
     user_affinity_category_ids: Optional[List[Any]] = None,
+    exclude_service_ids: Optional[List[Any]] = None,
+    service_text_by_id: Optional[Dict[str, Any]] = None,
+    recommendation_context: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Item-item CF with cosine similarity, blended with trend momentum and popularity.
@@ -478,11 +689,21 @@ def recommend_services_logic(
 
     `service_category_ids`: { service_id: category_id } for ranking boost into the
     same categories as the user's history.
+
+    `exclude_service_ids`: services to never recommend (typically already booked).
+    `user_history` is the full personalization profile (bookings ∪ preferences).
+    When `exclude_service_ids` is omitted, it defaults to the profile list (legacy).
+
+    `service_text_by_id`: lowercase name+description per service for seasonal keyword rules.
+    `recommendation_context`: e.g. { "month": 1-12, "country_code": "IN",
+      "season_scores_by_service_id": { "uuid": { "multiplier": 1.2, "reason_key": "..." } } }
+      from DB daily job; missing services fall back to keyword scoring on service_text_by_id.
     """
     limit = max(1, limit)
     trends = _parse_service_trends(service_trends)
     cat_map = _parse_service_category_map(service_category_ids)
     affinity = _affinity_category_set(user_affinity_category_ids)
+    pc_text = _parse_service_text_map(service_text_by_id or {})
 
     # Build sparse service co-occurrence vectors (keys are service_id strings).
     service_vecs: Dict[str, Dict[str, float]] = {}
@@ -495,21 +716,31 @@ def recommend_services_logic(
             continue
         service_vecs[sid_str] = {str(k): float(v) for k, v in row.items() if k is not None and v is not None}
 
-    # If we have neither history nor co-occurrence vectors, fall back to popularity.
-    history_ids = [str(sid) for sid in user_history if sid is not None]
-    history_set = set(history_ids)
+    profile_ids = [str(sid) for sid in user_history if sid is not None]
+    if exclude_service_ids is not None:
+        exclude_set = {str(x) for x in exclude_service_ids if x is not None}
+    else:
+        exclude_set = set(profile_ids)
 
     current_str = str(current_service_id) if current_service_id is not None else None
-    if (not history_ids) and (not current_str):
+    if (not profile_ids) and (not current_str):
         # popularity-only fallback — still rank with trend + popularity blend
-        used_set = history_set
         pairs: List[Tuple[str, float]] = []
         for svc in popular_services or []:
             sid = str(svc.get("service_id"))
-            if not sid or sid in used_set:
+            if not sid or sid in exclude_set:
                 continue
             pairs.append((sid, float(svc.get("count") or 0.0)))
-        return _blend_recommendations(pairs, trends, popular_services, limit, history_set, has_personalization=False)
+        return _blend_recommendations(
+            pairs,
+            trends,
+            popular_services,
+            limit,
+            exclude_set,
+            False,
+            pc_text,
+            recommendation_context,
+        )
 
     # Construct a user profile vector in sparse dict form.
     # We weight current_service_id higher, then add history services.
@@ -524,32 +755,48 @@ def recommend_services_logic(
 
     # Add each history item's co-occurrence row with smaller weight.
     # This gives a "what you often buy together" profile.
-    for sid in history_ids:
+    for sid in profile_ids:
         if sid in service_vecs:
             _add_vec(user_vec, service_vecs[sid], weight=1.0)
 
     if not user_vec:
         # Nothing to compare - fallback to popularity with trend blend.
-        used_set = history_set
         pairs = []
         for svc in popular_services or []:
             sid = str(svc.get("service_id"))
-            if not sid or sid in used_set:
+            if not sid or sid in exclude_set:
                 continue
             pairs.append((sid, float(svc.get("count") or 0.0)))
-        return _blend_recommendations(pairs, trends, popular_services, limit, history_set, has_personalization=False)
+        return _blend_recommendations(
+            pairs,
+            trends,
+            popular_services,
+            limit,
+            exclude_set,
+            False,
+            pc_text,
+            recommendation_context,
+        )
 
     # Precompute user norm once.
     user_norm = math.sqrt(sum(float(v) * float(v) for v in user_vec.values()))
     if user_norm == 0.0:
-        used_set = history_set
         pairs_fb: List[Tuple[str, float]] = []
         for svc in popular_services or []:
             sid = str(svc.get("service_id"))
-            if not sid or sid in used_set:
+            if not sid or sid in exclude_set:
                 continue
             pairs_fb.append((sid, float(svc.get("count") or 0.0)))
-        return _blend_recommendations(pairs_fb, trends, popular_services, limit, history_set, has_personalization=False)
+        return _blend_recommendations(
+            pairs_fb,
+            trends,
+            popular_services,
+            limit,
+            exclude_set,
+            False,
+            pc_text,
+            recommendation_context,
+        )
 
     pop_map, _ = _popularity_map(popular_services)
 
@@ -563,7 +810,7 @@ def recommend_services_logic(
     # KNN via cosine similarity; drop candidates with no bookings, no trend, and no real similarity
     scored: List[Tuple[str, float]] = []
     for sid in candidate_set:
-        if sid in history_set:
+        if sid in exclude_set:
             continue
         vec = service_vecs.get(sid, {})
         sim = float(_cosine_similarity_sparse_dict(vec, user_vec, b_norm=user_norm))
@@ -581,17 +828,34 @@ def recommend_services_logic(
     scored.sort(key=lambda kv: kv[1], reverse=True)
 
     if not scored:
-        used_set = history_set
         pairs_fb2: List[Tuple[str, float]] = []
         for svc in popular_services or []:
             sid = str(svc.get("service_id"))
-            if not sid or sid in used_set:
+            if not sid or sid in exclude_set:
                 continue
             pairs_fb2.append((sid, float(svc.get("count") or 0.0)))
-        return _blend_recommendations(pairs_fb2, trends, popular_services, limit, history_set, has_personalization=False)
+        return _blend_recommendations(
+            pairs_fb2,
+            trends,
+            popular_services,
+            limit,
+            exclude_set,
+            False,
+            pc_text,
+            recommendation_context,
+        )
 
     pool = scored[: max(limit * 4, limit + 8)]
-    return _blend_recommendations(pool, trends, popular_services, limit, history_set, has_personalization=True)
+    return _blend_recommendations(
+        pool,
+        trends,
+        popular_services,
+        limit,
+        exclude_set,
+        True,
+        pc_text,
+        recommendation_context,
+    )
 
 
 @app.route("/recommend-services", methods=["POST"])
@@ -609,6 +873,8 @@ def recommend_services() -> Any:
         {"service_id": "svc-10", "count": 120},
         {"service_id": "svc-2", "count": 80}
       ],
+      "service_text_by_id": { "svc-2": "deep cleaning waterproofing" },
+      "recommendation_context": { "month": 7, "country_code": "IN" },
       "limit": 5
     }
     """
@@ -621,6 +887,9 @@ def recommend_services() -> Any:
     service_trends = payload.get("service_trends") or payload.get("serviceTrends") or {}
     service_category_ids = payload.get("service_category_ids") or payload.get("serviceCategoryIds") or {}
     user_affinity_category_ids = payload.get("user_affinity_category_ids") or payload.get("userAffinityCategoryIds") or []
+    exclude_service_ids = payload.get("exclude_service_ids") or payload.get("excludeServiceIds")
+    service_text_by_id = payload.get("service_text_by_id") or payload.get("serviceTextById") or {}
+    recommendation_context = payload.get("recommendation_context") or payload.get("recommendationContext") or {}
     limit = int(payload.get("limit") or 5)
 
     if not isinstance(user_history, list):
@@ -641,6 +910,15 @@ def recommend_services() -> Any:
     if not isinstance(user_affinity_category_ids, list):
         user_affinity_category_ids = []
 
+    if exclude_service_ids is not None and not isinstance(exclude_service_ids, list):
+        exclude_service_ids = None
+
+    if not isinstance(service_text_by_id, dict):
+        service_text_by_id = {}
+
+    if not isinstance(recommendation_context, dict):
+        recommendation_context = {}
+
     recommendations = recommend_services_logic(
         user_id=user_id,
         current_service_id=current_service_id,
@@ -651,6 +929,9 @@ def recommend_services() -> Any:
         service_trends=service_trends,
         service_category_ids=service_category_ids,
         user_affinity_category_ids=user_affinity_category_ids,
+        exclude_service_ids=exclude_service_ids,
+        service_text_by_id=service_text_by_id,
+        recommendation_context=recommendation_context,
     )
 
     return jsonify(

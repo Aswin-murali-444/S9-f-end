@@ -18,6 +18,7 @@ const notificationsRouter = require('./routes/notifications');
 const reviewsRouter = require('./routes/reviews');
 const adminRouter = require('./routes/admin');
 const contactRouter = require('./routes/contact');
+const { scheduleSeasonalScoresCron } = require('./jobs/scheduleSeasonalScores');
 
 // Import middleware modules
 const { getSystemMetrics } = require('./middleware/systemMetrics');
@@ -234,4 +235,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🔗 API Base: http://localhost:${PORT}/api`);
+  scheduleSeasonalScoresCron();
 }); 

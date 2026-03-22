@@ -4657,6 +4657,12 @@ mark.search-match {
   border: 1px solid #c4b5fd;
 }
 
+.home-recommendation-badge--seasonal {
+  color: #0e7490;
+  background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
+  border: 1px solid #67e8f9;
+}
+
 .home-recommendation-badge--recommended,
 .home-recommendation-badge--default {
   color: #475569;

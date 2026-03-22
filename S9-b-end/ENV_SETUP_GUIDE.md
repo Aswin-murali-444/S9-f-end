@@ -115,6 +115,48 @@ LOG_FILE=./logs/app.log
 - **LOG_LEVEL**: Logging level (error, warn, info, debug)
 - **LOG_FILE**: Path to log file
 
+## Optional: daily weather / seasonal scores
+
+Used by `npm run refresh-seasonal-scores` (writes `service_seasonal_scores` in Supabase). Same Supabase vars as above.
+
+- **SEASON_SCORE_COUNTRY**: Country code for scoring rules (default `IN`). Must match how you use `country_code` on recommendations.
+
+### Automatic daily refresh (while `node index.js` is running)
+
+The API schedules **one refresh per calendar day** (default **02:30 Asia/Kolkata**) using `node-cron`. No OS cron required.
+
+- **SEASONAL_SCORES_CRON** = `false` or `0` — turn off the in-process job.
+- **DISABLE_SEASONAL_SCORES_CRON** = `1` — same as off.
+- **SEASONAL_SCORES_CRON_EXPRESSION** — optional 5-field cron (minute hour day month weekday), interpreted in `SEASONAL_SCORES_TZ` (default `Asia/Kolkata`). Example: `0 3 * * *` = 03:00 daily.
+- **SEASONAL_SCORES_TZ** — IANA timezone for the expression (default `Asia/Kolkata`).
+
+If the server restarts, the job is re-registered; the next run is the next matching wall-clock time in that timezone.
+
+### Cursor: Supabase MCP (optional)
+
+If **Supabase MCP** is connected in Cursor (**Settings → Tools & MCP**), the AI can use Supabase’s MCP tools (inspect schema, etc.). That is **separate** from:
+
+- **`mcp_execute_sql`** — a Postgres **function** in your project used by `npm run setup:seasonal-table` (RPC fallback) and `POST /admin/execute-sql`.
+- **Backend env** — the API still needs **`SUPABASE_URL`** + **`SUPABASE_SERVICE_ROLE_KEY`** in `S9-b-end/.env`.
+
+To version a **project** MCP template (replace placeholders; **do not commit real tokens**), copy `.cursor/mcp.json.example` → `.cursor/mcp.json` and fill in **project ref** + **personal access token** from [Supabase Account → Access Tokens](https://supabase.com/dashboard/account/tokens).
+
+### Create the `service_seasonal_scores` table (no Cursor MCP required)
+
+Recommended for scripts/CI:
+
+- **DATABASE_URL** (or **SUPABASE_DATABASE_URL**): URI from Supabase → **Project Settings → Database → Connection string** (URI).
+
+```bash
+cd S9-b-end
+npm run setup:seasonal-table
+npm run refresh-seasonal-scores
+```
+
+- **DATABASE_SSL=false**: only for local Postgres without SSL.
+
+If `DATABASE_URL` is not set, `setup:seasonal-table` tries the **`mcp_execute_sql`** RPC. You can also paste `create-service-seasonal-scores.sql` in the Supabase SQL Editor.
+
 ## Security Notes
 
 - Never commit the `.env` file to version control

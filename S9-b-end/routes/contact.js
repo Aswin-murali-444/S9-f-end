@@ -5,18 +5,6 @@ const { createNotification } = require('../services/notificationService');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^[0-9+\-\s()]{7,20}$/;
-const ALLOWED_SUPPORT_PRIORITIES = new Set(['low', 'normal', 'high']);
-
-function extractProviderSupportDetails(body = {}) {
-  const source = String(body.source || '').trim();
-  if (source !== 'provider_dashboard_settings') {
-    return null;
-  }
-
-  const subject = String(body.subject || '').trim();
-  const priority = String(body.priority || 'normal').trim().toLowerCase();
-  return { subject, priority };
-}
 
 function validatePayload(body = {}) {
   const errors = {};
@@ -25,38 +13,17 @@ function validatePayload(body = {}) {
   const phoneNumber = String(body.phoneNumber || '').trim();
   const serviceType = String(body.serviceType || '').trim();
   const message = String(body.message || '').trim();
-  const providerSupport = extractProviderSupportDetails(body);
 
   if (!fullName || fullName.length < 2) errors.fullName = 'Full name is required';
   if (!email || !EMAIL_RE.test(email)) errors.email = 'Valid email is required';
   if (!phoneNumber || !PHONE_RE.test(phoneNumber)) errors.phoneNumber = 'Valid phone number is required';
   if (!serviceType) errors.serviceType = 'Service type is required';
-  if (!message || message.length < 10) {
-    errors.message = 'Message must be at least 10 characters';
-  } else if (message.length > 5000) {
-    errors.message = 'Message cannot exceed 5000 characters';
-  }
-
-  if (providerSupport) {
-    if (!providerSupport.subject || providerSupport.subject.length < 5) {
-      errors.subject = 'Subject must be at least 5 characters';
-    } else if (providerSupport.subject.length > 120) {
-      errors.subject = 'Subject cannot exceed 120 characters';
-    }
-
-    if (!ALLOWED_SUPPORT_PRIORITIES.has(providerSupport.priority)) {
-      errors.priority = 'Priority must be low, normal, or high';
-    }
-
-    if (message.length < 20) {
-      errors.message = 'Provider support message must be at least 20 characters';
-    }
-  }
+  if (!message || message.length < 10) errors.message = 'Message must be at least 10 characters';
 
   return {
     ok: Object.keys(errors).length === 0,
     errors,
-    sanitized: { fullName, email, phoneNumber, serviceType, message, providerSupport }
+    sanitized: { fullName, email, phoneNumber, serviceType, message }
   };
 }
 
@@ -76,8 +43,7 @@ router.post('/message', async (req, res) => {
       email,
       phoneNumber,
       serviceType,
-      message,
-      providerSupport
+      message
     } = sanitized;
 
     const meta = {
@@ -119,27 +85,6 @@ router.post('/message', async (req, res) => {
     if (insertError) {
       console.error('Create contact message error:', insertError);
       return res.status(500).json({ error: 'Failed to submit message' });
-    }
-
-    if (providerSupport) {
-      if (!linkedUserId) {
-        return res.status(400).json({ error: 'Provider support messages require a logged-in provider user' });
-      }
-
-      const { error: supportInsertError } = await supabase
-        .from('provider_admin_support_messages')
-        .insert({
-          contact_message_id: inserted.id,
-          provider_user_id: linkedUserId,
-          subject: providerSupport.subject,
-          priority: providerSupport.priority,
-          status: 'open'
-        });
-
-      if (supportInsertError) {
-        console.error('Create provider_admin_support_messages error:', supportInsertError);
-        return res.status(500).json({ error: 'Failed to submit provider support message' });
-      }
     }
 
     // Notify all admins in notifications bell.
@@ -211,20 +156,7 @@ router.get('/admin/messages', async (req, res) => {
 
     let query = supabase
       .from('contact_messages')
-      .select(`
-        *,
-        provider_admin_support_messages (
-          id,
-          provider_user_id,
-          subject,
-          priority,
-          status,
-          admin_user_id,
-          admin_reply,
-          replied_at,
-          created_at
-        )
-      `)
+      .select('*')
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -236,65 +168,9 @@ router.get('/admin/messages', async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch contact messages' });
     }
 
-    const messages = Array.isArray(data) ? data : [];
-    const providerIds = [...new Set(
-      messages
-        .flatMap((row) => {
-          const supportRows = Array.isArray(row?.provider_admin_support_messages)
-            ? row.provider_admin_support_messages
-            : row?.provider_admin_support_messages
-              ? [row.provider_admin_support_messages]
-              : [];
-          return supportRows.map((s) => s?.provider_user_id).filter(Boolean);
-        })
-    )];
-
-    let providerById = {};
-    if (providerIds.length > 0) {
-      const { data: providerRows, error: providerError } = await supabase
-        .from('users')
-        .select('id, email, role, user_profiles(first_name, last_name, phone)')
-        .in('id', providerIds);
-
-      if (providerError) {
-        console.warn('Provider details lookup failed for admin messages:', providerError.message);
-      } else {
-        providerById = (providerRows || []).reduce((acc, row) => {
-          const profile = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
-          const firstName = profile?.first_name || '';
-          const lastName = profile?.last_name || '';
-          const fullName = `${firstName} ${lastName}`.trim();
-          acc[row.id] = {
-            id: row.id,
-            name: fullName || null,
-            email: row.email || null,
-            phone: profile?.phone || null,
-            role: row.role || null
-          };
-          return acc;
-        }, {});
-      }
-    }
-
-    const enriched = messages.map((row) => {
-      const supportRows = Array.isArray(row?.provider_admin_support_messages)
-        ? row.provider_admin_support_messages
-        : row?.provider_admin_support_messages
-          ? [row.provider_admin_support_messages]
-          : [];
-
-      return {
-        ...row,
-        provider_admin_support_messages: supportRows.map((s) => ({
-          ...s,
-          provider_user: s?.provider_user_id ? (providerById[s.provider_user_id] || null) : null
-        }))
-      };
-    });
-
     return res.json({
       success: true,
-      data: enriched
+      data: data || []
     });
   } catch (error) {
     console.error('Admin contact messages error:', error);

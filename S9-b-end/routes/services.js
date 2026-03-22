@@ -26,6 +26,26 @@ function buildServiceTrendsFromRows(rows) {
   return trends;
 }
 
+/**
+ * Calendar month (1–12) for seasonal ML rules. Defaults to Asia/Kolkata (IST).
+ * Optional query: `month`, `calendar_month`, or `calendarMonth` (e.g. demo monsoon).
+ */
+function getRecommendationContextMonth(req) {
+  const raw =
+    req.query.month ?? req.query.calendar_month ?? req.query.calendarMonth;
+  if (raw != null && raw !== '') {
+    const m = parseInt(String(raw), 10);
+    if (m >= 1 && m <= 12) return m;
+  }
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    month: 'numeric'
+  });
+  const mo = parseInt(fmt.format(now), 10);
+  return Number.isFinite(mo) && mo >= 1 && mo <= 12 ? mo : new Date().getUTCMonth() + 1;
+}
+
 /** Only pad / surface services with real demand: booked in sample or activity in trend windows */
 function hasRecommendationEvidence(serviceId, bookingCount, trends) {
   const c = Number(bookingCount) || 0;
@@ -208,17 +228,21 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch user bookings' });
     }
 
-    let userHistory = (userBookings || [])
-      .map((b) => b.service_id)
-      .filter((sid) => !!sid);
+    const bookedServiceIds = [
+      ...new Set((userBookings || []).map((b) => b.service_id).filter((sid) => !!sid))
+    ];
+
+    // Profile for ML: bookings (and later preferences). Exclusion from *results* uses booked only
+    // so users can see new services to book — not only repeats of what they already booked.
+    let userHistory = [...bookedServiceIds];
+
+    const isUuid = (v) =>
+      typeof v === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 
     // Cold-start fallback: if the user has no booking history yet,
     // use onboarding preferences from customer_details.preferred_services.
     if (userHistory.length === 0) {
-      const isUuid = (v) =>
-        typeof v === 'string' &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
-
       try {
         const { data: customerRow, error: customerErr } = await supabase
           .from('customer_details')
@@ -261,6 +285,46 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       } catch (e) {
         // Non-blocking: ML will fall back to popularity if userHistory stays empty.
         console.warn('Cold-start preferred_services fallback failed:', e?.message || e);
+      }
+    } else {
+      // Has bookings: still merge onboarding preferences into ML profile only (not into exclusion).
+      try {
+        const { data: customerRow, error: customerErr } = await supabase
+          .from('customer_details')
+          .select('preferred_services')
+          .eq('id', resolvedUserId)
+          .maybeSingle();
+
+        if (!customerErr && customerRow?.preferred_services) {
+          const rawPrefs = Array.isArray(customerRow.preferred_services)
+            ? customerRow.preferred_services
+            : [];
+          const prefStrings = rawPrefs.filter(Boolean).map((x) => String(x));
+          if (prefStrings.length > 0) {
+            const uuidPrefs = prefStrings.filter(isUuid);
+            const namePrefs = prefStrings.filter((p) => !isUuid(p));
+            let extra = [];
+            if (uuidPrefs.length === prefStrings.length) {
+              extra = uuidPrefs;
+            } else if (namePrefs.length > 0) {
+              const serviceRows = await supabase
+                .from('services')
+                .select('id, name')
+                .in('name', namePrefs);
+              const byName = {};
+              (serviceRows || []).forEach((s) => {
+                if (s?.name) byName[s.name] = s.id;
+              });
+              const mappedByName = namePrefs.map((n) => byName[n]).filter(Boolean);
+              extra = [...uuidPrefs, ...mappedByName];
+            } else {
+              extra = uuidPrefs;
+            }
+            userHistory = [...new Set([...userHistory.map(String), ...extra.map(String)])];
+          }
+        }
+      } catch (e) {
+        console.warn('preferred_services profile merge failed:', e?.message || e);
       }
     }
 
@@ -310,22 +374,73 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       .sort(([, aCount], [, bCount]) => bCount - aCount)
       .map(([serviceId, count]) => ({ service_id: serviceId, count }));
 
-    // Category map for ML: rank same-category services higher when co-occurrence is weak
+    // Category map + service text (name/description) for ML seasonal keyword rules
     let serviceCategoryById = {};
+    const serviceTextById = {};
     try {
       const { data: catRows, error: catErr } = await supabase
         .from('services')
-        .select('id, category_id')
+        .select('id, category_id, name, description')
         .limit(1000);
       if (!catErr && Array.isArray(catRows)) {
         for (const row of catRows) {
           if (row?.id == null) continue;
-          serviceCategoryById[String(row.id)] =
+          const sid = String(row.id);
+          serviceCategoryById[sid] =
             row.category_id != null ? String(row.category_id) : '';
+          const bits = [row.name, row.description]
+            .filter(Boolean)
+            .map((x) => String(x));
+          if (bits.length) serviceTextById[sid] = bits.join(' ').toLowerCase();
         }
       }
     } catch (e) {
       console.warn('Recommendation category map skipped:', e?.message || e);
+    }
+
+    const recommendationContext = {
+      month: getRecommendationContextMonth(req),
+      country_code: req.query.country_code || req.query.countryCode || 'IN'
+    };
+
+    // Daily job table service_seasonal_scores (optional): overrides keyword season rules per service/month
+    try {
+      const month = recommendationContext.month;
+      const seasonScoresByServiceId = {};
+      let from = 0;
+      const pageSize = 1000;
+      for (;;) {
+        const { data: scoreRows, error: scoreErr } = await supabase
+          .from('service_seasonal_scores')
+          .select('service_id, multiplier, reason_key')
+          .eq('calendar_month', month)
+          .range(from, from + pageSize - 1);
+        if (scoreErr) {
+          if (scoreErr.code === '42P01' || /relation|does not exist/i.test(scoreErr.message || '')) {
+            console.warn(
+              'service_seasonal_scores table missing; run create-service-seasonal-scores.sql and npm run refresh-seasonal-scores'
+            );
+          } else {
+            console.warn('service_seasonal_scores query failed:', scoreErr.message);
+          }
+          break;
+        }
+        if (!scoreRows || scoreRows.length === 0) break;
+        for (const r of scoreRows) {
+          if (r?.service_id == null) continue;
+          seasonScoresByServiceId[String(r.service_id)] = {
+            multiplier: Number(r.multiplier),
+            reason_key: r.reason_key != null ? String(r.reason_key) : null
+          };
+        }
+        if (scoreRows.length < pageSize) break;
+        from += pageSize;
+      }
+      if (Object.keys(seasonScoresByServiceId).length > 0) {
+        recommendationContext.season_scores_by_service_id = seasonScoresByServiceId;
+      }
+    } catch (e) {
+      console.warn('service_seasonal_scores load skipped:', e?.message || e);
     }
 
     const userAffinityCategoryIds = [
@@ -360,15 +475,24 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       ? Math.max(...popularServices.map((p) => Number(p.count) || 0), 1)
       : 1;
 
+    const bookedOnlyExcludeSet = new Set(bookedServiceIds.map(String));
+    const stripAlreadyBooked = (recs) =>
+      (recs || []).filter(
+        (r) => r?.serviceId != null && !bookedOnlyExcludeSet.has(String(r.serviceId))
+      );
+
     const payload = {
       user_id: resolvedUserId,
       current_service_id: currentServiceId,
       user_history: userHistory,
+      exclude_service_ids: [...bookedOnlyExcludeSet],
       global_cooccurrence: globalCooccurrence,
       popular_services: popularServices,
       service_trends: serviceTrends,
       service_category_ids: serviceCategoryById,
       user_affinity_category_ids: userAffinityCategoryIds,
+      service_text_by_id: serviceTextById,
+      recommendation_context: recommendationContext,
       limit: Number.isFinite(limit) && limit > 0 ? limit : 5
     };
 
@@ -377,7 +501,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     if (mlError || !mlData) {
       console.error('ML recommend-services failed, falling back to popularity:', mlError);
       // Simple popularity-based fallback excluding already used services
-      const usedSet = new Set(userHistory.map(String));
+      const usedSet = bookedOnlyExcludeSet;
       const fallback = popularServices
         .filter((p) => !usedSet.has(String(p.service_id)))
         .slice(0, payload.limit)
@@ -399,7 +523,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
         return res.json({
           userId,
           currentServiceId,
-          recommendations: paddedNone,
+          recommendations: stripAlreadyBooked(paddedNone),
           usedMlService: false,
           trendSignalAvailable: Object.keys(serviceTrends).length > 0
         });
@@ -436,13 +560,12 @@ router.get('/user/:userId/recommendations', async (req, res) => {
         };
       });
 
-      const excludeSet = new Set(userHistory.map(String));
       const padded = await backfillRecommendationsEnriched(
         supabase,
         recommendations,
         payload.limit,
         popularServices,
-        excludeSet,
+        bookedOnlyExcludeSet,
         serviceTrends,
         maxPop
       );
@@ -450,14 +573,13 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       return res.json({
         userId,
         currentServiceId,
-        recommendations: padded,
+        recommendations: stripAlreadyBooked(padded),
         usedMlService: false,
         trendSignalAvailable: Object.keys(serviceTrends).length > 0
       });
     }
 
     const recommendedList = mlData.recommendations || [];
-    const excludeSet = new Set(userHistory.map(String));
 
     if (!recommendedList.length) {
       const paddedEmpty = await backfillRecommendationsEnriched(
@@ -465,14 +587,14 @@ router.get('/user/:userId/recommendations', async (req, res) => {
         [],
         payload.limit,
         popularServices,
-        excludeSet,
+        bookedOnlyExcludeSet,
         serviceTrends,
         maxPop
       );
       return res.json({
         userId,
         currentServiceId,
-        recommendations: paddedEmpty,
+        recommendations: stripAlreadyBooked(paddedEmpty),
         usedMlService: true,
         trendSignalAvailable: Object.keys(serviceTrends).length > 0
       });
@@ -513,10 +635,12 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       recommendations,
       payload.limit,
       popularServices,
-      excludeSet,
+      bookedOnlyExcludeSet,
       serviceTrends,
       maxPop
     );
+
+    recommendations = stripAlreadyBooked(recommendations);
 
     return res.json({
       userId,
