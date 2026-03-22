@@ -4610,15 +4610,58 @@ mark.search-match {
 }
 
 .home-recommendation-badge {
-  font-size: 0.625rem;
+  font-size: 0.5625rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0.02em;
   color: #1d4ed8;
   background: #dbeafe;
-  padding: 0.2rem 0.45rem;
+  padding: 0.22rem 0.4rem;
   border-radius: 6px;
-  white-space: nowrap;
+  max-width: 104px;
+  text-align: right;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+/* ML insight styles — trend vs personalization */
+.home-recommendation-badge--trending {
+  color: #b45309;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 1px solid #fdba74;
+}
+
+.home-recommendation-badge--high_demand {
+  color: #9f1239;
+  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+  border: 1px solid #fda4af;
+}
+
+.home-recommendation-badge--rising,
+.home-recommendation-badge--momentum {
+  color: #047857;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 1px solid #6ee7b7;
+}
+
+.home-recommendation-badge--personalized,
+.home-recommendation-badge--match {
+  color: #1e40af;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 1px solid #93c5fd;
+}
+
+.home-recommendation-badge--popular {
+  color: #5b21b6;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  border: 1px solid #c4b5fd;
+}
+
+.home-recommendation-badge--recommended,
+.home-recommendation-badge--default {
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
 }
 
 .home-recommendation-name {

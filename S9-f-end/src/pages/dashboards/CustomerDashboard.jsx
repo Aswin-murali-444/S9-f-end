@@ -2863,9 +2863,9 @@ const CustomerDashboard = () => {
                             <Zap size={18} aria-hidden />
                           </div>
                           <div>
-                            <h3 className="home-recommendations-title">Picked for you</h3>
+                            <h3 className="home-recommendations-title">Intelligent recommendations</h3>
                             <p className="home-recommendations-sub">
-                              Smart matches from your activity, preferences &amp; survey
+                              Personalized for you and ranked with live booking trends &amp; demand signals
                             </p>
                           </div>
                         </div>
@@ -2920,7 +2920,11 @@ const CustomerDashboard = () => {
                                       <Settings size={22} />
                                     </span>
                                   )}
-                                  <span className="home-recommendation-badge">For you</span>
+                                  <span
+                                    className={`home-recommendation-badge home-recommendation-badge--${rec.insightKey || 'default'}`}
+                                  >
+                                    {rec.insightLabel || 'For you'}
+                                  </span>
                                 </div>
                                 <span className="home-recommendation-name">{rec.name}</span>
                                 {categoryLabel ? (

@@ -260,6 +260,160 @@ def rank_providers() -> Any:
     )
 
 
+def _parse_service_trends(raw: Any) -> Dict[str, Dict[str, float]]:
+    """Normalize optional trend payload: { service_id: { recent, prior } } counts."""
+    out: Dict[str, Dict[str, float]] = {}
+    if not isinstance(raw, dict):
+        return out
+    for sid, row in raw.items():
+        if sid is None:
+            continue
+        s = str(sid)
+        if not isinstance(row, dict):
+            continue
+        recent = _safe_float(row.get("recent") or row.get("recent_count"), 0.0)
+        prior = _safe_float(row.get("prior") or row.get("prior_count"), 0.0)
+        out[s] = {"recent": recent, "prior": prior}
+    return out
+
+
+def _popularity_map(popular_services: List[Dict[str, Any]]) -> Tuple[Dict[str, float], float]:
+    m: Dict[str, float] = {}
+    for svc in popular_services or []:
+        sid = svc.get("service_id")
+        if sid is None:
+            continue
+        m[str(sid)] = float(svc.get("count") or 0.0)
+    mx = max(m.values()) if m else 1.0
+    if mx <= 0:
+        mx = 1.0
+    return m, mx
+
+
+def _momentum(recent: float, prior: float) -> float:
+    """Smoothed week-over-week style ratio; higher = more bookings in recent window."""
+    return (recent + 0.5) / (prior + 0.5)
+
+
+def _insight_from_components(
+    p_norm: float,
+    t_norm: float,
+    pop_norm: float,
+    momentum: float,
+    recent: float,
+    has_trend_data: bool,
+    has_personalization: bool,
+) -> Tuple[str, str]:
+    """
+    Human-readable reason for the recommendation (for product UI).
+    Trend signals are surfaced first when strong so users see demand/momentum clearly.
+    """
+    if has_trend_data and recent >= 2.0 and momentum >= 1.4:
+        return "trending", "Trending this week"
+    if has_trend_data and recent >= 3.0 and t_norm >= 0.55:
+        return "high_demand", "High demand lately"
+    if has_trend_data and momentum >= 1.25 and recent >= 1.0:
+        return "rising", "Rising interest"
+    if has_personalization and p_norm >= 0.38 and p_norm >= max(t_norm, pop_norm) - 0.08:
+        return "personalized", "Aligned with your activity"
+    if pop_norm >= 0.65:
+        return "popular", "Popular with customers"
+    if has_trend_data and t_norm >= 0.5:
+        return "momentum", "Strong booking momentum"
+    if has_personalization:
+        return "match", "Matches your profile"
+    return "recommended", "Recommended for you"
+
+
+def _blend_recommendations(
+    personal_pairs: List[Tuple[str, float]],
+    service_trends: Dict[str, Dict[str, float]],
+    popular_services: List[Dict[str, Any]],
+    limit: int,
+    history_set: set,
+    has_personalization: bool,
+) -> List[Dict[str, Any]]:
+    """
+    Combine personalization (cosine / co-occurrence), platform trend momentum,
+    and overall popularity into a single score and attach insight labels.
+    """
+    limit = max(1, limit)
+    pop_map, max_pop = _popularity_map(popular_services)
+
+    # Normalize personalization scores across this candidate batch
+    pers_vals = [float(p[1]) for p in personal_pairs]
+    p_min = min(pers_vals) if pers_vals else 0.0
+    p_max = max(pers_vals) if pers_vals else 1.0
+    p_span = (p_max - p_min) if (p_max > p_min) else 1.0
+
+    # Trend signal: log-momentum, then min-max normalize across candidates
+    log_moms: List[float] = []
+    rows: List[Tuple[str, float, float, float, float, float, float]] = []
+    for sid, raw_p in personal_pairs:
+        if sid in history_set:
+            continue
+        tr = service_trends.get(sid, {})
+        recent = float(tr.get("recent", 0.0))
+        prior = float(tr.get("prior", 0.0))
+        mom = _momentum(recent, prior)
+        lm = math.log1p(mom)
+        log_moms.append(lm)
+        pop = pop_map.get(sid, 0.0) / max_pop
+        p_norm = (float(raw_p) - p_min) / p_span
+        rows.append((sid, raw_p, p_norm, lm, pop, recent, prior))
+
+    if not rows:
+        return []
+
+    has_trend_data = bool(service_trends)
+
+    if log_moms:
+        lm_min, lm_max = min(log_moms), max(log_moms)
+        lm_span = (lm_max - lm_min) if (lm_max > lm_min) else 1.0
+    else:
+        lm_min, lm_max, lm_span = 0.0, 1.0, 1.0
+
+    # Weights: personalization + platform trend momentum + global popularity
+    if has_personalization:
+        w_p, w_t, w_pop = 0.52, 0.33, 0.15
+    else:
+        w_p, w_t, w_pop = 0.15, 0.45, 0.40
+
+    if not has_trend_data:
+        w_t = 0.0
+    s = w_p + w_t + w_pop
+    if s > 0:
+        w_p, w_t, w_pop = w_p / s, w_t / s, w_pop / s
+
+    blended: List[Dict[str, Any]] = []
+    for sid, raw_p, p_norm, lm, pop, recent, prior in rows:
+        t_norm = (lm - lm_min) / lm_span if has_trend_data and log_moms else 0.0
+        combined = w_p * p_norm + w_t * t_norm + w_pop * pop
+        insight_key, insight_label = _insight_from_components(
+            p_norm, t_norm, pop, _momentum(recent, prior), recent, has_trend_data, has_personalization
+        )
+        blended.append(
+            {
+                "service_id": sid,
+                "score": float(combined),
+                "components": {
+                    "personalization": round(p_norm, 4),
+                    "trend": round(t_norm, 4),
+                    "popularity": round(pop, 4),
+                    "raw_personal": round(float(raw_p), 6),
+                    "momentum": round(_momentum(recent, prior), 4),
+                    "recent_window_bookings": int(recent),
+                    "prior_window_bookings": int(prior),
+                },
+                "insight_key": insight_key,
+                "insight_label": insight_label,
+            }
+        )
+
+    blended.sort(key=lambda x: x["score"], reverse=True)
+    return blended[:limit]
+
+
 def recommend_services_logic(
     user_id: Any,
     current_service_id: Optional[Any],
@@ -267,20 +421,16 @@ def recommend_services_logic(
     global_cooccurrence: Dict[str, Dict[str, int]],
     popular_services: List[Dict[str, Any]],
     limit: int = 5,
+    service_trends: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Item-item CF with KNN-style top-k ranking using cosine similarity.
+    Item-item CF with cosine similarity, blended with trend momentum and popularity.
 
-    We build sparse "service vectors" from co-occurrence counts:
-      service_vec[sid] = { other_sid: cooccurrence_count }
-
-    Then we build a "user vector" by aggregating co-occurrence vectors
-    from the user's history (and optionally the currently selected service).
-
-    Finally, we rank candidate services by cosine similarity between
-    the user vector and each service vector, and return top-k.
+    Optional `service_trends`: { service_id: { "recent": n7, "prior": p7 } }
+    counts (e.g. bookings last 7 days vs previous 7 days) for demand signals.
     """
     limit = max(1, limit)
+    trends = _parse_service_trends(service_trends)
 
     # Build sparse service co-occurrence vectors (keys are service_id strings).
     service_vecs: Dict[str, Dict[str, float]] = {}
@@ -299,18 +449,15 @@ def recommend_services_logic(
 
     current_str = str(current_service_id) if current_service_id is not None else None
     if (not history_ids) and (not current_str):
-        # popularity-only fallback (exclude history if any)
+        # popularity-only fallback — still rank with trend + popularity blend
         used_set = history_set
-        candidates = []
+        pairs: List[Tuple[str, float]] = []
         for svc in popular_services or []:
             sid = str(svc.get("service_id"))
             if not sid or sid in used_set:
                 continue
-            candidates.append(
-                {"service_id": sid, "score": float(svc.get("count") or 0.0)}
-            )
-        candidates.sort(key=lambda x: x["score"], reverse=True)
-        return candidates[:limit]
+            pairs.append((sid, float(svc.get("count") or 0.0)))
+        return _blend_recommendations(pairs, trends, popular_services, limit, history_set, has_personalization=False)
 
     # Construct a user profile vector in sparse dict form.
     # We weight current_service_id higher, then add history services.
@@ -330,18 +477,15 @@ def recommend_services_logic(
             _add_vec(user_vec, service_vecs[sid], weight=1.0)
 
     if not user_vec:
-        # Nothing to compare - fallback to popularity.
+        # Nothing to compare - fallback to popularity with trend blend.
         used_set = history_set
-        candidates = []
+        pairs = []
         for svc in popular_services or []:
             sid = str(svc.get("service_id"))
             if not sid or sid in used_set:
                 continue
-            candidates.append(
-                {"service_id": sid, "score": float(svc.get("count") or 0.0)}
-            )
-        candidates.sort(key=lambda x: x["score"], reverse=True)
-        return candidates[:limit]
+            pairs.append((sid, float(svc.get("count") or 0.0)))
+        return _blend_recommendations(pairs, trends, popular_services, limit, history_set, has_personalization=False)
 
     # Precompute user norm once.
     user_norm = math.sqrt(sum(float(v) * float(v) for v in user_vec.values()))
@@ -357,7 +501,7 @@ def recommend_services_logic(
         if sid is not None:
             candidate_set.add(str(sid))
 
-    # KNN (top-k nearest) via cosine similarity.
+    # KNN (top-k nearest) via cosine similarity — take more than limit for re-ranking
     scored: List[Tuple[str, float]] = []
     for sid in candidate_set:
         if sid in history_set:
@@ -366,11 +510,9 @@ def recommend_services_logic(
         sim = _cosine_similarity_sparse_dict(vec, user_vec, b_norm=user_norm)
         scored.append((sid, sim))
 
-    # Sort by similarity (highest first).
     scored.sort(key=lambda kv: kv[1], reverse=True)
-    top = scored[:limit]
-
-    return [{"service_id": service_id, "score": float(score)} for service_id, score in top]
+    pool = scored[: max(limit * 4, limit + 8)]
+    return _blend_recommendations(pool, trends, popular_services, limit, history_set, has_personalization=True)
 
 
 @app.route("/recommend-services", methods=["POST"])
@@ -397,6 +539,7 @@ def recommend_services() -> Any:
     user_history = payload.get("user_history") or []
     global_cooccurrence = payload.get("global_cooccurrence") or {}
     popular_services = payload.get("popular_services") or []
+    service_trends = payload.get("service_trends") or payload.get("serviceTrends") or {}
     limit = int(payload.get("limit") or 5)
 
     if not isinstance(user_history, list):
@@ -408,6 +551,9 @@ def recommend_services() -> Any:
     if not isinstance(popular_services, list):
         popular_services = []
 
+    if not isinstance(service_trends, dict):
+        service_trends = {}
+
     recommendations = recommend_services_logic(
         user_id=user_id,
         current_service_id=current_service_id,
@@ -415,6 +561,7 @@ def recommend_services() -> Any:
         global_cooccurrence=global_cooccurrence,
         popular_services=popular_services,
         limit=limit,
+        service_trends=service_trends,
     )
 
     return jsonify(
