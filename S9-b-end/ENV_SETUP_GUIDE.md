@@ -183,6 +183,10 @@ While `node index.js` runs, the daily seasonal job refreshes **scores** then **p
 - Check the live API: `GET https://<your-api-host>/health`  
   - `supabaseServiceRoleConfigured` should be **`true`**.  
   - `deployCommit` (if present) should match the short SHA of the latest commit on `main` (e.g. `a83657d`).
+- **Catalog visibility:** `GET https://<your-api-host>/services/catalog-meta`  
+  - `supabaseServiceRoleConfigured`: **`true`**  
+  - `servicesVisibleCount`: should match (roughly) the number of services in Supabase **Table Editor** for that project. If this is **1** locally vs many in the dashboard, the API is using the **wrong Supabase project** or **anon + RLS**.
+- The recommendations route uses a **dedicated service-role client** when `SUPABASE_SERVICE_ROLE_KEY` or **`SUPABASE_SERVICE_ROLE`** is set (alias for common env typos).
 
 ## Security Notes
 

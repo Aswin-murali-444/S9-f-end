@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { supabase } = require('../lib/supabase');
+const { supabase, supabaseAdmin } = require('../lib/supabase');
 const { recommendServicesForUser } = require('../services/mlService');
 const {
   getSeasonUiInsight,
@@ -692,9 +692,34 @@ router.get('/', async (req, res) => {
   }
 });
 
+/** Hosted debug: how many `services` rows this API can see (compare local vs Render). */
+router.get('/catalog-meta', async (req, res) => {
+  try {
+    const client = supabaseAdmin || supabase;
+    const { count, error } = await client
+      .from('services')
+      .select('id', { count: 'exact', head: true });
+    res.json({
+      supabaseServiceRoleConfigured: Boolean(supabaseAdmin),
+      servicesVisibleCount: count,
+      queryError: error?.message || null
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message || 'catalog-meta failed' });
+  }
+});
+
 // Recommend services for a user (for dashboards / booking page)
 router.get('/user/:userId/recommendations', async (req, res) => {
   try {
+    /** Always use service role here when available — anon + RLS often returns 1 service row on hosted. */
+    const dbRec = supabaseAdmin || supabase;
+    if (!supabaseAdmin) {
+      console.warn(
+        '[recommendations] supabaseAdmin unavailable (set SUPABASE_SERVICE_ROLE_KEY on the host). Using default client; catalog may be truncated by RLS.'
+      );
+    }
+
     const { userId } = req.params;
     const rawLimit = parseInt(String(req.query.limit || RECOMMENDATIONS_DEFAULT_LIMIT), 10);
     const limit = Math.min(
@@ -716,7 +741,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       bookingUserIds.add(String(userId).trim());
     }
     try {
-      const { data: byAuth, error: authErr } = await supabase
+      const { data: byAuth, error: authErr } = await dbRec
         .from('users')
         .select('id')
         .eq('auth_user_id', userId)
@@ -729,7 +754,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       /* ignore */
     }
     try {
-      const { data: byPk } = await supabase
+      const { data: byPk } = await dbRec
         .from('users')
         .select('id')
         .eq('id', userId)
@@ -745,7 +770,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     const uidListForBookings = [...bookingUserIds].filter(Boolean);
 
     // Fetch this user's recent booking history (any matching user id key)
-    const { data: userBookings, error: userErr } = await supabase
+    const { data: userBookings, error: userErr } = await dbRec
       .from('bookings')
       .select('id, user_id, service_id')
       .in('user_id', uidListForBookings.length ? uidListForBookings : [resolvedUserId])
@@ -779,7 +804,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     // use onboarding preferences from customer_details.preferred_services.
     if (userHistory.length === 0) {
       try {
-        const { data: customerRow, error: customerErr } = await supabase
+        const { data: customerRow, error: customerErr } = await dbRec
           .from('customer_details')
           .select('preferred_services')
           .eq('id', resolvedUserId)
@@ -800,7 +825,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
               userHistory = uuidPrefs;
             } else if (namePrefs.length > 0) {
               // Map service names -> service IDs (best-effort for older/onboarding docs).
-              const serviceRows = await supabase
+              const serviceRows = await dbRec
                 .from('services')
                 .select('id, name')
                 .in('name', namePrefs);
@@ -824,7 +849,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     } else {
       // Has bookings: still merge onboarding preferences into ML profile only (not into exclusion).
       try {
-        const { data: customerRow, error: customerErr } = await supabase
+        const { data: customerRow, error: customerErr } = await dbRec
           .from('customer_details')
           .select('preferred_services')
           .eq('id', resolvedUserId)
@@ -842,7 +867,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
             if (uuidPrefs.length === prefStrings.length) {
               extra = uuidPrefs;
             } else if (namePrefs.length > 0) {
-              const serviceRows = await supabase
+              const serviceRows = await dbRec
                 .from('services')
                 .select('id, name')
                 .in('name', namePrefs);
@@ -866,7 +891,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     userHistory = [...new Set(userHistory.map((x) => normalizeRecServiceId(x)).filter(Boolean))];
 
     // Fetch a global sample of bookings to build co-occurrence and popularity
-    const { data: globalBookings, error: globalErr } = await supabase
+    const { data: globalBookings, error: globalErr } = await dbRec
       .from('bookings')
       .select('user_id, service_id')
       .neq('booking_status', 'cancelled')
@@ -918,7 +943,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     const serviceCategoryById = {};
     const serviceTextById = {};
     try {
-      allCatalogRows = await fetchAllActiveServicesForRecommendations(supabase);
+      allCatalogRows = await fetchAllActiveServicesForRecommendations(dbRec);
       for (const row of allCatalogRows) {
         if (row?.id == null) continue;
         const sid = normalizeRecServiceId(row.id);
@@ -944,7 +969,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       let from = 0;
       const pageSize = 1000;
       for (;;) {
-        const { data: scoreRows, error: scoreErr } = await supabase
+        const { data: scoreRows, error: scoreErr } = await dbRec
           .from('service_seasonal_scores')
           .select('service_id, multiplier, reason_key')
           .eq('calendar_month', month)
@@ -989,7 +1014,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     let serviceTrends = {};
     try {
       const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: trendRows, error: trendErr } = await supabase
+      const { data: trendRows, error: trendErr } = await dbRec
         .from('bookings')
         .select('service_id, created_at')
         .neq('booking_status', 'cancelled')
@@ -1049,7 +1074,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
         recommendationContext,
         bookedOnlyExcludeSet,
         limit: payload.limit,
-        supabase,
+        supabase: dbRec,
         popularServices,
         serviceTrends,
         maxPop,
@@ -1062,7 +1087,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
 
     const finalizeRecs = async (list) =>
       forceTopUpRecommendationsIfShort(
-        supabase,
+        dbRec,
         list,
         bookedOnlyExcludeSet,
         payload.limit,
@@ -1086,7 +1111,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
 
       if (!fallback.length) {
         const paddedNone = await backfillRecommendationsEnriched(
-          supabase,
+          dbRec,
           [],
           payload.limit,
           popularServices,
@@ -1112,7 +1137,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       }
 
       const serviceIds = fallback.map((r) => r.service_id);
-      const { data: serviceRows } = await supabase
+      const { data: serviceRows } = await dbRec
         .from('services')
         .select('id, name, description, icon_url, duration, price, offer_price, offer_enabled, category_id')
         .in('id', serviceIds);
@@ -1143,7 +1168,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       });
 
       const padded = await backfillRecommendationsEnriched(
-        supabase,
+        dbRec,
         recommendations,
         payload.limit,
         popularServices,
@@ -1169,7 +1194,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
 
     if (!recommendedList.length) {
       const paddedEmpty = await backfillRecommendationsEnriched(
-        supabase,
+        dbRec,
         [],
         payload.limit,
         popularServices,
@@ -1191,7 +1216,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     }
 
     const serviceIds = recommendedList.map((r) => r.service_id);
-    const { data: serviceRows } = await supabase
+    const { data: serviceRows } = await dbRec
       .from('services')
       .select('id, name, description, icon_url, duration, price, offer_price, offer_enabled, category_id')
       .in('id', serviceIds);
@@ -1221,7 +1246,7 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     });
 
     recommendations = await backfillRecommendationsEnriched(
-      supabase,
+      dbRec,
       recommendations,
       payload.limit,
       popularServices,

@@ -1,7 +1,7 @@
 require('dotenv').config();
-if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.SUPABASE_SERVICE_ROLE) {
   console.warn(
-    '[S9-b-end] SUPABASE_SERVICE_ROLE_KEY is not set — client may use anon key; recommendations/admin can return very few rows due to RLS on services.'
+    '[S9-b-end] SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_ROLE) is not set — client may use anon key; recommendations can return very few rows due to RLS on services.'
   );
 }
 const express = require('express');
@@ -139,7 +139,10 @@ app.get('/health', (req, res) => {
     uptime: process.uptime(),
     memory: process.memoryUsage(),
     /** If false, recommendations often return 1 item (RLS + anon key). */
-    supabaseServiceRoleConfigured: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    supabaseServiceRoleConfigured: Boolean(
+      (process.env.SUPABASE_SERVICE_ROLE_KEY && String(process.env.SUPABASE_SERVICE_ROLE_KEY).trim()) ||
+        (process.env.SUPABASE_SERVICE_ROLE && String(process.env.SUPABASE_SERVICE_ROLE).trim())
+    ),
     /** Git SHA from host (Render/Railway/Vercel) — compare with GitHub latest commit. */
     deployCommit:
       process.env.RENDER_GIT_COMMIT ||
