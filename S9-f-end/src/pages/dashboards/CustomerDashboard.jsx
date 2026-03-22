@@ -99,6 +99,9 @@ const CustomerDashboard = () => {
     initialFromBooking = location.state?.reviewFrom === 'booking' || localStorage.getItem('reviewFromBooking') === '1';
   } catch {}
   const { user, logout, getCompleteUserProfile } = useAuth();
+  /** Always latest profile fetcher; onboarding check effect deps stay [user?.id] only so production doesn’t re-run the check every render and wipe skip timers. */
+  const getCompleteUserProfileRef = useRef(getCompleteUserProfile);
+  getCompleteUserProfileRef.current = getCompleteUserProfile;
   const toastManager = useToast();
   const { isOnline, wasOffline, resetOfflineFlag } = useNetworkStatus();
   
@@ -1017,7 +1020,7 @@ const CustomerDashboard = () => {
 
     const check = async () => {
       try {
-        const complete = await getCompleteUserProfile?.();
+        const complete = await getCompleteUserProfileRef.current?.();
         setDbUserId(complete?.id || user.id);
         const customerDetails = complete?.customer_details
           ? (Array.isArray(complete.customer_details) ? complete.customer_details[0] : complete.customer_details)
@@ -1075,14 +1078,37 @@ const CustomerDashboard = () => {
     return () => {
       isCancelled = true;
     };
-  }, [user?.id, getCompleteUserProfile]);
+  }, [user?.id]);
 
   useEffect(() => {
     onboardingRequiredRef.current = onboardingRequired;
   }, [onboardingRequired]);
 
+  // Logout / user swap: clear all onboarding timers so the next login starts clean.
+  useEffect(() => {
+    if (user?.id) return undefined;
+    const ref = onboardingPromptTimersRef.current;
+    clearTimeout(ref.showTimer);
+    clearInterval(ref.repeatTimer);
+    clearTimeout(ref.skipReshowTimer);
+    ref.showTimer = null;
+    ref.repeatTimer = null;
+    ref.skipReshowTimer = null;
+    return undefined;
+  }, [user?.id]);
+
+  // Clear "remind me later" timer when user is no longer eligible (saved prefs / permanent dismiss).
+  useEffect(() => {
+    if (onboardingRequired) return;
+    const ref = onboardingPromptTimersRef.current;
+    if (ref.skipReshowTimer) {
+      clearTimeout(ref.skipReshowTimer);
+      ref.skipReshowTimer = null;
+    }
+  }, [onboardingRequired]);
+
   // First prompt after 30s, then every 30s until user saves preferences or opts out permanently.
-  // getCompleteUserProfile is useCallback([user?.id]) so this effect is not wiped on every render.
+  // Do NOT clear skipReshowTimer here — effect re-runs (e.g. loading flicker) would cancel "remind me later" on hosted builds.
   useEffect(() => {
     if (!user?.id || !onboardingRequired || onboardingCheckLoading) {
       return undefined;
@@ -1090,8 +1116,6 @@ const CustomerDashboard = () => {
     const ref = onboardingPromptTimersRef.current;
     if (ref.showTimer) clearTimeout(ref.showTimer);
     if (ref.repeatTimer) clearInterval(ref.repeatTimer);
-    if (ref.skipReshowTimer) clearTimeout(ref.skipReshowTimer);
-    ref.skipReshowTimer = null;
 
     ref.showTimer = setTimeout(() => {
       setOnboardingModalOpen(true);
@@ -1105,10 +1129,8 @@ const CustomerDashboard = () => {
     return () => {
       clearTimeout(ref.showTimer);
       clearInterval(ref.repeatTimer);
-      clearTimeout(ref.skipReshowTimer);
       ref.showTimer = null;
       ref.repeatTimer = null;
-      ref.skipReshowTimer = null;
     };
   }, [user?.id, onboardingRequired, onboardingCheckLoading]);
 
@@ -1308,6 +1330,12 @@ const CustomerDashboard = () => {
       setOnboardingNotes('');
       setOnboardingServiceSearch('');
       setOnboardingInlineFeedback(null);
+
+      const tref = onboardingPromptTimersRef.current;
+      if (tref.skipReshowTimer) {
+        clearTimeout(tref.skipReshowTimer);
+        tref.skipReshowTimer = null;
+      }
 
       toast.success('Preferences saved. Your recommendations are updating…');
     } catch (e) {
