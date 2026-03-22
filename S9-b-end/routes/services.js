@@ -16,6 +16,18 @@ function djb2(str) {
   return h | 0;
 }
 
+/** Stable string for Set lookups (avoids UUID case mismatches vs Supabase). */
+function normalizeRecServiceId(v) {
+  if (v == null || v === '') return '';
+  const s = String(v).trim();
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
+  ) {
+    return s.toLowerCase();
+  }
+  return s;
+}
+
 /** Which profile phases to show for this calendar month (India). */
 function profilePhasesForCalendarMonth(month) {
   const m = Math.max(1, Math.min(12, parseInt(String(month), 10) || 1));
@@ -54,24 +66,30 @@ function appendCatalogFloatRecs({
   const n = Math.max(0, Math.floor(Number(need) || 0));
   if (!n || !Array.isArray(allCatalogRows) || !allCatalogRows.length) return [];
 
-  const haveSet = have instanceof Set ? have : new Set(have);
-  const ex = excludeSet instanceof Set ? excludeSet : new Set(excludeSet);
+  const haveSet = new Set(
+    [...(have instanceof Set ? have : new Set(have))].map(normalizeRecServiceId).filter(Boolean)
+  );
+  const ex = new Set(
+    [...(excludeSet instanceof Set ? excludeSet : new Set(excludeSet))]
+      .map(normalizeRecServiceId)
+      .filter(Boolean)
+  );
   const ids = [];
   for (const row of allCatalogRows) {
     if (!row?.id) continue;
-    const id = String(row.id);
-    if (haveSet.has(id) || ex.has(id)) continue;
+    const id = normalizeRecServiceId(row.id);
+    if (!id || haveSet.has(id) || ex.has(id)) continue;
     ids.push(id);
   }
   const picked = floatOrderIds(ids, `${String(rotationKey)}|catalog`, n);
-  const byId = new Map(allCatalogRows.map((r) => [String(r.id), r]));
+  const byId = new Map(allCatalogRows.map((r) => [normalizeRecServiceId(r.id), r]));
   const out = [];
   for (const id of picked) {
     const row = byId.get(id);
     if (!row) continue;
     const ui = getSeasonUiInsight(row.name, row.description, month, country);
     out.push({
-      serviceId: id,
+      serviceId: row?.id != null ? String(row.id) : id,
       score: 0.06 - out.length * 0.001,
       insightKey: ui?.insightKey || 'discover',
       insightLabel: ui?.insightLabel || 'Rotating pick from our catalog',
@@ -113,8 +131,8 @@ async function fetchSeasonShelfCandidateIds(supabase, phases, excludeSet) {
     if (!data?.length) break;
     for (const r of data) {
       if (!r?.service_id || !want.has(r.primary_phase)) continue;
-      const id = String(r.service_id);
-      if (excludeSet.has(id)) continue;
+      const id = normalizeRecServiceId(r.service_id);
+      if (!id || excludeSet.has(id)) continue;
       acc.push(id);
     }
     if (data.length < pageSize) break;
@@ -126,67 +144,56 @@ async function fetchSeasonShelfCandidateIds(supabase, phases, excludeSet) {
 const SERVICES_SELECT_RECOMMENDATIONS =
   'id, category_id, name, description, icon_url, duration, price, offer_price, offer_enabled, active';
 
+/** Treat only explicit “off” as hidden — avoids losing the whole catalog when `active` is false for most rows. */
+function rowIsRecommendationCatalogVisible(row) {
+  const a = row?.active;
+  if (a === false || a === 0) return false;
+  if (typeof a === 'string') {
+    const s = a.trim().toLowerCase();
+    if (s === 'false' || s === '0' || s === 'inactive' || s === 'no') return false;
+  }
+  return true;
+}
+
 /**
- * Catalog for ML + season shelf + catalog-float padding.
- * Treat NULL `active` as visible: `.eq('active', true)` alone hides most rows on DBs that default active to NULL.
+ * Full catalog for ML + season shelf + padding: page all services, filter in JS.
+ * PostgREST `.or(active...)` + strict true/NULL was returning tiny sets when most rows use active=false.
  */
 async function fetchAllActiveServicesForRecommendations(supabase) {
   const pageSize = 500;
-  const fetchPages = async (activeOrNullOnly) => {
-    let from = 0;
-    const acc = [];
-    for (;;) {
-      let q = supabase
-        .from('services')
-        .select(SERVICES_SELECT_RECOMMENDATIONS)
-        .order('id', { ascending: true })
-        .range(from, from + pageSize - 1);
-      if (activeOrNullOnly) {
-        q = q.or('active.eq.true,active.is.null');
-      }
-      const { data, error } = await q;
-      if (error) {
-        console.warn('fetchAllActiveServicesForRecommendations:', error.message);
-        break;
-      }
-      if (!data?.length) break;
-      acc.push(...data);
-      if (data.length < pageSize) break;
-      from += pageSize;
+  let from = 0;
+  const all = [];
+  for (;;) {
+    const { data, error } = await supabase
+      .from('services')
+      .select(SERVICES_SELECT_RECOMMENDATIONS)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) {
+      console.warn('fetchAllActiveServicesForRecommendations:', error.message);
+      break;
     }
-    return acc;
-  };
-
-  let all = await fetchPages(true);
-  if (!all.length) {
-    console.warn(
-      '[recommendations] No services with active=true or active IS NULL; loading all services as catalog fallback'
-    );
-    let from = 0;
-    for (;;) {
-      const { data, error } = await supabase
-        .from('services')
-        .select(SERVICES_SELECT_RECOMMENDATIONS)
-        .order('id', { ascending: true })
-        .range(from, from + pageSize - 1);
-      if (error) {
-        console.warn('fetchAllActiveServicesForRecommendations (fallback):', error.message);
-        break;
-      }
-      if (!data?.length) break;
-      all.push(...data);
-      if (data.length < pageSize) break;
-      from += pageSize;
+    if (!data?.length) break;
+    for (const row of data) {
+      if (rowIsRecommendationCatalogVisible(row)) all.push(row);
     }
+    if (data.length < pageSize) break;
+    from += pageSize;
   }
   return all;
 }
 
-/** Use in-memory catalog when present; otherwise refetch (hosted edge cases). */
+const MIN_CATALOG_ROWS_TRUST = 3;
+
+/** Prefer in-memory catalog only if it looks complete; otherwise refetch so padding isn’t starved. */
 async function resolveRecommendationCatalogRows(allCatalogRows, supabase) {
-  if (Array.isArray(allCatalogRows) && allCatalogRows.length > 0) return allCatalogRows;
-  if (!supabase) return [];
-  return fetchAllActiveServicesForRecommendations(supabase);
+  if (Array.isArray(allCatalogRows) && allCatalogRows.length >= MIN_CATALOG_ROWS_TRUST) {
+    return allCatalogRows;
+  }
+  if (!supabase) return Array.isArray(allCatalogRows) ? allCatalogRows : [];
+  const fresh = await fetchAllActiveServicesForRecommendations(supabase);
+  if (fresh.length > 0) return fresh;
+  return Array.isArray(allCatalogRows) ? allCatalogRows : [];
 }
 
 /**
@@ -222,8 +229,8 @@ async function composeSeasonFirstRecommendations({
   let shelfIds = floatOrderIds(candidateIds, rotationKey, seasonSlots);
 
   const catalogRows = await resolveRecommendationCatalogRows(allCatalogRows, supabase);
-  const byId = new Map(catalogRows.map((r) => [String(r.id), r]));
-  let shelfRows = shelfIds.map((id) => byId.get(String(id))).filter(Boolean);
+  const byId = new Map(catalogRows.map((r) => [normalizeRecServiceId(r.id), r]));
+  let shelfRows = shelfIds.map((id) => byId.get(normalizeRecServiceId(id))).filter(Boolean);
 
   // Profiles reference service IDs; if catalog map was empty/wrong, hydrate rows from DB.
   if (shelfRows.length === 0 && shelfIds.length > 0 && supabase) {
@@ -232,8 +239,8 @@ async function composeSeasonFirstRecommendations({
       .select(SERVICES_SELECT_RECOMMENDATIONS)
       .in('id', shelfIds);
     if (!hydErr && hydrated?.length) {
-      const hmap = new Map(hydrated.map((r) => [String(r.id), r]));
-      shelfRows = shelfIds.map((id) => hmap.get(String(id))).filter(Boolean);
+      const hmap = new Map(hydrated.map((r) => [normalizeRecServiceId(r.id), r]));
+      shelfRows = shelfIds.map((id) => hmap.get(normalizeRecServiceId(id))).filter(Boolean);
     }
   }
 
@@ -266,12 +273,12 @@ async function composeSeasonFirstRecommendations({
     };
   });
 
-  const have = new Set(seasonalRecs.map((r) => String(r.serviceId)));
+  const have = new Set(seasonalRecs.map((r) => normalizeRecServiceId(r.serviceId)).filter(Boolean));
   const pers = (personalizedRecommendations || []).filter(
     (r) =>
       r?.serviceId &&
-      !have.has(String(r.serviceId)) &&
-      !bookedOnlyExcludeSet.has(String(r.serviceId))
+      !have.has(normalizeRecServiceId(r.serviceId)) &&
+      !bookedOnlyExcludeSet.has(normalizeRecServiceId(r.serviceId))
   );
 
   let merged = [...seasonalRecs, ...pers].slice(0, cap);
@@ -322,7 +329,8 @@ function buildServiceTrendsFromRows(rows) {
 
   for (const b of rows) {
     if (!b?.service_id || !b?.created_at) continue;
-    const sid = String(b.service_id);
+    const sid = normalizeRecServiceId(b.service_id);
+    if (!sid) continue;
     const ts = new Date(b.created_at).getTime();
     if (Number.isNaN(ts)) continue;
     if (!trends[sid]) trends[sid] = { recent: 0, prior: 0 };
@@ -458,7 +466,7 @@ async function backfillRecommendationsEnriched(
       const month = recommendationContext?.month;
       const country =
         recommendationContext?.country_code || recommendationContext?.countryCode || 'IN';
-      const have2 = new Set(result.map((r) => String(r.serviceId)));
+      const have2 = new Set(result.map((r) => normalizeRecServiceId(r.serviceId)).filter(Boolean));
       const floatMore = appendCatalogFloatRecs({
         allCatalogRows: catalogRows,
         have: have2,
@@ -494,13 +502,13 @@ async function padRecommendationsToLimit(
 ) {
   const limit = Math.max(1, Number(cap) || 5);
   let out = Array.isArray(recommendations) ? [...recommendations] : [];
-  const have = new Set(out.map((r) => String(r.serviceId)));
+  const have = new Set(out.map((r) => normalizeRecServiceId(r.serviceId)).filter(Boolean));
 
   const affinity = new Set((userAffinityCategoryIds || []).map(String).filter(Boolean));
   const scorePopular = () =>
     (popularServices || [])
       .map((p) => {
-        const sid = String(p.service_id);
+        const sid = normalizeRecServiceId(p.service_id);
         if (!sid || excludeSet.has(sid) || have.has(sid)) return null;
         const cnt = Number(p.count) || 0;
         if (!hasRecommendationEvidence(sid, cnt, serviceTrends)) return null;
@@ -531,7 +539,7 @@ async function padRecommendationsToLimit(
       );
     const byId = {};
     (serviceRows || []).forEach((s) => {
-      byId[String(s.id)] = s;
+      byId[normalizeRecServiceId(s.id)] = s;
     });
     for (const { sid, count } of batch) {
       if (out.length >= limit) break;
@@ -540,7 +548,7 @@ async function padRecommendationsToLimit(
       const ins = fallbackInsight(sid, serviceTrends, count, maxPop);
       have.add(sid);
       out.push({
-        serviceId: sid,
+        serviceId: s.id != null ? String(s.id) : sid,
         score: count * 0.001 + 0.015,
         insightKey: ins.insightKey,
         insightLabel: ins.insightLabel,
@@ -694,9 +702,8 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     const bookedServiceIds = [
       ...new Set(
         (userBookings || [])
-          .map((b) => b.service_id)
-          .filter((sid) => sid != null && sid !== '')
-          .map((sid) => String(sid))
+          .map((b) => normalizeRecServiceId(b.service_id))
+          .filter(Boolean)
       )
     ];
 
@@ -796,6 +803,8 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       }
     }
 
+    userHistory = [...new Set(userHistory.map((x) => normalizeRecServiceId(x)).filter(Boolean))];
+
     // Fetch a global sample of bookings to build co-occurrence and popularity
     const { data: globalBookings, error: globalErr } = await supabase
       .from('bookings')
@@ -817,9 +826,11 @@ router.get('/user/:userId/recommendations', async (req, res) => {
     for (const b of globalBookings || []) {
       if (!b.user_id || !b.service_id) continue;
       const uid = String(b.user_id);
+      const sid = normalizeRecServiceId(b.service_id);
+      if (!sid) continue;
       if (!bookingsByUser[uid]) bookingsByUser[uid] = [];
-      bookingsByUser[uid].push(String(b.service_id));
-      popularityCounts[String(b.service_id)] = (popularityCounts[String(b.service_id)] || 0) + 1;
+      bookingsByUser[uid].push(sid);
+      popularityCounts[sid] = (popularityCounts[sid] || 0) + 1;
     }
 
     // Build co-occurrence matrix at user level (services that co-occur for same user)
@@ -850,7 +861,8 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       allCatalogRows = await fetchAllActiveServicesForRecommendations(supabase);
       for (const row of allCatalogRows) {
         if (row?.id == null) continue;
-        const sid = String(row.id);
+        const sid = normalizeRecServiceId(row.id);
+        if (!sid) continue;
         serviceCategoryById[sid] =
           row.category_id != null ? String(row.category_id) : '';
         const bits = [row.name, row.description].filter(Boolean).map((x) => String(x));
@@ -937,12 +949,16 @@ router.get('/user/:userId/recommendations', async (req, res) => {
       ? Math.max(...popularServices.map((p) => Number(p.count) || 0), 1)
       : 1;
 
-    const bookedOnlyExcludeSet = new Set(bookedServiceIds.map(String));
+    const bookedOnlyExcludeSet = new Set(
+      bookedServiceIds.map((id) => normalizeRecServiceId(id)).filter(Boolean)
+    );
     const catalogFloatDay = Math.floor(Date.now() / 86400000);
     const catalogRotationKey = `${String(resolvedUserId)}|${recommendationContext.month}|${catalogFloatDay}`;
     const stripAlreadyBooked = (recs) =>
       (recs || []).filter(
-        (r) => r?.serviceId != null && !bookedOnlyExcludeSet.has(String(r.serviceId))
+        (r) =>
+          r?.serviceId != null &&
+          !bookedOnlyExcludeSet.has(normalizeRecServiceId(r.serviceId))
       );
 
     // Avoid over-narrowing CF: onboarding anchor + booking history double-weights one service.

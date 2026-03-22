@@ -164,17 +164,28 @@ function computeSeasonScoreForService(name, description, month, country = 'IN') 
  * Services with seasonal multiplier > 1 for this month (right season to promote).
  * Used to build the top "season shelf" in recommendations.
  */
+function _normRecId(v) {
+  if (v == null || v === '') return '';
+  const s = String(v).trim();
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
+  ) {
+    return s.toLowerCase();
+  }
+  return s;
+}
+
 function rankSeasonalBoostedServices(rows, month, country, excludeSet, maxTake) {
   const cc = String(country || 'IN').toUpperCase();
   const m = Math.max(1, Math.min(12, parseInt(String(month), 10) || 1));
-  const ex = excludeSet instanceof Set ? excludeSet : new Set([...(excludeSet || [])].map(String));
+  const ex = excludeSet instanceof Set ? excludeSet : new Set([...(excludeSet || [])].map(_normRecId));
   const n = Math.max(0, parseInt(String(maxTake), 10) || 0);
   if (n === 0) return [];
 
   const scored = (rows || [])
     .map((row) => {
       const id = row?.id;
-      if (id == null || ex.has(String(id))) return null;
+      if (id == null || ex.has(_normRecId(id))) return null;
       const { multiplier, reasonKey } = computeSeasonScoreForService(row.name, row.description, m, cc);
       if (multiplier <= 1.0001) return null;
       return { row, multiplier, reasonKey };
