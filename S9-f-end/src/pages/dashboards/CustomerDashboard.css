@@ -11862,6 +11862,14 @@ mark.search-match {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  color: #0f172a;
+}
+
+.cd-onboarding-body input,
+.cd-onboarding-body select,
+.cd-onboarding-body textarea {
+  color: #0f172a;
+  -webkit-text-fill-color: #0f172a;
 }
 
 .cd-onboarding-inline-alert {
@@ -12058,13 +12066,26 @@ mark.search-match {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   background: #f8fafc;
+  /* Dashboard / dark-theme globals can force white text on inputs — override hard */
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #0f172a;
   transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.cd-onboarding-search::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b;
+  opacity: 1;
 }
 
 .cd-onboarding-search:focus {
   outline: none;
   border-color: #3b82f6;
   background: #fff;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #0f172a;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
