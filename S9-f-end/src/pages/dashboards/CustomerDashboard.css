@@ -6201,6 +6201,36 @@ mark.search-match {
   color: white;
 }
 
+.recent-image--stacked {
+  position: relative;
+}
+
+.recent-image--stacked .recent-image-thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 6px;
+  z-index: 1;
+  border-radius: 10px;
+}
+
+.recent-image-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.recent-services-loading,
+.recent-services-empty {
+  color: #64748b;
+  font-size: 0.9375rem;
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0;
+}
+
 .recent-card h5 {
   font-size: 1rem;
   font-weight: 600;
@@ -6225,6 +6255,15 @@ mark.search-match {
   width: 100%;
   padding: 0.5rem !important;
   font-size: 0.875rem;
+  color: #1e293b !important;
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+.recent-card .book-again:hover {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
 }
 
 /* Flipkart Hero Banner */

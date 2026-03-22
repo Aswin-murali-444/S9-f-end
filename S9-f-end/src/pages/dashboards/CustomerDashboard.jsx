@@ -423,6 +423,62 @@ const CustomerDashboard = () => {
     [recommendedServices, recommendationPriorityIds, services]
   );
 
+  /** Real rows from Supabase `bookings` for this user (deduped by service, newest first). */
+  const recentActivityFromBookings = useMemo(() => {
+    if (!Array.isArray(bookings) || bookings.length === 0) return [];
+    const seen = new Set();
+    const rows = [];
+    for (const b of bookings) {
+      const sid = String(b.service_id ?? b.services?.id ?? '').trim();
+      const dedupeKey = sid || `booking-${b.id}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      const d =
+        b.created_at || b.scheduled_at || b.scheduled_date || b.booking_date || b.updated_at;
+      let dateStr = '';
+      if (d) {
+        try {
+          const dt = new Date(d);
+          if (!Number.isNaN(dt.getTime())) dateStr = dt.toISOString().split('T')[0];
+        } catch {
+          dateStr = String(d).slice(0, 10);
+        }
+      }
+      const amount = Number(b.calculated_price ?? b.total_amount ?? b.base_price ?? 0);
+      let serviceForBooking = null;
+      if (b.services && b.services.id != null) {
+        serviceForBooking = {
+          id: b.services.id,
+          name: b.services.name,
+          description: b.services.description,
+          price: b.services.price,
+          offer_price: b.services.offer_price,
+          offer_enabled: b.services.offer_enabled,
+          duration: b.services.duration,
+          icon_url: b.services.icon_url,
+          category:
+            b.category_name ||
+            (b.services.service_categories && b.services.service_categories.name) ||
+            'General'
+        };
+      } else if (sid) {
+        const found = services.find((s) => String(s.id) === sid);
+        if (found) serviceForBooking = { ...found };
+      }
+      rows.push({
+        key: String(b.id ?? dedupeKey),
+        serviceId: sid || null,
+        name: b.service_name || b.services?.name || 'Service',
+        dateLabel: dateStr || '—',
+        amount,
+        iconUrl: b.services?.icon_url || serviceForBooking?.icon_url || null,
+        serviceForBooking
+      });
+      if (rows.length >= 4) break;
+    }
+    return rows;
+  }, [bookings, services]);
+
   const [bookingHistory, setBookingHistory] = useState([]);
   const [bills, setBills] = useState([]);
 
@@ -3682,37 +3738,70 @@ const CustomerDashboard = () => {
                     </div>
                   </div>
 
-                  {/* Recently Viewed Services */}
+                  {/* Recently viewed = distinct services from this user’s real bookings (Supabase) */}
                   <div className="recently-section full-bleed">
                     <div className="section-header">
                       <h3>Recently Viewed</h3>
-                      <button className="view-all-btn" onClick={() => setActiveTab('orders')}>
+                      <button type="button" className="view-all-btn" onClick={() => setActiveTab('orders')}>
                         View History
                         <ArrowRight size={16} />
                       </button>
                     </div>
-                    <div className="recent-services-grid">
-                      {bookingHistory.slice(0, 4).map(booking => (
-                        <motion.div 
-                          key={booking.id} 
-                          className="recent-card"
-                          whileHover={{ y: -2 }}
-                          variants={itemVariants}
-                        >
-                          <div className="recent-image">
-                            <Calendar size={24} />
-                          </div>
-                          <h5>{booking.service}</h5>
-                          <p className="recent-date">{booking.date}</p>
-                           <div className="recent-price">
-                             <span>₹{booking.amount}</span>
-                           </div>
-                          <button className="btn-secondary book-again">
-                            Book Again
-                          </button>
-                        </motion.div>
-                      ))}
-                    </div>
+                    {bookingsLoading && recentActivityFromBookings.length === 0 ? (
+                      <p className="recent-services-loading" role="status">
+                        Loading your recent services…
+                      </p>
+                    ) : recentActivityFromBookings.length === 0 ? (
+                      <p className="recent-services-empty" role="status">
+                        No recent bookings yet. Book a service and it will show up here with quick rebook.
+                      </p>
+                    ) : (
+                      <div className="recent-services-grid">
+                        {recentActivityFromBookings.map((row) => (
+                          <motion.div
+                            key={row.key}
+                            className="recent-card"
+                            whileHover={{ y: -2 }}
+                            variants={itemVariants}
+                          >
+                            <div className="recent-image recent-image--stacked">
+                              {row.iconUrl ? (
+                                <img
+                                  src={row.iconUrl}
+                                  alt=""
+                                  className="recent-image-thumb"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              ) : null}
+                              <span className="recent-image-icon-wrap" aria-hidden>
+                                <Calendar size={24} />
+                              </span>
+                            </div>
+                            <h5>{row.name}</h5>
+                            <p className="recent-date">{row.dateLabel}</p>
+                            <div className="recent-price">
+                              <span>₹{Number.isFinite(row.amount) ? row.amount.toLocaleString('en-IN') : row.amount}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn-secondary book-again"
+                              onClick={() => {
+                                const svc = row.serviceForBooking;
+                                if (svc && svc.id != null) {
+                                  navigate('/booking', { state: { service: svc, user } });
+                                  return;
+                                }
+                                toast.error('Could not open booking. Find the service in Browse or Categories.');
+                              }}
+                            >
+                              Book Again
+                            </button>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </motion.div>
           )}
