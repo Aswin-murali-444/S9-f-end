@@ -86,6 +86,12 @@ import invoiceService from '../../services/invoiceService';
 import { apiService } from '../../services/api';
 import { supabase } from '../../lib/supabase';
 import aiAssistantService from '../../services/aiAssistantService';
+import {
+  recordServiceView,
+  readLocalServiceViews,
+  fetchDbServiceViews,
+  mergeViewTimestamps
+} from '../../services/serviceViewTracking';
 
 /** Supabase/jsonb sometimes returns `{}` or odd shapes; old logic did `preferred ? [preferred] : []` → [{}] = "has prefs" and skipped the modal in production. */
 function normalizePreferredServiceIds(preferred) {
@@ -230,6 +236,9 @@ const CustomerDashboard = () => {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [bookings, setBookings] = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
+  /** Synced from Supabase `customer_service_views` (optional table); merged with localStorage in useMemo */
+  const [dbServiceViews, setDbServiceViews] = useState([]);
+  const [recentViewsBump, setRecentViewsBump] = useState(0);
   const [ordersFilter, setOrdersFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isOrderDetailsOpen, setIsOrderDetailsOpen] = useState(false);
@@ -423,16 +432,25 @@ const CustomerDashboard = () => {
     [recommendedServices, recommendationPriorityIds, services]
   );
 
-  /** Real rows from Supabase `bookings` for this user (deduped by service, newest first). */
-  const recentActivityFromBookings = useMemo(() => {
-    if (!Array.isArray(bookings) || bookings.length === 0) return [];
-    const seen = new Set();
-    const rows = [];
-    for (const b of bookings) {
-      const sid = String(b.service_id ?? b.services?.id ?? '').trim();
-      const dedupeKey = sid || `booking-${b.id}`;
-      if (seen.has(dedupeKey)) continue;
-      seen.add(dedupeKey);
+  /** Bookings + browsed services (localStorage + optional `customer_service_views`), one card per service by latest activity */
+  const recentActivityCombined = useMemo(() => {
+    const authId = user?.id;
+
+    const bookingBySid = new Map();
+    if (Array.isArray(bookings)) {
+      for (const b of bookings) {
+        const sid = String(b.service_id ?? b.services?.id ?? '').trim();
+        if (!sid) continue;
+        const d =
+          b.created_at || b.scheduled_at || b.scheduled_date || b.booking_date || b.updated_at;
+        const sortTime = d ? new Date(d).getTime() : 0;
+        const prev = bookingBySid.get(sid);
+        if (!prev || sortTime > prev.sortTime) bookingBySid.set(sid, { b, sortTime });
+      }
+    }
+
+    const bookingRows = [];
+    for (const [sid, { b, sortTime }] of bookingBySid) {
       const d =
         b.created_at || b.scheduled_at || b.scheduled_date || b.booking_date || b.updated_at;
       let dateStr = '';
@@ -461,23 +479,85 @@ const CustomerDashboard = () => {
             (b.services.service_categories && b.services.service_categories.name) ||
             'General'
         };
-      } else if (sid) {
+      } else {
         const found = services.find((s) => String(s.id) === sid);
         if (found) serviceForBooking = { ...found };
       }
-      rows.push({
-        key: String(b.id ?? dedupeKey),
-        serviceId: sid || null,
+      bookingRows.push({
+        key: `book-${b.id ?? sid}`,
+        serviceId: sid,
         name: b.service_name || b.services?.name || 'Service',
         dateLabel: dateStr || '—',
         amount,
         iconUrl: b.services?.icon_url || serviceForBooking?.icon_url || null,
-        serviceForBooking
+        serviceForBooking,
+        sortTime,
+        source: 'booking'
       });
-      if (rows.length >= 4) break;
     }
-    return rows;
-  }, [bookings, services]);
+
+    const localViews = authId ? readLocalServiceViews(authId) : [];
+    const mergedTs = mergeViewTimestamps(localViews, dbServiceViews);
+    const viewRows = mergedTs.map(({ serviceId, sortTime }) => {
+      const svc = services.find((s) => String(s.id) === String(serviceId));
+      const amount = svc
+        ? Number(
+            svc.offer_enabled && svc.offer_price != null ? svc.offer_price : svc.price || 0
+          )
+        : 0;
+      let dateStr = '—';
+      try {
+        const dt = new Date(sortTime);
+        if (!Number.isNaN(dt.getTime())) dateStr = dt.toISOString().split('T')[0];
+      } catch {
+        /* keep — */
+      }
+      return {
+        key: `view-${serviceId}-${sortTime}`,
+        serviceId,
+        name: svc?.name || 'Service',
+        dateLabel: dateStr,
+        amount,
+        iconUrl: svc?.icon_url || null,
+        serviceForBooking: svc
+          ? {
+              id: svc.id,
+              name: svc.name,
+              description: svc.description,
+              price: svc.price,
+              offer_price: svc.offer_price,
+              offer_enabled: svc.offer_enabled,
+              duration: svc.duration,
+              icon_url: svc.icon_url,
+              category: svc.category || 'General'
+            }
+          : null,
+        sortTime,
+        source: 'view'
+      };
+    });
+
+    const merged = new Map();
+    for (const r of bookingRows) {
+      const sid = String(r.serviceId);
+      const prev = merged.get(sid);
+      if (!prev || r.sortTime > prev.sortTime) merged.set(sid, r);
+    }
+    for (const r of viewRows) {
+      const sid = String(r.serviceId);
+      const prev = merged.get(sid);
+      if (!prev || r.sortTime > prev.sortTime) merged.set(sid, r);
+    }
+
+    return [...merged.values()].sort((a, b) => b.sortTime - a.sortTime).slice(0, 8);
+  }, [
+    bookings,
+    services,
+    dbServiceViews,
+    user?.id,
+    recentViewsBump,
+    location.pathname
+  ]);
 
   const [bookingHistory, setBookingHistory] = useState([]);
   const [bills, setBills] = useState([]);
@@ -1252,6 +1332,20 @@ const CustomerDashboard = () => {
   }, [user?.id]);
 
   useEffect(() => {
+    if (!user?.id) {
+      setDbServiceViews([]);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchDbServiceViews(supabase, user.id).then((rows) => {
+      if (!cancelled) setDbServiceViews(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, location.pathname]);
+
+  useEffect(() => {
     onboardingRequiredRef.current = onboardingRequired;
   }, [onboardingRequired]);
 
@@ -1869,11 +1963,16 @@ const CustomerDashboard = () => {
   };
 
   const handleOpenBookingModal = (service) => {
-    navigate('/booking', { 
-      state: { 
-        service: service, 
-        user: user 
-      } 
+    if (user?.id && service?.id != null) {
+      void recordServiceView(supabase, user.id, service.id).finally(() =>
+        setRecentViewsBump((n) => n + 1)
+      );
+    }
+    navigate('/booking', {
+      state: {
+        service: service,
+        user: user
+      }
     });
   };
 
@@ -3738,7 +3837,7 @@ const CustomerDashboard = () => {
                     </div>
                   </div>
 
-                  {/* Recently viewed = distinct services from this user’s real bookings (Supabase) */}
+                  {/* Recently viewed: latest activity per service = real bookings + tracked opens (local + optional DB table) */}
                   <div className="recently-section full-bleed">
                     <div className="section-header">
                       <h3>Recently Viewed</h3>
@@ -3747,17 +3846,17 @@ const CustomerDashboard = () => {
                         <ArrowRight size={16} />
                       </button>
                     </div>
-                    {bookingsLoading && recentActivityFromBookings.length === 0 ? (
+                    {bookingsLoading && recentActivityCombined.length === 0 ? (
                       <p className="recent-services-loading" role="status">
                         Loading your recent services…
                       </p>
-                    ) : recentActivityFromBookings.length === 0 ? (
+                    ) : recentActivityCombined.length === 0 ? (
                       <p className="recent-services-empty" role="status">
-                        No recent bookings yet. Book a service and it will show up here with quick rebook.
+                        No recent activity yet. Open a service to book (or complete a booking) and it will appear here.
                       </p>
                     ) : (
                       <div className="recent-services-grid">
-                        {recentActivityFromBookings.map((row) => (
+                        {recentActivityCombined.map((row) => (
                           <motion.div
                             key={row.key}
                             className="recent-card"
@@ -3780,6 +3879,9 @@ const CustomerDashboard = () => {
                               </span>
                             </div>
                             <h5>{row.name}</h5>
+                            <p className={`recent-source recent-source--${row.source}`}>
+                              {row.source === 'booking' ? 'Last booked' : 'Recently viewed'}
+                            </p>
                             <p className="recent-date">{row.dateLabel}</p>
                             <div className="recent-price">
                               <span>₹{Number.isFinite(row.amount) ? row.amount.toLocaleString('en-IN') : row.amount}</span>
@@ -3790,13 +3892,13 @@ const CustomerDashboard = () => {
                               onClick={() => {
                                 const svc = row.serviceForBooking;
                                 if (svc && svc.id != null) {
-                                  navigate('/booking', { state: { service: svc, user } });
+                                  handleOpenBookingModal(svc);
                                   return;
                                 }
                                 toast.error('Could not open booking. Find the service in Browse or Categories.');
                               }}
                             >
-                              Book Again
+                              {row.source === 'booking' ? 'Book Again' : 'Book Now'}
                             </button>
                           </motion.div>
                         ))}

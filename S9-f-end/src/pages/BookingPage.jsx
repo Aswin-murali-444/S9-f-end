@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { recordServiceView } from '../services/serviceViewTracking';
 import { apiService } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { useNotifications } from '../hooks/useNotifications';
@@ -33,7 +34,7 @@ const BookingPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { service, user, cartItems = [], isMultiService = false } = location.state || {};
-  const { logout } = useAuth();
+  const { logout, user: authUser } = useAuth();
   // Workers and duration controls
   const [workersCount, setWorkersCount] = useState(1);
   // For group/team work: allow customer to *request* extra workers (optional)
@@ -150,6 +151,11 @@ const BookingPage = () => {
     }
     return null;
   }, [service?.id, service?.service_id, service?.serviceId, cartItems]);
+
+  useEffect(() => {
+    if (!reviewServiceId || !authUser?.id) return;
+    void recordServiceView(supabase, authUser.id, reviewServiceId);
+  }, [reviewServiceId, authUser?.id]);
 
   useEffect(() => {
     if (!reviewServiceId) return;
