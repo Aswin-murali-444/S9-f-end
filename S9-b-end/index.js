@@ -131,13 +131,21 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check endpoint
+// Health check endpoint (use on hosted URL to verify deploy + Supabase config)
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'healthy', 
+  res.json({
+    status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    memory: process.memoryUsage()
+    memory: process.memoryUsage(),
+    /** If false, recommendations often return 1 item (RLS + anon key). */
+    supabaseServiceRoleConfigured: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    /** Git SHA from host (Render/Railway/Vercel) — compare with GitHub latest commit. */
+    deployCommit:
+      process.env.RENDER_GIT_COMMIT ||
+      process.env.RAILWAY_GIT_COMMIT_SHA ||
+      process.env.VERCEL_GIT_COMMIT_SHA ||
+      null
   });
 });
 

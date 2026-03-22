@@ -175,6 +175,15 @@ npm run refresh-season-profiles
 
 While `node index.js` runs, the daily seasonal job refreshes **scores** then **profiles** automatically. Tune matching in **`lib/seasonProfileClassifier.js`** to your **`service_categories.name`** values.
 
+## Hosted vs local (recommendations)
+
+- **Git `main`** may be up to date while **your server is not**. Redeploy the API (e.g. Render “Manual Deploy”) after every push.
+- The **browser build** calls the API from `VITE_API_URL`, or falls back to **`https://nexus-d2dx.onrender.com`** (`S9-f-end/src/lib/apiBaseUrl.js`). That is **not** your laptop — it must run the same backend code and **`.env`** as local for parity.
+- **`SUPABASE_SERVICE_ROLE_KEY` must be set on the host.** Without it, the API uses the anon key and RLS often hides almost all `services` rows → **one recommendation**.
+- Check the live API: `GET https://<your-api-host>/health`  
+  - `supabaseServiceRoleConfigured` should be **`true`**.  
+  - `deployCommit` (if present) should match the short SHA of the latest commit on `main` (e.g. `a83657d`).
+
 ## Security Notes
 
 - Never commit the `.env` file to version control
