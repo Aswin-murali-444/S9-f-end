@@ -29,7 +29,7 @@ const Footer = () => {
               </a>
               <div className="contact-item">
                 <MapPin size={16} />
-                123 Care Street, City, State
+                123 Care Street, City, Kerala, India
               </div>
             </div>
           </div>
