@@ -2260,7 +2260,7 @@ const AdminDashboard = () => {
                       { icon: Settings, label: 'Manage Categories', path: '/admin/categories' },
                       { icon: Settings, label: 'Add Service', path: '/admin/add-service' },
                       { icon: Database, label: 'Manage Categories', path: '/admin/categories' },
-                      { icon: Target, label: 'Assign Provider', path: '/admin/assign-provider' },
+                      { icon: Target, label: 'Assign Provider', path: '/dashboard/admin?tab=allocation' },
                       { icon: IndianRupee, label: 'Create Bill', path: '/admin/create-bill' }
                     ].map((action, index) => (
                       <motion.button
@@ -3044,7 +3044,7 @@ const AdminDashboard = () => {
                     className="admin-form-card"
                     whileHover={{ scale: 1.02, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => navigate('/admin/assign-provider')}
+                    onClick={() => navigate('/dashboard/admin?tab=allocation')}
                     variants={itemVariants}
                   >
                     <div className="form-card-icon">

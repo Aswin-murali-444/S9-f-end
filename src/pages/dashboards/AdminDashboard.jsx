@@ -1373,7 +1373,7 @@ const AdminDashboard = () => {
                       <Database size={24} />
                       <span>Manage Categories</span>
                     </button>
-                    <button className="action-card" onClick={() => navigate('/admin/assign-provider')}>
+                    <button className="action-card" onClick={() => navigate('/dashboard/admin?tab=allocation')}>
                       <Target size={24} />
                       <span>Assign Provider</span>
                     </button>
@@ -1750,7 +1750,7 @@ const AdminDashboard = () => {
                     className="admin-form-card"
                     whileHover={{ scale: 1.02, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => navigate('/admin/assign-provider')}
+                    onClick={() => navigate('/dashboard/admin?tab=allocation')}
                     variants={itemVariants}
                   >
                     <div className="form-card-icon">
@@ -1830,7 +1830,7 @@ const AdminDashboard = () => {
                       <h3>Provider Assignment</h3>
                       <button 
                         className="btn-primary" 
-                        onClick={() => navigate('/admin/assign-provider')}
+                        onClick={() => navigate('/dashboard/admin?tab=allocation')}
                       >
                         <Plus size={20} />
                         Assign Provider

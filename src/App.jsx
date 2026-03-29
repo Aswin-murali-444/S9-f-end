@@ -36,7 +36,6 @@ const AdminDashboard = lazy(() => import('./pages/dashboards/AdminDashboard'));
 const AddCategoryPage = lazy(() => import('./pages/admin/AddCategoryPage'));
 const AddServicePage = lazy(() => import('./pages/admin/AddServicePage'));
 const AddServiceProviderPage = lazy(() => import('./pages/admin/AddServiceProviderPage'));
-const AssignProviderPage = lazy(() => import('./pages/admin/AssignProviderPage'));
 const CreateBillPage = lazy(() => import('./pages/admin/CreateBillPage'));
 const AdminUserProfilePage = lazy(() => import('./pages/admin/AdminUserProfile'));
 const CategoriesPage = lazy(() => import('./pages/admin/CategoriesPage'));
@@ -213,14 +212,6 @@ function AppShell() {
                       element={
                         <ProtectedRoute allowedRoles={["admin"]}>
                           <ManageProvidersPage />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/admin/assign-provider"
-                      element={
-                        <ProtectedRoute allowedRoles={["admin"]}>
-                          <AssignProviderPage />
                         </ProtectedRoute>
                       }
                     />

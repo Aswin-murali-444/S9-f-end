@@ -49,7 +49,7 @@ const AdminLayout = ({ children }) => {
     if (location.pathname.includes('/admin/add-user') || location.pathname.includes('/admin/users')) return 'users';
     if (location.pathname.includes('/admin/add-category') || location.pathname.includes('/admin/categories')) return 'services';
     if (location.pathname.includes('/admin/add-service') || location.pathname.includes('/admin/services')) return 'services';
-    if (location.pathname.includes('/admin/assign-provider') || location.pathname.includes('/admin/allocation')) return 'allocation';
+    if (location.pathname.includes('/admin/allocation')) return 'allocation';
     if (location.pathname.includes('/admin/create-bill') || location.pathname.includes('/admin/billing')) return 'billing';
     if (location.pathname.includes('/admin/feedback')) return 'feedback';
     if (location.pathname.includes('/admin/system') || location.pathname.includes('/admin/health')) return 'system';
@@ -86,7 +86,6 @@ const AdminLayout = ({ children }) => {
     if (location.pathname.includes('/admin/add-service-provider')) return 'Add Service Provider';
     if (location.pathname.includes('/admin/add-category')) return 'Add Category';
     if (location.pathname.includes('/admin/add-service')) return 'Add Service';
-    if (location.pathname.includes('/admin/assign-provider')) return 'Assign Provider';
     if (location.pathname.includes('/admin/create-bill')) return 'Create Bill';
     if (location.pathname.includes('/admin/services')) return 'Services Management';
     if (location.pathname.includes('/admin/categories')) return 'Categories Management';
@@ -113,7 +112,7 @@ const AdminLayout = ({ children }) => {
     if (location.pathname.includes('/admin/billing') || location.pathname.includes('/admin/create-bill')) {
       return 'Search bills or payments...';
     }
-    if (location.pathname.includes('/admin/assign-provider') || location.pathname.includes('/admin/allocation')) {
+    if (location.pathname.includes('/admin/allocation')) {
       return 'Search providers or allocations...';
     }
     if (location.pathname.includes('/admin/feedback')) {
@@ -622,7 +621,7 @@ const AdminLayout = ({ children }) => {
                       <div className="action-icon billing">💰</div>
                       <span>Create Bill</span>
                     </button>
-                    <button className="action-btn" onClick={() => navigate('/admin/assign-provider')}>
+                    <button className="action-btn" onClick={() => navigate('/dashboard/admin?tab=allocation')}>
                       <div className="action-icon assign">🎯</div>
                       <span>Assign Provider</span>
                     </button>
