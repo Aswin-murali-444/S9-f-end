@@ -1,253 +1,106 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Save, IndianRupee, Calendar, User, FileText } from 'lucide-react';
+import { FileText, IndianRupee, Mail, Download, CheckCircle } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/AdminLayout';
-import { validationUtils } from '../../utils/validation';
+import { apiService } from '../../services/api';
 import './AdminPages.css';
+
+const fmtMoney = (n) => `₹${(Number(n) || 0).toFixed(2)}`;
 
 const CreateBillPage = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    customerId: '',
-    serviceId: '',
-    amount: '',
-    dueDate: '',
-    status: 'pending',
-    description: '',
-    taxRate: '0',
-    discountAmount: '0'
-  });
-  const [customers, setCustomers] = useState([]);
-  const [services, setServices] = useState([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState({});
-  const [touched, setTouched] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [bookings, setBookings] = useState([]);
+  const [billingSummary, setBillingSummary] = useState(null);
+  const [selectedBookingId, setSelectedBookingId] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  // Mock data - in real app, fetch from API
   useEffect(() => {
-    setCustomers([
-      { 
-        id: 1, 
-        name: 'John Smith', 
-        email: 'john.smith@example.com',
-        phone: '+1 555-0101',
-        address: '123 Main St, City, State 12345'
-      },
-      { 
-        id: 2, 
-        name: 'Sarah Johnson', 
-        email: 'sarah.j@example.com',
-        phone: '+1 555-0102',
-        address: '456 Oak Ave, City, State 12345'
-      },
-      { 
-        id: 3, 
-        name: 'Emily Davis', 
-        email: 'emily.d@example.com',
-        phone: '+1 555-0103',
-        address: '789 Pine Rd, City, State 12345'
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [bookingsResp, billingResp] = await Promise.all([
+          apiService.getAdminBookings({ limit: 200, status: 'all' }),
+          apiService.getAdminBillingSummary(200)
+        ]);
+        if (cancelled) return;
+        setBookings(Array.isArray(bookingsResp?.data) ? bookingsResp.data : []);
+        setBillingSummary(billingResp?.data || null);
+      } catch (e) {
+        if (!cancelled) toast.error(String(e?.message || 'Failed to load billing data'));
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    ]);
-    
-    setServices([
-      { id: 1, name: 'Plumbing Repair', basePrice: 75.00, category: 'Home Maintenance' },
-      { id: 2, name: 'Electrical Work', basePrice: 90.00, category: 'Home Maintenance' },
-      { id: 3, name: 'Elder Care (4 hours)', basePrice: 120.00, category: 'Healthcare' },
-      { id: 4, name: 'Airport Transfer', basePrice: 45.00, category: 'Transport' },
-      { id: 5, name: 'Medicine Delivery', basePrice: 15.00, category: 'Delivery' }
-    ]);
-
-    // Set default due date to 30 days from now
-    const defaultDueDate = new Date();
-    defaultDueDate.setDate(defaultDueDate.getDate() + 30);
-    setFormData(prev => ({
-      ...prev,
-      dueDate: defaultDueDate.toISOString().split('T')[0]
-    }));
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  const validateField = (fieldName, value) => {
-    switch (fieldName) {
-      case 'customerId': {
-        if (!value) return 'Please select a customer';
-        return undefined;
-      }
-      case 'serviceId': {
-        if (!value) return 'Please select a service';
-        return undefined;
-      }
-      case 'amount': {
-        const result = validationUtils.validateNumeric(value, {
-          min: 0.01,
-          max: 999999.99,
-          allowDecimals: true,
-          fieldName: 'Bill amount',
-          required: true
-        });
-        return result.isValid ? undefined : result.error;
-      }
-      case 'dueDate': {
-        const result = validationUtils.validateDate(value, {
-          minDate: new Date().toISOString().split('T')[0],
-          fieldName: 'Due date',
-          required: true
-        });
-        return result.isValid ? undefined : result.error;
-      }
-      case 'taxRate': {
-        const result = validationUtils.validateNumeric(value, {
-          min: 0,
-          max: 100,
-          allowDecimals: true,
-          fieldName: 'Tax rate',
-          required: false
-        });
-        return result.isValid ? undefined : result.error;
-      }
-      case 'discountAmount': {
-        const result = validationUtils.validateNumeric(value, {
-          min: 0,
-          max: parseFloat(formData.amount) || 999999.99,
-          allowDecimals: true,
-          fieldName: 'Discount amount',
-          required: false
-        });
-        return result.isValid ? undefined : result.error;
-      }
-      case 'description': {
-        if (!value) return undefined; // optional
-        const result = validationUtils.validateTextLength(value, {
-          max: 1000,
-          fieldName: 'Description',
-          required: false
-        });
-        return result.isValid ? undefined : result.error;
-      }
-      default:
-        return undefined;
-    }
-  };
+  const selectedBooking = useMemo(() => {
+    if (!selectedBookingId) return null;
+    return bookings.find((b) => String(b.id) === String(selectedBookingId)) || null;
+  }, [bookings, selectedBookingId]);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    // Mark as touched and validate
-    setTouched(prev => ({ ...prev, [name]: true }));
-    const error = validateField(name, value);
-    setValidationErrors(prev => ({ ...prev, [name]: error }));
-  };
+  const payoutRow = useMemo(() => {
+    if (!selectedBooking) return null;
+    const rows = Array.isArray(billingSummary?.provider_payouts) ? billingSummary.provider_payouts : [];
+    return rows.find((r) => String(r.booking_id) === String(selectedBooking.id)) || null;
+  }, [billingSummary?.provider_payouts, selectedBooking]);
 
-  const handleServiceSelect = (e) => {
-    const serviceId = e.target.value;
-    const selectedService = services.find(s => s.id === parseInt(serviceId));
-    
-    setFormData(prev => ({
-      ...prev,
-      serviceId,
-      amount: selectedService ? selectedService.basePrice.toString() : ''
-    }));
-  };
+  const payoutStatus = String(payoutRow?.status || '').toLowerCase();
+  const isWorkerPaid = payoutStatus === 'paid' || payoutStatus === 'earned' || payoutStatus === 'completed' || payoutStatus === 'success';
 
-  const handleStatusSelect = (status) => {
-    setFormData(prev => ({
-      ...prev,
-      status
-    }));
-  };
+  const canInvoice = Boolean(selectedBooking);
+  const canPayslip = Boolean(selectedBooking && selectedBooking.assigned_provider_id);
 
-  const calculateTotal = () => {
-    const baseAmount = parseFloat(formData.amount) || 0;
-    const taxRate = parseFloat(formData.taxRate) || 0;
-    const discountAmount = parseFloat(formData.discountAmount) || 0;
-    
-    const taxAmount = (baseAmount * taxRate) / 100;
-    const total = baseAmount + taxAmount - discountAmount;
-    
-    return {
-      baseAmount,
-      taxAmount,
-      discountAmount,
-      total: Math.max(0, total)
-    };
-  };
+  const invoicePdfUrl = selectedBooking ? apiService.getInvoicePdfUrl(selectedBooking.id) : '#';
+  const payslipPdfUrl = selectedBooking ? apiService.getPayslipPdfUrl(selectedBooking.id) : '#';
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    // Validate all fields
-    const errors = {};
-    const fieldsToValidate = ['customerId', 'serviceId', 'amount', 'dueDate', 'taxRate', 'discountAmount', 'description'];
-    
-    fieldsToValidate.forEach(field => {
-      const error = validateField(field, formData[field]);
-      if (error) errors[field] = error;
-    });
-    
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
-      setTouched({
-        customerId: true,
-        serviceId: true,
-        amount: true,
-        dueDate: true,
-        taxRate: true,
-        discountAmount: true,
-        description: true
-      });
-      return;
-    }
-    
-    setIsSubmitting(true);
-    
+  const handleEmailInvoice = async () => {
+    if (!selectedBooking) return;
+    setBusy(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const billData = {
-        ...formData,
-        calculations: calculateTotal(),
-        createdAt: new Date().toISOString(),
-        billNumber: `INV-${Date.now()}`
-      };
-      
-      console.log('Bill data:', billData);
-      
-      // Navigate back to billing tab
-      navigate('/dashboard/admin?tab=billing');
-    } catch (error) {
-      console.error('Error creating bill:', error);
+      await apiService.emailInvoicePdf(selectedBooking.id);
+      toast.success('Invoice emailed to customer (if SendGrid is configured).');
+    } catch (e) {
+      toast.error(String(e?.message || 'Failed to email invoice'));
     } finally {
-      setIsSubmitting(false);
+      setBusy(false);
     }
   };
 
-  const selectedCustomer = customers.find(c => c.id === parseInt(formData.customerId));
-  const selectedService = services.find(s => s.id === parseInt(formData.serviceId));
-  const calculations = calculateTotal();
-
-  const containerVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.6,
-        staggerChildren: 0.1
-      }
+  const handleMarkWorkerPaid = async () => {
+    if (!selectedBooking) return;
+    setBusy(true);
+    try {
+      const resp = await apiService.markWorkerPayoutPaid({
+        bookingId: selectedBooking.id,
+        payout_method: 'manual',
+        notes: 'Paid from admin billing page'
+      });
+      toast.success(resp?.message || 'Worker payout marked as paid.');
+      // Refresh billing summary so status updates in UI
+      const billingResp = await apiService.getAdminBillingSummary(200);
+      setBillingSummary(billingResp?.data || null);
+    } catch (e) {
+      toast.error(String(e?.message || 'Failed to mark worker as paid'));
+    } finally {
+      setBusy(false);
     }
   };
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.4 }
+  const handleEmailPayslip = async () => {
+    if (!selectedBooking) return;
+    setBusy(true);
+    try {
+      await apiService.emailPayslipPdf(selectedBooking.id);
+      toast.success('Payslip emailed to worker (if SendGrid is configured).');
+    } catch (e) {
+      toast.error(String(e?.message || 'Failed to email payslip'));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -255,296 +108,145 @@ const CreateBillPage = () => {
     <AdminLayout>
       <motion.div
         className="admin-page-content"
-        initial="hidden"
-        animate="visible"
-        variants={containerVariants}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
       >
-        {/* Page Header */}
-        <motion.div className="page-header" variants={itemVariants}>
+        <div className="page-header">
           <div className="page-title">
-            <h1>Create Bill</h1>
-            <p>Generate a new invoice for customer services</p>
+            <h1>Billing (Create Bill)</h1>
+            <p>Create correct invoices/payslips and email PDFs to the customer/worker.</p>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Form */}
-        <motion.form 
-          className="admin-form"
-          onSubmit={handleSubmit}
-          variants={itemVariants}
-        >
+        <div className="admin-form">
           <div className="form-sections">
-            {/* Customer Selection */}
             <div className="form-section">
-              <h3>Customer Information</h3>
+              <h3>Select booking</h3>
               <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="customerId">Select Customer *</label>
-                  <select
-                    id="customerId"
-                    name="customerId"
-                    value={formData.customerId}
-                    onChange={handleInputChange}
-                    onBlur={() => setTouched(prev => ({ ...prev, customerId: true }))}
-                    required
-                    className={touched.customerId && validationErrors.customerId ? 'error' : ''}
-                  >
-                    <option value="">Choose a customer</option>
-                    {customers.map(customer => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name} ({customer.email})
-                      </option>
-                    ))}
-                  </select>
-                  {touched.customerId && validationErrors.customerId && (
-                    <small className="error-text">{validationErrors.customerId}</small>
-                  )}
-                </div>
-
-                {selectedCustomer && (
-                  <div className="form-group">
-                    <label>Customer Details</label>
-                    <div style={{ 
-                      padding: '1rem', 
-                      background: '#f8fafc', 
-                      borderRadius: '8px',
-                      border: '1px solid #e2e8f0'
-                    }}>
-                      <div style={{ fontWeight: '600', marginBottom: '0.5rem' }}>
-                        {selectedCustomer.name}
-                      </div>
-                      <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                        📧 {selectedCustomer.email}
-                      </div>
-                      <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                        📞 {selectedCustomer.phone}
-                      </div>
-                      <div style={{ color: '#64748b', fontSize: '0.9rem' }}>
-                        📍 {selectedCustomer.address}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Service & Billing Details */}
-            <div className="form-section">
-              <h3>Service & Billing Details</h3>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="serviceId">Service Availed *</label>
-                  <select
-                    id="serviceId"
-                    name="serviceId"
-                    value={formData.serviceId}
-                    onChange={handleServiceSelect}
-                    onBlur={() => setTouched(prev => ({ ...prev, serviceId: true }))}
-                    required
-                    className={touched.serviceId && validationErrors.serviceId ? 'error' : ''}
-                  >
-                    <option value="">Choose a service</option>
-                    {services.map(service => (
-                      <option key={service.id} value={service.id}>
-                        {service.name} - ${service.basePrice}
-                      </option>
-                    ))}
-                  </select>
-                  {touched.serviceId && validationErrors.serviceId && (
-                    <small className="error-text">{validationErrors.serviceId}</small>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="amount">Bill Amount *</label>
-                  <div className="price-input-group">
-                    <input
-                      id="amount"
-                      name="amount"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.amount}
-                      onChange={handleInputChange}
-                      onBlur={() => setTouched(prev => ({ ...prev, amount: true }))}
-                      placeholder="0.00"
-                      required
-                      className={touched.amount && validationErrors.amount ? 'error' : ''}
-                    />
-                  </div>
-                  {touched.amount && validationErrors.amount && (
-                    <small className="error-text">{validationErrors.amount}</small>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="dueDate">Due Date *</label>
-                  <input
-                    id="dueDate"
-                    name="dueDate"
-                    type="date"
-                    value={formData.dueDate}
-                    onChange={handleInputChange}
-                    onBlur={() => setTouched(prev => ({ ...prev, dueDate: true }))}
-                    required
-                    className={touched.dueDate && validationErrors.dueDate ? 'error' : ''}
-                  />
-                  {touched.dueDate && validationErrors.dueDate && (
-                    <small className="error-text">{validationErrors.dueDate}</small>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="taxRate">Tax Rate (%)</label>
-                  <input
-                    id="taxRate"
-                    name="taxRate"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    value={formData.taxRate}
-                    onChange={handleInputChange}
-                    onBlur={() => setTouched(prev => ({ ...prev, taxRate: true }))}
-                    placeholder="0.00"
-                    className={touched.taxRate && validationErrors.taxRate ? 'error' : ''}
-                  />
-                  {touched.taxRate && validationErrors.taxRate && (
-                    <small className="error-text">{validationErrors.taxRate}</small>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="discountAmount">Discount Amount</label>
-                  <div className="price-input-group">
-                    <input
-                      id="discountAmount"
-                      name="discountAmount"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.discountAmount}
-                      onChange={handleInputChange}
-                      onBlur={() => setTouched(prev => ({ ...prev, discountAmount: true }))}
-                      placeholder="0.00"
-                      className={touched.discountAmount && validationErrors.discountAmount ? 'error' : ''}
-                    />
-                  </div>
-                  {touched.discountAmount && validationErrors.discountAmount && (
-                    <small className="error-text">{validationErrors.discountAmount}</small>
-                  )}
-                </div>
-
                 <div className="form-group full-width">
-                  <label htmlFor="description">Description / Notes</label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    onBlur={() => setTouched(prev => ({ ...prev, description: true }))}
-                    rows="3"
-                    placeholder="Additional details about the service provided..."
-                    className={touched.description && validationErrors.description ? 'error' : ''}
-                  />
-                  {touched.description && validationErrors.description && (
-                    <small className="error-text">{validationErrors.description}</small>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Bill Status */}
-            <div className="form-section">
-              <h3>Bill Status</h3>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Payment Status *</label>
-                  <div className="status-grid">
-                    {['pending', 'paid', 'overdue'].map(status => (
-                      <div
-                        key={status}
-                        className={`status-option ${status} ${formData.status === status ? 'selected' : ''}`}
-                        onClick={() => handleStatusSelect(status)}
-                      >
-                        {status.charAt(0).toUpperCase() + status.slice(1)}
-                      </div>
+                  <label htmlFor="bookingId">Booking *</label>
+                  <select
+                    id="bookingId"
+                    value={selectedBookingId}
+                    onChange={(e) => setSelectedBookingId(e.target.value)}
+                    disabled={loading}
+                  >
+                    <option value="">{loading ? 'Loading…' : 'Choose a booking'}</option>
+                    {bookings.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {String(b.id).slice(-8).toUpperCase()} • {b.customer_name || b.customer_email || 'Customer'} • {b.service_name || 'Service'} • {fmtMoney(b.total_amount)}
+                      </option>
                     ))}
-                  </div>
-                  <small style={{ color: '#64748b', marginTop: '0.5rem' }}>
-                    {formData.status === 'pending' && 'Bill is awaiting payment from customer'}
-                    {formData.status === 'paid' && 'Payment has been received and processed'}
-                    {formData.status === 'overdue' && 'Payment is past due date'}
-                  </small>
+                  </select>
                 </div>
 
-                {/* Bill Summary */}
-                {formData.amount && (
-                  <div className="form-group">
-                    <label>Bill Summary</label>
-                    <div style={{ 
-                      padding: '1rem', 
-                      background: '#f8fafc', 
-                      borderRadius: '8px',
-                      border: '1px solid #e2e8f0'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                        <span>Service Amount:</span>
-                        <span>₹{calculations.baseAmount.toFixed(2)}</span>
+                {selectedBooking && (
+                  <div className="form-group full-width">
+                    <label>Details</label>
+                    <div style={{ padding: '1rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                        <div>
+                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{selectedBooking.service_name || 'Service'}</div>
+                          <div style={{ color: '#64748b', fontSize: 14 }}>
+                            Customer: {selectedBooking.customer_name || selectedBooking.customer_email || '—'}
+                          </div>
+                          <div style={{ color: '#64748b', fontSize: 14 }}>
+                            Payment: {selectedBooking.payment_status || '—'} • Booking: {selectedBooking.booking_status || '—'}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ color: '#64748b', fontSize: 13 }}>Total</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                            <IndianRupee size={18} />
+                            {fmtMoney(selectedBooking.total_amount)}
+                          </div>
+                        </div>
                       </div>
-                      {calculations.taxAmount > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: '#64748b' }}>
-                          <span>Tax ({formData.taxRate}%):</span>
-                          <span>+₹{calculations.taxAmount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      {calculations.discountAmount > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: '#059669' }}>
-                          <span>Discount:</span>
-                          <span>-₹{calculations.discountAmount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      <hr style={{ margin: '0.5rem 0', border: 'none', borderTop: '1px solid #e2e8f0' }} />
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', fontSize: '1.1rem' }}>
-                        <span>Total Amount:</span>
-                        <span>₹{calculations.total.toFixed(2)}</span>
+                      <div style={{ marginTop: 10, color: '#64748b', fontSize: 13 }}>
+                        Address: {selectedBooking.service_address || '—'}
                       </div>
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="form-section">
+              <h3>Customer invoice</h3>
+              <div className="form-actions" style={{ justifyContent: 'flex-start', gap: 10 }}>
+                <a
+                  className={`btn-secondary ${!canInvoice ? 'disabled' : ''}`}
+                  href={invoicePdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => { if (!canInvoice) e.preventDefault(); }}
+                >
+                  <Download size={18} />
+                  Download invoice PDF
+                </a>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleEmailInvoice}
+                  disabled={!canInvoice || busy}
+                >
+                  <Mail size={18} />
+                  Email invoice PDF
+                </button>
+              </div>
+            </div>
+
+            <div className="form-section">
+              <h3>Worker payment + payslip</h3>
+              <div style={{ color: '#64748b', fontSize: 14, marginBottom: 10 }}>
+                Status: {isWorkerPaid ? <span style={{ color: '#059669', fontWeight: 700 }}><CheckCircle size={16} style={{ verticalAlign: 'text-bottom' }} /> Paid</span> : 'Not paid'}
+              </div>
+
+              <div className="form-actions" style={{ justifyContent: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleMarkWorkerPaid}
+                  disabled={!selectedBooking || busy || isWorkerPaid}
+                  title={isWorkerPaid ? 'Already paid' : 'Mark payout as paid'}
+                >
+                  <IndianRupee size={18} />
+                  Mark worker as paid
+                </button>
+
+                <a
+                  className={`btn-secondary ${!canPayslip ? 'disabled' : ''}`}
+                  href={payslipPdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => { if (!canPayslip) e.preventDefault(); }}
+                  title={!canPayslip ? 'No worker assigned to this booking' : 'Download payslip'}
+                >
+                  <FileText size={18} />
+                  Download payslip PDF
+                </a>
+
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleEmailPayslip}
+                  disabled={!canPayslip || busy || !isWorkerPaid}
+                  title={!isWorkerPaid ? 'Pay the worker first' : 'Email payslip'}
+                >
+                  <Mail size={18} />
+                  Email payslip PDF
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Form Actions */}
-          <motion.div className="form-actions" variants={itemVariants}>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => navigate('/dashboard/admin?tab=billing')}
-              disabled={isSubmitting}
-            >
-              Cancel
+          <div className="form-actions">
+            <button type="button" className="btn-secondary" onClick={() => navigate('/dashboard/admin?tab=billing')}>
+              Back to billing
             </button>
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={isSubmitting || !formData.customerId || !formData.serviceId || !formData.amount || !formData.dueDate}
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="spinner"></div>
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Save size={20} />
-                  Create Bill
-                </>
-              )}
-            </button>
-          </motion.div>
-        </motion.form>
+          </div>
+        </div>
       </motion.div>
     </AdminLayout>
   );

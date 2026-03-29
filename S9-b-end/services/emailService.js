@@ -780,5 +780,47 @@ module.exports = {
   sendTeamAllAcceptedToCustomerEmail,
   sendTeamAllAcceptedToAdminEmail,
   sendWorkerDeclinedToAdminEmail,
-  sendWorkerDeclinedToCustomerEmail
+  sendWorkerDeclinedToCustomerEmail,
+  /**
+   * Generic SendGrid email helper (supports PDF attachments).
+   * attachments: [{ filename, contentBase64, type, disposition }]
+   */
+  sendEmailWithAttachments: async ({
+    to,
+    subject,
+    text,
+    html,
+    attachments = []
+  }) => {
+    if (!to) return { sent: false, error: 'No recipient' };
+    if (!process.env.SENDGRID_API_KEY) {
+      console.warn('SendGrid API key not configured, skipping email send');
+      return { skipped: true, reason: 'No SendGrid API key' };
+    }
+
+    const from = process.env.SENDGRID_FROM_EMAIL || process.env.FROM_EMAIL || 'no-reply@nexus.com';
+    const safeAttachments = (attachments || [])
+      .filter((a) => a && a.filename && a.contentBase64)
+      .map((a) => ({
+        filename: a.filename,
+        content: a.contentBase64,
+        type: a.type || 'application/pdf',
+        disposition: a.disposition || 'attachment'
+      }));
+
+    try {
+      await sgMail.send({
+        to,
+        from,
+        subject: subject || 'Nexus document',
+        text: text || '',
+        html: html || undefined,
+        attachments: safeAttachments.length ? safeAttachments : undefined
+      });
+      return { sent: true };
+    } catch (error) {
+      console.error('❌ Failed to send email with attachments:', error);
+      return { sent: false, error: error.message };
+    }
+  }
 };

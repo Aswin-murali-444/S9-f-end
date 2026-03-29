@@ -954,6 +954,45 @@ class ApiService {
     return this.request(q ? `/admin/bookings?${q}` : '/admin/bookings');
   }
 
+  // Billing: invoice/payslip PDFs + email delivery
+  getInvoicePdfUrl(bookingId) {
+    const base = this.getBaseUrl();
+    const normalized = String(base || '').replace(/\/$/, '');
+    return `${normalized}/billing/invoice/${encodeURIComponent(bookingId)}/pdf`;
+  }
+
+  getPayslipPdfUrl(bookingId) {
+    const base = this.getBaseUrl();
+    const normalized = String(base || '').replace(/\/$/, '');
+    return `${normalized}/billing/payslip/${encodeURIComponent(bookingId)}/pdf`;
+  }
+
+  async emailInvoicePdf(bookingId) {
+    return this.request('/billing/invoice/email', {
+      method: 'POST',
+      body: JSON.stringify({ booking_id: bookingId })
+    });
+  }
+
+  async emailPayslipPdf(bookingId) {
+    return this.request('/billing/payslip/email', {
+      method: 'POST',
+      body: JSON.stringify({ booking_id: bookingId })
+    });
+  }
+
+  async markWorkerPayoutPaid({ bookingId, payout_method = 'manual', payout_reference = null, notes = null }) {
+    return this.request('/payments/worker-payout', {
+      method: 'POST',
+      body: JSON.stringify({
+        booking_id: bookingId,
+        payout_method,
+        payout_reference,
+        notes
+      })
+    });
+  }
+
   // Public contact form + admin feedback inbox
   async submitContactMessage(payload) {
     try {

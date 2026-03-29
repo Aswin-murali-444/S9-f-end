@@ -23,6 +23,7 @@ const notificationsRouter = require('./routes/notifications');
 const reviewsRouter = require('./routes/reviews');
 const adminRouter = require('./routes/admin');
 const contactRouter = require('./routes/contact');
+const billingRouter = require('./routes/billing');
 const { scheduleSeasonalScoresCron } = require('./jobs/scheduleSeasonalScores');
 
 // Import middleware modules
@@ -212,6 +213,7 @@ app.use('/notifications', notificationsRouter);
 app.use('/reviews', reviewsRouter);
 app.use('/admin', adminRouter);
 app.use('/contact', contactRouter);
+app.use('/billing', billingRouter);
 
 // Optional mirrors for dev proxies expecting /api prefix
 app.use('/api/categories', categoriesRouter);
@@ -228,6 +230,7 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/contact', contactRouter);
+app.use('/api/billing', billingRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

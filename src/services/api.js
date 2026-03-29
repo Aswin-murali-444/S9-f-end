@@ -748,6 +748,59 @@ class ApiService {
       method: 'DELETE'
     });
   }
+
+  // Admin: bookings list (used by Billing UI)
+  async getAdminBookings(params = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.limit != null) searchParams.set('limit', params.limit);
+    if (params.status) searchParams.set('status', params.status);
+    const q = searchParams.toString();
+    return this.request(q ? `/admin/bookings?${q}` : '/admin/bookings');
+  }
+
+  async getAdminBillingSummary(limit = 200) {
+    const params = new URLSearchParams();
+    if (limit != null) params.set('limit', limit);
+    const q = params.toString();
+    return this.request(q ? `/admin/billing-summary?${q}` : '/admin/billing-summary');
+  }
+
+  // Billing: invoice/payslip PDFs + email delivery
+  getInvoicePdfUrl(bookingId) {
+    const normalized = String(API_BASE_URL || '').replace(/\/$/, '');
+    return `${normalized}/billing/invoice/${encodeURIComponent(bookingId)}/pdf`;
+  }
+
+  getPayslipPdfUrl(bookingId) {
+    const normalized = String(API_BASE_URL || '').replace(/\/$/, '');
+    return `${normalized}/billing/payslip/${encodeURIComponent(bookingId)}/pdf`;
+  }
+
+  async emailInvoicePdf(bookingId) {
+    return this.request('/billing/invoice/email', {
+      method: 'POST',
+      body: JSON.stringify({ booking_id: bookingId })
+    });
+  }
+
+  async emailPayslipPdf(bookingId) {
+    return this.request('/billing/payslip/email', {
+      method: 'POST',
+      body: JSON.stringify({ booking_id: bookingId })
+    });
+  }
+
+  async markWorkerPayoutPaid({ bookingId, payout_method = 'manual', payout_reference = null, notes = null }) {
+    return this.request('/payments/worker-payout', {
+      method: 'POST',
+      body: JSON.stringify({
+        booking_id: bookingId,
+        payout_method,
+        payout_reference,
+        notes
+      })
+    });
+  }
 }
 
 export const apiService = new ApiService(); 
