@@ -958,13 +958,15 @@ class ApiService {
   getInvoicePdfUrl(bookingId) {
     const base = this.getBaseUrl();
     const normalized = String(base || '').replace(/\/$/, '');
-    return `${normalized}/billing/invoice/${encodeURIComponent(bookingId)}/pdf`;
+    const withApi = normalized.endsWith('/api') ? normalized : `${normalized}/api`;
+    return `${withApi}/billing/invoice/${encodeURIComponent(bookingId)}/pdf`;
   }
 
   getPayslipPdfUrl(bookingId) {
     const base = this.getBaseUrl();
     const normalized = String(base || '').replace(/\/$/, '');
-    return `${normalized}/billing/payslip/${encodeURIComponent(bookingId)}/pdf`;
+    const withApi = normalized.endsWith('/api') ? normalized : `${normalized}/api`;
+    return `${withApi}/billing/payslip/${encodeURIComponent(bookingId)}/pdf`;
   }
 
   async emailInvoicePdf(bookingId) {

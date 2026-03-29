@@ -768,12 +768,14 @@ class ApiService {
   // Billing: invoice/payslip PDFs + email delivery
   getInvoicePdfUrl(bookingId) {
     const normalized = String(API_BASE_URL || '').replace(/\/$/, '');
-    return `${normalized}/billing/invoice/${encodeURIComponent(bookingId)}/pdf`;
+    const withApi = normalized.endsWith('/api') ? normalized : `${normalized}/api`;
+    return `${withApi}/billing/invoice/${encodeURIComponent(bookingId)}/pdf`;
   }
 
   getPayslipPdfUrl(bookingId) {
     const normalized = String(API_BASE_URL || '').replace(/\/$/, '');
-    return `${normalized}/billing/payslip/${encodeURIComponent(bookingId)}/pdf`;
+    const withApi = normalized.endsWith('/api') ? normalized : `${normalized}/api`;
+    return `${withApi}/billing/payslip/${encodeURIComponent(bookingId)}/pdf`;
   }
 
   async emailInvoicePdf(bookingId) {
