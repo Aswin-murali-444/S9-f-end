@@ -247,13 +247,44 @@ const AddServiceProviderPage = () => {
 
   // Handle team member selection
   const handleAddTeamMember = (providerId) => {
-    if (!teamData.team_members.includes(providerId) && teamData.team_members.length < teamData.max_members - 1) {
+    // `max_members` includes the leader. Members cap is (max_members - 1).
+    // Also, never allow the leader to be added as a member.
+    const memberCap = Math.max(0, (parseInt(String(teamData.max_members), 10) || 0) - 1);
+    if (
+      providerId !== teamData.team_leader_id &&
+      !teamData.team_members.includes(providerId) &&
+      teamData.team_members.length < memberCap
+    ) {
       setTeamData(prev => ({
         ...prev,
         team_members: [...prev.team_members, providerId]
       }));
     }
   };
+
+  // Keep team leader + members consistent:
+  // - leader cannot also be in members
+  // - members cannot exceed (max_members - 1)
+  useEffect(() => {
+    if (providerType !== 'team') return;
+    setTeamData(prev => {
+      const maxTotal = Math.max(2, Math.min(20, parseInt(String(prev.max_members), 10) || 2));
+      const memberCap = Math.max(0, maxTotal - 1);
+      const leaderId = prev.team_leader_id;
+      let members = Array.isArray(prev.team_members) ? [...prev.team_members] : [];
+      if (leaderId != null) {
+        members = members.filter(id => id !== leaderId);
+      }
+      if (members.length > memberCap) {
+        members = members.slice(0, memberCap);
+      }
+      // Avoid unnecessary state churn
+      const sameLen = members.length === (prev.team_members || []).length;
+      const sameLeaderNotInMembers = leaderId == null || !(prev.team_members || []).includes(leaderId);
+      if (sameLen && sameLeaderNotInMembers) return prev;
+      return { ...prev, max_members: maxTotal, team_members: members };
+    });
+  }, [providerType, teamData.max_members, teamData.team_leader_id]);
 
   const handleRemoveTeamMember = (providerId) => {
     setTeamData(prev => ({
@@ -391,6 +422,7 @@ const AddServiceProviderPage = () => {
       }
 
       case 'max_members': {
+        // `max_members` includes the leader. Minimum 2 means leader + 1 member.
         if (providerType === 'team' && (!value || value < 2)) {
           return 'Maximum members must be at least 2';
         }
@@ -583,10 +615,19 @@ const AddServiceProviderPage = () => {
     const { name, value, type, checked } = e.target;
     const newValue = type === 'checkbox' ? checked : value;
     
-    setTeamData(prev => ({
-      ...prev,
-      [name]: newValue
-    }));
+    setTeamData(prev => {
+      const next = { ...prev, [name]: newValue };
+      if (name === 'max_members') {
+        const maxTotal = Math.max(2, Math.min(20, parseInt(String(newValue), 10) || 2));
+        const memberCap = Math.max(0, maxTotal - 1);
+        next.max_members = maxTotal;
+        // If max is reduced below selected members, drop extras so selection stays valid.
+        if (Array.isArray(next.team_members) && next.team_members.length > memberCap) {
+          next.team_members = next.team_members.slice(0, memberCap);
+        }
+      }
+      return next;
+    });
     
     // Mark as touched and validate
     setTouched(prev => ({ ...prev, [name]: true }));
@@ -1167,7 +1208,14 @@ const AddServiceProviderPage = () => {
                               <div 
                                 key={provider.id} 
                                 className={`team-leader-card ${teamData.team_leader_id === provider.id ? 'selected' : ''}`}
-                                onClick={() => setTeamData(prev => ({ ...prev, team_leader_id: provider.id }))}
+                                onClick={() =>
+                                  setTeamData(prev => ({
+                                    ...prev,
+                                    team_leader_id: provider.id,
+                                    // If this person was previously selected as a member, remove them.
+                                    team_members: (prev.team_members || []).filter(id => id !== provider.id)
+                                  }))
+                                }
                                 style={{
                                   background: teamData.team_leader_id === provider.id ? 'linear-gradient(135deg, rgba(79, 156, 249, 0.1), rgba(59, 130, 246, 0.1))' : '#ffffff',
                                   border: teamData.team_leader_id === provider.id ? '2px solid #4f9cf9' : '1px solid #e2e8f0',
@@ -1575,7 +1623,7 @@ const AddServiceProviderPage = () => {
                                   type="button"
                                   className="add-member-btn"
                                   onClick={() => handleAddTeamMember(provider.id)}
-                                  disabled={teamData.team_members.length >= teamData.max_members - 1}
+                                  disabled={teamData.team_members.length >= Math.max(0, (parseInt(String(teamData.max_members), 10) || 0) - 1)}
                                 >
                                   <UserPlus size={16} />
                                   Add to Team
