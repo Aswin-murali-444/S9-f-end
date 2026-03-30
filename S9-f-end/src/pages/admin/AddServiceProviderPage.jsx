@@ -716,12 +716,15 @@ const AddServiceProviderPage = () => {
         const teamResult = await apiService.createTeamWithExistingProviders(teamPayload);
         
         if (teamResult && teamResult.team) {
-          const memberCount = teamResult.memberCount || (1 + teamData.team_members.length);
+          const leaderCount = teamData.team_leader_id ? 1 : 0;
+          const memberOnlyCount = Array.isArray(teamData.team_members) ? teamData.team_members.length : 0;
+          const totalCount = teamResult.memberCount || (leaderCount + memberOnlyCount);
+          const memberWord = memberOnlyCount === 1 ? 'member' : 'members';
           
           setSuccessModal({
             open: true,
             title: 'Team Created Successfully',
-            message: `Team "${teamData.name}" has been created with ${memberCount} members (1 leader + ${teamData.team_members.length} team members). All members are existing verified workers. Notifications have been sent to all team members.`
+            message: `Team "${teamData.name}" has been created with ${totalCount} total members (${leaderCount} leader + ${memberOnlyCount} ${memberWord}). All members are existing verified workers. Notifications have been sent to all team members.`
           });
         }
       }
@@ -1635,7 +1638,12 @@ const AddServiceProviderPage = () => {
                       </div>
 
                       <div className="selected-members">
-                        <h4>Team Structure ({teamData.team_members.length + (teamData.team_leader_id ? 1 : 0)}/{teamData.max_members})</h4>
+                        <h4>
+                          Team Structure ({teamData.team_members.length + (teamData.team_leader_id ? 1 : 0)}/{teamData.max_members})
+                          <span style={{ fontWeight: 400, color: '#64748b', marginLeft: '0.5rem', fontSize: '0.9em' }}>
+                            ({teamData.team_leader_id ? 1 : 0} leader + {teamData.team_members.length} members)
+                          </span>
+                        </h4>
                         
                         {/* Team Leader Display */}
                         {teamData.team_leader_id && (
