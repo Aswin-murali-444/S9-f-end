@@ -94,17 +94,30 @@ function AppShell() {
   const isLogin = location.pathname === '/login';
   const showPublicHeader = !(isAnyDashboard || isAdminPage || isBookingPage);
 
+  // Auth can be briefly null during initialization; use persisted auth to keep history lock reliable.
+  const hasPersistedAuth = (() => {
+    try {
+      if (user) return true;
+      const storedAuth = localStorage.getItem('isAuthenticated') === 'true';
+      const storedSession = !!localStorage.getItem('session');
+      const storedUser = !!localStorage.getItem('user');
+      return storedAuth || storedSession || storedUser;
+    } catch {
+      return !!user;
+    }
+  })();
+
   // If the requirement is "back should stay on the dashboard after login",
   // prevent browser back navigation from leaving /dashboard/* while authenticated.
   const lastDashboardUrlRef = useRef('');
   useEffect(() => {
-    if (isAnyDashboard && user) {
+    if (isAnyDashboard && hasPersistedAuth) {
       lastDashboardUrlRef.current = `${location.pathname}${location.search}${location.hash}`;
     }
-  }, [isAnyDashboard, user, location.pathname, location.search, location.hash]);
+  }, [isAnyDashboard, hasPersistedAuth, location.pathname, location.search, location.hash]);
 
   useEffect(() => {
-    if (!isAnyDashboard || !user) return;
+    if (!isAnyDashboard || !hasPersistedAuth) return;
 
     // Ensure there's always a forward entry to cancel "back"
     try {
@@ -149,7 +162,7 @@ function AppShell() {
 
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [isAnyDashboard, user, navigate]);
+  }, [isAnyDashboard, hasPersistedAuth, navigate]);
 
   return (
     <div className="App">
