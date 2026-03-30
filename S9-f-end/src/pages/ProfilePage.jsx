@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import './ProfilePage.css';
 
 const ProfilePage = () => {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, isInitialized } = useAuth();
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState({
@@ -25,13 +25,15 @@ const ProfilePage = () => {
   const [touched, setTouched] = useState({});
 
   useEffect(() => {
+    // Avoid redirecting during auth initialization; only redirect once initialized.
+    if (!isInitialized) return;
     if (!isAuthenticated) {
-      navigate('/login');
+      navigate('/login', { replace: true });
       return;
     }
 
     fetchProfile();
-  }, [isAuthenticated, navigate, user]);
+  }, [isAuthenticated, isInitialized, navigate, user]);
 
   const fetchProfile = async () => {
     if (!user?.id) return;

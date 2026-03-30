@@ -1270,11 +1270,11 @@ const ServiceProviderDashboard = () => {
       console.log('🚪 Calling logout function...');
       await logout();
       console.log('🚪 Logout successful, navigating to login...');
-      navigate('/login');
+      navigate('/login', { replace: true });
     } catch (error) {
       console.error('🚪 Logout error:', error);
       toast.error('Logout failed. Please try again.');
-      navigate('/login');
+      navigate('/login', { replace: true });
     } finally {
       setIsLoggingOut(false);
     }

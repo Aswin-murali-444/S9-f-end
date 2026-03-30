@@ -25,7 +25,7 @@ const ServicesPage = () => {
       if (target && target.classList && target.classList.contains('book-service-btn')) {
         if (!user) {
           e.preventDefault();
-          navigate('/login');
+          navigate('/login', { replace: true });
           // Ensure login page opens at top
           setTimeout(() => {
             try { window.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch {}
