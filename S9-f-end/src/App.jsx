@@ -1,5 +1,5 @@
-import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect, useRef } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import QueryProvider from './providers/QueryProvider';
 import { useAuth, AuthProvider } from './hooks/useAuth';
@@ -84,6 +84,7 @@ const Placeholder = ({ title }) => (
 
 function AppShell() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const isAnyDashboard = location.pathname.startsWith('/dashboard');
   const isCustomerDashboard = location.pathname.startsWith('/dashboard/customer');
@@ -92,6 +93,63 @@ function AppShell() {
   const isHome = location.pathname === '/';
   const isLogin = location.pathname === '/login';
   const showPublicHeader = !(isAnyDashboard || isAdminPage || isBookingPage);
+
+  // If the requirement is "back should stay on the dashboard after login",
+  // prevent browser back navigation from leaving /dashboard/* while authenticated.
+  const lastDashboardUrlRef = useRef('');
+  useEffect(() => {
+    if (isAnyDashboard && user) {
+      lastDashboardUrlRef.current = `${location.pathname}${location.search}${location.hash}`;
+    }
+  }, [isAnyDashboard, user, location.pathname, location.search, location.hash]);
+
+  useEffect(() => {
+    if (!isAnyDashboard || !user) return;
+
+    // Ensure there's always a forward entry to cancel "back"
+    try {
+      window.history.pushState({ __dashboardLock: true }, '', lastDashboardUrlRef.current || window.location.href);
+    } catch {}
+
+    const onPopState = () => {
+      // If back tries to leave dashboard, immediately restore the dashboard URL.
+      const currentPath = window.location.pathname || '';
+      const isStillDashboard = currentPath.startsWith('/dashboard');
+      const fromStorage = localStorage.getItem('dashboard_path') || '';
+      const role = localStorage.getItem('user_role') || '';
+      const roleFallback =
+        role === 'admin' ? '/dashboard/admin'
+          : role === 'service_provider' ? '/dashboard/provider'
+          : role === 'supervisor' ? '/dashboard/supervisor'
+          : role === 'driver' ? '/dashboard/driver'
+          : '/dashboard/customer';
+      const targetCandidate =
+        (lastDashboardUrlRef.current && lastDashboardUrlRef.current.startsWith('/dashboard'))
+          ? lastDashboardUrlRef.current
+          : (fromStorage && fromStorage.startsWith('/dashboard'))
+            ? fromStorage
+            : roleFallback;
+      const target = targetCandidate;
+
+      if (!isStillDashboard) {
+        // Restore dashboard route
+        try {
+          window.history.pushState({ __dashboardLock: true }, '', target);
+        } catch {}
+        navigate(target, { replace: true });
+        return;
+      }
+
+      // Even within dashboard, keep user on the last known dashboard URL (no back navigation)
+      try {
+        window.history.pushState({ __dashboardLock: true }, '', target);
+      } catch {}
+      navigate(target, { replace: true });
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [isAnyDashboard, user, navigate]);
 
   return (
     <div className="App">
