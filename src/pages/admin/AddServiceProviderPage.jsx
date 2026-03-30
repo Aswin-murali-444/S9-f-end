@@ -282,7 +282,8 @@ const AddServiceProviderPage = () => {
         if (!value || value.trim() === '') {
           return 'Service category is required';
         }
-        const validCategory = categories.find(cat => cat.id === value);
+        const v = String(value);
+        const validCategory = categories.find(cat => String(cat?.id) === v);
         if (!validCategory) {
           return 'Please select a valid service category';
         }
@@ -293,7 +294,8 @@ const AddServiceProviderPage = () => {
         if (!value || value.trim() === '') {
           return 'Service selection is required';
         }
-        const validService = services.find(service => service.id === value);
+        const v = String(value);
+        const validService = services.find(service => String(service?.id) === v);
         if (!validService) {
           return 'Please select a valid service';
         }
@@ -437,11 +439,19 @@ const AddServiceProviderPage = () => {
     if (name === 'service_category_id') {
       console.log('Filtering services for category:', value);
       console.log('Available services:', services);
-      const filtered = services.filter(service => 
-        service.category_id === parseInt(value) || 
-        service.category === value || 
-        service.service_category_id === parseInt(value)
-      );
+      const selectedCategoryStr = String(value ?? '');
+      const filtered = services.filter((service) => {
+        const serviceCategoryId =
+          service?.category_id ??
+          service?.service_category_id ??
+          service?.categoryId ??
+          service?.categoryID;
+        const serviceCategory = service?.category;
+        return (
+          String(serviceCategoryId ?? '') === selectedCategoryStr ||
+          String(serviceCategory ?? '') === selectedCategoryStr
+        );
+      });
       console.log('Filtered services:', filtered);
       setFilteredServices(filtered);
       // Clear service selection when category changes
@@ -452,7 +462,7 @@ const AddServiceProviderPage = () => {
     // Handle service selection - update specialization and basic pay
     if (name === 'service_id') {
       console.log('Service selected:', value);
-      const service = services.find(s => s.id === value);
+      const service = services.find(s => String(s?.id) === String(value));
       console.log('Found service:', service);
       setSelectedService(service);
       if (service) {
@@ -464,7 +474,6 @@ const AddServiceProviderPage = () => {
         setFormData(prev => ({ 
           ...prev, 
           specialization: service.name,
-          service_category_id: service.category,
           basic_pay: rupeeValue 
         }));
       }

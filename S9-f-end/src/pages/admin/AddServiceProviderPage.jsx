@@ -325,7 +325,8 @@ const AddServiceProviderPage = () => {
         if (!value || value.trim() === '') {
           return 'Service category is required';
         }
-        const validCategory = categories.find(cat => cat.id === value);
+        const v = String(value);
+        const validCategory = categories.find(cat => String(cat?.id) === v);
         if (!validCategory) {
           return 'Please select a valid service category';
         }
@@ -336,7 +337,8 @@ const AddServiceProviderPage = () => {
         if (!value || value.trim() === '') {
           return 'Service selection is required';
         }
-        const validService = services.find(service => service.id === value);
+        const v = String(value);
+        const validService = services.find(service => String(service?.id) === v);
         if (!validService) {
           return 'Please select a valid service';
         }
@@ -508,15 +510,19 @@ const AddServiceProviderPage = () => {
       
       const filtered = services.filter(service => {
         // Handle different possible category ID formats
-        const serviceCategoryId = service.category_id || service.service_category_id;
+        const serviceCategoryId =
+          service.category_id ??
+          service.service_category_id ??
+          service.categoryId ??
+          service.categoryID;
         const serviceCategory = service.category;
-        const selectedCategoryId = parseInt(value);
+        const selectedCategoryRaw = value;
+        const selectedCategoryStr = String(selectedCategoryRaw);
         
         // Check if service matches the selected category
-        const categoryMatch = serviceCategoryId === selectedCategoryId || 
-                             serviceCategoryId === value ||
-                             serviceCategory === value ||
-                             serviceCategory === selectedCategoryId;
+        const categoryMatch =
+          String(serviceCategoryId) === selectedCategoryStr ||
+          String(serviceCategory) === selectedCategoryStr;
         
         // For team creation, only show services with service_type = 'group'
         // For individual providers, only show services with service_type = 'individual'
@@ -544,11 +550,12 @@ const AddServiceProviderPage = () => {
     // Handle service selection - update specialization and basic pay
     if (name === 'service_id') {
       console.log('Service selected:', value, 'Type:', typeof value);
-      const service = services.find(s => s.id === value);
+      const service = services.find(s => String(s?.id) === String(value));
       console.log('Found service:', service);
       console.log('Service category info:', {
         category_id: service?.category_id,
         service_category_id: service?.service_category_id,
+        categoryId: service?.categoryId,
         category: service?.category
       });
       setSelectedService(service);
