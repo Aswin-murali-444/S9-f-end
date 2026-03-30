@@ -955,7 +955,7 @@ const AddServiceProviderPage = () => {
                       onChange={handleInputChange}
                       placeholder="Select a service"
                       disabled={!formData.service_category_id}
-                      options={(filteredServices.length > 0 ? filteredServices : services).map(s => {
+                      options={(formData.service_category_id ? filteredServices : []).map(s => {
                         const rupee = s.price_inr ?? s.wage_inr ?? s.wage ?? s.price;
                         const display = typeof rupee === 'number' ? `₹${rupee}` : (rupee ? `₹${rupee}` : '₹N/A');
                         return { value: s.id, label: `${s.name} - ${display}` };
@@ -970,6 +970,9 @@ const AddServiceProviderPage = () => {
                       )}
                       {!formData.service_category_id && (
                         <small className="field-help">Please select a category first</small>
+                      )}
+                      {formData.service_category_id && filteredServices.length === 0 && (
+                        <small className="field-help">No services found for this category</small>
                       )}
                       {selectedService && (
                         <small className="form-help">
