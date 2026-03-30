@@ -117,15 +117,8 @@ function AppShell() {
   }, [isAnyDashboard, hasPersistedAuth, location.pathname, location.search, location.hash]);
 
   useEffect(() => {
-    if (!isAnyDashboard || !hasPersistedAuth) return;
-
-    // Ensure there's always a forward entry to cancel "back"
-    try {
-      window.history.pushState({ __dashboardLock: true }, '', lastDashboardUrlRef.current || window.location.href);
-    } catch {}
-
+    if (!hasPersistedAuth) return;
     const onPopState = () => {
-      // If back tries to leave dashboard, immediately restore the dashboard URL.
       const currentPath = window.location.pathname || '';
       const isStillDashboard = currentPath.startsWith('/dashboard');
       const fromStorage = localStorage.getItem('dashboard_path') || '';
@@ -145,7 +138,6 @@ function AppShell() {
       const target = targetCandidate;
 
       if (!isStillDashboard) {
-        // Restore dashboard route
         try {
           window.history.pushState({ __dashboardLock: true }, '', target);
         } catch {}
@@ -153,16 +145,24 @@ function AppShell() {
         return;
       }
 
-      // Even within dashboard, keep user on the last known dashboard URL (no back navigation)
+      // Even within dashboard, keep user on the last known dashboard URL (no back navigation).
       try {
         window.history.pushState({ __dashboardLock: true }, '', target);
       } catch {}
       navigate(target, { replace: true });
     };
 
+    // Ensure there's always a forward entry to cancel "back" while authenticated.
+    // Do this both on initial mount and whenever route changes.
+    if (isAnyDashboard) {
+      try {
+        window.history.pushState({ __dashboardLock: true }, '', lastDashboardUrlRef.current || window.location.href);
+      } catch {}
+    }
+
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [isAnyDashboard, hasPersistedAuth, navigate]);
+  }, [hasPersistedAuth, isAnyDashboard, navigate]);
 
   return (
     <div className="App">

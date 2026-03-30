@@ -88,11 +88,7 @@ function AppShell() {
   }, [isAnyDashboard, hasPersistedAuth, location.pathname, location.search, location.hash]);
 
   useEffect(() => {
-    if (!isAnyDashboard || !hasPersistedAuth) return;
-    try {
-      window.history.pushState({ __dashboardLock: true }, '', lastDashboardUrlRef.current || window.location.href);
-    } catch {}
-
+    if (!hasPersistedAuth) return;
     const onPopState = () => {
       const currentPath = window.location.pathname || '';
       const isStillDashboard = currentPath.startsWith('/dashboard');
@@ -126,9 +122,15 @@ function AppShell() {
       navigate(target, { replace: true });
     };
 
+    if (isAnyDashboard) {
+      try {
+        window.history.pushState({ __dashboardLock: true }, '', lastDashboardUrlRef.current || window.location.href);
+      } catch {}
+    }
+
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [isAnyDashboard, hasPersistedAuth, navigate]);
+  }, [hasPersistedAuth, isAnyDashboard, navigate]);
 
   return (
     <div className="App">
