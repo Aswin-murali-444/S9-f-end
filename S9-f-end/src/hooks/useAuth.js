@@ -12,7 +12,15 @@ console.log('🔍 Supabase configuration:', {
   keyLength: supabase.supabaseKey?.length
 });
 
-const AuthContext = createContext();
+// Ensure a single AuthContext instance even under Vite HMR
+// (avoids "useAuth must be used within an AuthProvider" when different module instances load).
+const AUTH_CONTEXT_KEY = '__nexus_auth_context__';
+const AuthContext =
+  (typeof globalThis !== 'undefined' && globalThis[AUTH_CONTEXT_KEY]) ||
+  createContext();
+if (typeof globalThis !== 'undefined' && !globalThis[AUTH_CONTEXT_KEY]) {
+  globalThis[AUTH_CONTEXT_KEY] = AuthContext;
+}
 
 export const useAuth = () => {
   const context = useContext(AuthContext);

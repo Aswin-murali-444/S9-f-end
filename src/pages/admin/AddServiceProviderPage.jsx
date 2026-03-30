@@ -348,8 +348,10 @@ const AddServiceProviderPage = () => {
       }
 
       case 'max_members': {
-        if (providerType === 'team' && (!value || value < 2)) {
-          return 'Maximum members must be at least 2';
+        // `max_members` is the number of selectable members EXCLUDING the leader.
+        // Minimum 1 means leader + 1 member.
+        if (providerType === 'team' && (!value || value < 1)) {
+          return 'Maximum members must be at least 1';
         }
         if (value && value > 20) {
           return 'Maximum members cannot exceed 20';
@@ -489,10 +491,16 @@ const AddServiceProviderPage = () => {
     const { name, value, type, checked } = e.target;
     const newValue = type === 'checkbox' ? checked : value;
     
-    setTeamData(prev => ({
-      ...prev,
-      [name]: newValue
-    }));
+    setTeamData(prev => {
+      const next = { ...prev, [name]: newValue };
+      if (name === 'max_members') {
+        const cap = Math.max(1, Math.min(20, parseInt(String(newValue), 10) || 1));
+        if (Array.isArray(next.team_members) && next.team_members.length > cap) {
+          next.team_members = next.team_members.slice(0, cap);
+        }
+      }
+      return next;
+    });
     
     // Mark as touched and validate
     setTouched(prev => ({ ...prev, [name]: true }));
@@ -515,7 +523,7 @@ const AddServiceProviderPage = () => {
   };
 
   const addTeamMember = (userId) => {
-    if (!teamData.team_members.includes(userId)) {
+    if (!teamData.team_members.includes(userId) && teamData.team_members.length < teamData.max_members) {
       setTeamData(prev => ({
         ...prev,
         team_members: [...prev.team_members, userId]
