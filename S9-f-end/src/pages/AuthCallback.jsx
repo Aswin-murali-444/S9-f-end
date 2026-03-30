@@ -23,14 +23,14 @@ const AuthCallback = () => {
               toast.error(result?.status === 'suspended' ? 'Your account is suspended' : result?.status === 'inactive' ? 'Your account is inactive' : 'Your account is pending verification');
               localStorage.setItem('logout_toast_count', String(count + 1));
             }
-            navigate('/login');
+            navigate('/login', { replace: true });
             return;
           }
           if (result?.isNewUser) {
             // New user - show welcome message and redirect to dashboard
             toast.success('Welcome! Your account has been created successfully.');
             console.log('🎉 New user created, redirecting to dashboard');
-            navigate('/dashboard/customer');
+            navigate('/dashboard/customer', { replace: true });
             return;
           } else if (result?.dashboardPath) {
             // Existing user - redirect to dashboard; cap welcome toast to 2 total
@@ -41,7 +41,7 @@ const AuthCallback = () => {
               localStorage.setItem(key, String(count + 1));
             }
             console.log('🔄 Existing user logged in, redirecting to dashboard');
-            navigate(result.dashboardPath);
+            navigate(result.dashboardPath, { replace: true });
             return;
           }
         }
@@ -49,15 +49,15 @@ const AuthCallback = () => {
         // Fallback: if already authenticated, go to customer dashboard; otherwise go login
         if (isAuthenticated) {
           console.log('✅ User authenticated, redirecting to customer dashboard');
-          navigate('/dashboard/customer');
+          navigate('/dashboard/customer', { replace: true });
         } else {
           console.log('❌ User not authenticated, redirecting to login');
-          navigate('/login');
+          navigate('/login', { replace: true });
         }
       } catch (error) {
         console.error('💥 OAuth callback error:', error);
         toast.error('Authentication failed. Please try again.');
-        navigate('/login');
+        navigate('/login', { replace: true });
       }
     };
     

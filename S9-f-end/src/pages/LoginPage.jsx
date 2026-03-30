@@ -100,13 +100,12 @@ const LoginPage = () => {
         // Show success message
         toast.success('Login successful! Redirecting...');
         
-        // Use window.location.href for immediate hard redirect (no React Router delay)
-        // This prevents any render cycles that might show the login page
+        // Use replace so /login is not kept in browser history (back button won't return to login)
         console.log('🚀 Immediate hard redirect to:', targetPath);
         
         // Small delay to ensure state is set, then redirect
         setTimeout(() => {
-          window.location.href = targetPath;
+          window.location.replace(targetPath);
         }, 50);
         
       } else {
